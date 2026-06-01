@@ -1,31 +1,39 @@
-# 日志智能分析系统 (Log Intelligence)
+# Financial RAG — 财报/经济新闻智能分析系统
 
-基于 LlamaIndex 的日志自动解析和知识库问答系统。支持多种日志格式解析、向量索引构建、智能问答和故障排查。
+基于阿里百炼 DashScope 的智能金融分析系统，支持财报解析、经济新闻检索和 Multi-Agent 协同分析。
 
 ## 功能特性
 
-- **多格式日志解析**: 支持 Nginx、Syslog、JSON、通用日志格式
-- **智能知识库**: 基于 LlamaIndex 的向量索引和检索
-- **RAG 问答**: 结合日志内容和知识库进行智能问答
-- **故障排查**: 自动分析日志错误并提供解决方案
-- **交互式界面**: 支持命令行交互和批量处理
+- **全链路阿里百炼**：LLM (Qwen) + Embedding (text-embedding-v3) + Rerank (gte-rerank)
+- **三大核心架构**：Coordinate（多 Agent 协调）、Indexer（混合检索）、Reflection（反思防幻觉）
+- **混合检索**：BM25 关键词 + 向量语义检索 → RRF 融合 → gte-rerank 精排
+- **Multi-Agent 流水线**：Ingestion → Extraction → Analysis → Forecast → Report
+- **六层防幻觉**：来源验证 → 一致性 → 事实性 → 完整性 → 引用 → 综合评分
+- **多模式降级**：无 API Key 自动回退纯本地检索模式
 
 ## 项目结构
 
 ```
 llamaindex/
-├── config.py              # 配置文件
-├── log_parser.py          # 日志解析模块
-├── knowledge_base.py      # 知识库构建模块
-├── rag_engine.py          # RAG 查询引擎
-├── main.py                # 主程序入口
-├── example_usage.py       # 使用示例
-├── requirements.txt       # 依赖列表
-├── .env.example          # 环境变量示例
-├── data/                 # 日志文件目录
-├── knowledge_base/       # 知识库文档目录
-├── storage/              # 向量存储目录
-└── output/               # 输出目录
+├── main.py                       # 项目入口
+├── README.md
+├── requirements.txt              # 依赖列表
+├── .env.example                  # 环境变量示例
+├── data/
+│   ├── financial/                # 财报/经济数据
+│   └── knowledge_base/           # 知识库文档
+└── financial_rag/                # 核心包
+    ├── main.py                   # CLI 主入口
+    ├── config.py                 # 配置（阿里百炼）
+    ├── agents/                   # Multi-Agent 子模块
+    ├── core/                     # 三大架构核心
+    │   ├── coordinator.py        # Coordinate 多 Agent 协调
+    │   ├── indexer.py            # Indexer 混合检索流水线
+    │   └── reflector.py          # Reflection 反思防幻觉
+    ├── llm/
+    │   └── dashscope_client.py   # 阿里百炼客户端封装
+    ├── retrievers/               # 混合检索器（BM25 + Embedding + Rerank）
+    └── ingestion/                # 文档导入处理
 ```
 
 ## 快速开始
@@ -36,187 +44,137 @@ llamaindex/
 pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量
+### 2. 配置 API Key
 
-复制 `.env.example` 为 `.env`，并填写你的 OpenAI API Key:
+复制 `.env.example` 为 `.env`，填写阿里百炼 API Key：
 
 ```bash
 cp .env.example .env
-# 编辑 .env 文件
-OPENAI_API_KEY=your_api_key_here
+# 编辑 .env，填入你的 Key：
+DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### 3. 快速演示
+> API Key 获取地址：https://bailian.console.aliyun.com/
+
+> 没有 Key 也可以运行，系统会自动回退到纯本地模式（BM25 + Jaccard）。
+
+### 3. 演示模式
 
 ```bash
-python main.py demo
+python -m financial_rag.main demo
 ```
 
-### 4. 处理日志文件
+### 4. 交互式查询
 
 ```bash
-# 解析日志并构建知识库
-python main.py logs ./data/app.log --build-kb
-
-# 指定日志格式
-python main.py logs ./data/access.log --format nginx --build-kb
+python -m financial_rag.main query -i
 ```
 
-### 5. 构建知识库
+### 5. 单次查询
 
 ```bash
-# 从文档目录构建
-python main.py build --docs-dir ./knowledge_base
+python -m financial_rag.main query -q "茅台2024年营收增长了多少？"
 ```
 
-### 6. 交互式查询
+### 6. 构建知识库
 
 ```bash
-# 启动交互式问答
-python main.py query -i
-
-# 单次查询
-python main.py query -q "日志中有哪些错误？"
+python -m financial_rag.main build --dir ./data/financial
 ```
 
-### 7. 日志分析
+### 7. Multi-Agent 财报分析
 
 ```bash
-# 生成分析报告并进入交互模式
-python main.py analyze -r -i
+# 串行分析
+python -m financial_rag.main analyze ./data/financial/maotai_2024.pdf
+
+# 并行分析
+python -m financial_rag.main analyze ./data/financial/maotai_2024.pdf --parallel
 ```
 
 ## 使用示例
 
-### 基础使用
+### 基础查询
 
 ```python
-from log_parser import parse_log_file
-from knowledge_base import LogKnowledgeBase
-from rag_engine import RAGEngine
+from financial_rag.llm import get_llm
+from financial_rag.config import config
 
-# 1. 解析日志
-entries = parse_log_file("./data/app.log")
-
-# 2. 构建知识库
-log_kb = LogKnowledgeBase()
-log_kb.add_logs(entries).build_index().save_index()
-
-# 3. 智能问答
-engine = RAGEngine(log_kb)
-result = engine.query("为什么会出现数据库连接失败？")
-print(result.answer)
+llm = get_llm(api_key=config.llm.api_key, model="qwen-plus")
+response = llm.chat("茅台2024年毛利率是多少？")
+print(response.content)
 ```
 
-### 高级分析
+### 混合检索
 
 ```python
-from rag_engine import LogAnalyzer
+from financial_rag.retrievers import HybridRetriever
+from financial_rag.llm import get_embedding, get_reranker
+from financial_rag.config import config
 
-# 创建分析器
-analyzer = LogAnalyzer(log_kb)
+retriever = HybridRetriever(
+    embedder=get_embedding(api_key=config.llm.api_key),
+    reranker=get_reranker(api_key=config.llm.api_key),
+)
 
-# 获取概览
-overview = analyzer.get_overview()
+docs = [
+    {"text": "茅台2024年营收1738.52亿元，同比增长15.66%", "meta": {}},
+    {"text": "茅台2024年净利润862.28亿元，同比增长15.38%", "meta": {}},
+]
+retriever.index(docs)
 
-# 生成完整报告
-report = analyzer.generate_report()
-
-# 查找相似错误
-similar = analyzer.find_similar_errors("connection timeout")
+results = retriever.search("茅台盈利情况", top_k=3, use_rerank=True)
+for r in results:
+    print(f"[{r['retriever']}] score={r['score']:.4f} | {r['text']}")
 ```
 
-## 支持的日志格式
-
-| 格式 | 说明 | 自动检测 |
-|------|------|----------|
-| Nginx | Nginx access log | ✅ |
-| Syslog | 系统日志 | ✅ |
-| JSON | JSON 格式日志 | ✅ |
-| Generic | 通用格式（兜底） | ✅ |
-
-## API 参考
-
-### LogParser 模块
-
-- `parse_log_file(file_path, log_format=None)` - 解析日志文件
-- `LogParserFactory.get_parser(file_path)` - 自动检测并获取解析器
-- `LogProcessor` - 批量处理日志
-
-### KnowledgeBase 模块
-
-- `KnowledgeBase` - 通用知识库
-- `LogKnowledgeBase` - 专用日志知识库
-- `add_documents_from_directory(dir_path)` - 从目录加载文档
-- `add_logs(log_entries)` - 添加日志条目
-- `build_index()` - 构建向量索引
-- `save_index()` / `load_index()` - 保存/加载索引
-
-### RAGEngine 模块
-
-- `query(question)` - 执行查询
-- `chat(message)` - 聊天模式
-- `analyze_logs()` - 自动分析日志
-- `troubleshoot_error(error_message)` - 故障排查
-- `summarize_logs()` - 日志总结
-
-## 配置说明
-
-编辑 `config.py` 或设置环境变量:
+### Multi-Agent 分析
 
 ```python
-# OpenAI 配置
-OPENAI_API_KEY=your_key
-OPENAI_API_BASE=https://api.openai.com/v1
+from financial_rag.main import create_orchestrator
 
-# 模型配置
-EMBEDDING_MODEL=text-embedding-3-small
-LLM_MODEL=gpt-4o-mini
+orch = create_orchestrator()
+result = orch.execute("./data/financial/report.pdf")
 
-# RAG 配置
-similarity_top_k=5
-response_mode=compact
+for r in result.agent_results:
+    print(f"[{'OK' if r.success else 'FAIL'}] {r.agent_name}: {r.message}")
 ```
 
-## 自定义扩展
+## 模型配置
 
-### 添加自定义日志解析器
+| 组件 | 模型 | 说明 |
+|------|------|------|
+| LLM | qwen-plus / qwen-turbo / qwen-max | 阿里百炼 Qwen 系列 |
+| Embedding | text-embedding-v3 | 1024 维向量 |
+| Rerank | gte-rerank | 重排序精排 |
 
-```python
-from log_parser import LogParser, LogEntry, LogParserFactory
-import re
+## 检索模式
 
-class MyParser(LogParser):
-    def parse(self, line: str):
-        # 实现解析逻辑
-        pass
-    
-    def can_parse(self, sample_lines):
-        # 检测是否支持
-        pass
+系统支持三种模式自动切换：
 
-# 注册到工厂
-LogParserFactory.PARSERS.append(MyParser())
-```
+| 模式 | 条件 | 链路 |
+|------|------|------|
+| 纯本地 | 无 API Key | BM25 + Jaccard → RRF |
+| 带 Embedding | 仅配 API Key | BM25 + 向量检索 → RRF |
+| 全链路 | API Key 可用 | BM25 + Embedding → RRF → gte-rerank |
 
 ## 命令行帮助
 
 ```bash
 # 查看所有命令
-python main.py --help
+python -m financial_rag.main --help
 
 # 查看具体命令帮助
-python main.py logs --help
-python main.py query --help
-python main.py analyze --help
+python -m financial_rag.main query --help
+python -m financial_rag.main build --help
+python -m financial_rag.main analyze --help
 ```
 
-## 注意事项
+## 环境变量
 
-1. **API Key**: 确保设置了有效的 OpenAI API Key
-2. **日志编码**: 默认使用 UTF-8 编码读取日志文件
-3. **大文件处理**: 大日志文件会自动分块处理
-4. **向量存储**: 索引默认保存在 `./storage/vector_store` 目录
+| 变量 | 说明 | 必填 |
+|------|------|------|
+| `DASHSCOPE_API_KEY` | 阿里百炼 API Key | 否（无 Key 自动降级本地模式） |
 
 ## 许可证
 
