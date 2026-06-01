@@ -437,13 +437,16 @@ class PipelineScoreCard:
             "llm_generate": StageGroup.GENERATION,
             "hallucination_check": StageGroup.GENERATION,
             "slot_filling_summary": StageGroup.GENERATION,
+            "tool_session_summary": StageGroup.GENERATION,
         }
         groups: Dict[StageGroup, List[StageScore]] = {g: [] for g in StageGroup}
         for s in self.stages:
             g = mapping.get(s.stage)
-            if g is None and s.stage.startswith("slot_"):
-                # 自动将 slot_* 槽位归入 GENERATION 组
-                g = StageGroup.GENERATION
+            if g is None:
+                if s.stage.startswith("slot_"):
+                    g = StageGroup.GENERATION
+                elif s.stage.startswith("tool_"):
+                    g = StageGroup.GENERATION
             if g:
                 groups[g].append(s)
         return groups

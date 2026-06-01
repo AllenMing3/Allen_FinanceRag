@@ -32,6 +32,7 @@ class LLMResponse:
     model: str
     usage: Dict = field(default_factory=dict)
     finish_reason: str = ""
+    tool_calls: List[Dict] = field(default_factory=list)  # function calling 返回的工具调用
 
 @dataclass
 class EmbeddingResponse:
@@ -116,6 +117,68 @@ class DashScopeLLM:
                 model=self.model,
                 usage=resp.usage.__dict__ if resp.usage else {},
                 finish_reason=resp.output.choices[0].finish_reason or "",
+            )
+        else:
+            raise RuntimeError(
+                f"DashScope LLM error: code={resp.status_code}, "
+                f"message={resp.message}"
+            )
+
+    # ---------- Function Calling ----------
+
+    def chat_with_tools(
+        self,
+        messages: List[Dict],
+        tools: List[Dict],
+        tool_choice: str = "auto",
+        **kwargs,
+    ) -> LLMResponse:
+        """Function Calling 模式 — 发送 tools 定义，解析 LLM 返回的工具调用。
+
+        DashScope Qwen 系列支持 OpenAI 兼容的 tools/tool_choice 参数。
+
+        Args:
+            messages: 对话历史
+            tools: 工具定义列表 (OpenAI JSON Schema 格式)
+            tool_choice: "auto" | "required" | "none" | {"type": "function", "function": {"name": "xxx"}}
+            **kwargs: 覆盖 temperature/max_tokens 等
+
+        Returns:
+            LLMResponse，其中 tool_calls 包含 LLM 选择的工具调用
+        """
+        resp = dashscope.Generation.call(
+            api_key=self.api_key,
+            model=self.model,
+            messages=messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            temperature=kwargs.get("temperature", self.temperature),
+            max_tokens=kwargs.get("max_tokens", self.max_tokens),
+            top_p=kwargs.get("top_p", self.top_p),
+            result_format="message",
+        )
+
+        if resp.status_code == 200:
+            choice = resp.output.choices[0]
+            msg = choice.message
+            # 提取 tool_calls（可能为 None）
+            tool_calls_raw = getattr(msg, "tool_calls", None) or []
+            # 标准化格式
+            tool_calls = []
+            for tc in tool_calls_raw:
+                if hasattr(tc, '__dict__'):
+                    tc = tc.__dict__
+                tc = dict(tc)
+                if "function" in tc and hasattr(tc["function"], '__dict__'):
+                    tc["function"] = tc["function"].__dict__
+                tool_calls.append(tc)
+
+            return LLMResponse(
+                content=msg.content or "",
+                model=self.model,
+                usage=resp.usage.__dict__ if resp.usage else {},
+                finish_reason=choice.finish_reason or "",
+                tool_calls=tool_calls,
             )
         else:
             raise RuntimeError(

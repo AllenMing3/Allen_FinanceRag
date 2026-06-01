@@ -40,6 +40,11 @@ from financial_rag.templates import (
     get_template, ALL_TEMPLATES,
 )
 from financial_rag.slot_filler import SlotFiller, FillStats, create_slot_filler
+from financial_rag.tools import (
+    FunctionRegistry, FunctionDef, ToolExecutor, ToolCallSession,
+    ToolCallStats, ToolCallResult, CATEGORIES,
+    create_financial_registry, create_tool_session,
+)
 
 from financial_rag.agents.ingestion_agent import IngestionAgent
 from financial_rag.agents.extraction_agent import ExtractionAgent
@@ -584,6 +589,92 @@ def cmd_slot(args):
     show_scorecard(card, "全链路打分卡 (含槽位评分):")
 
 
+def cmd_toolcall(args):
+    """Function Calling 模式测试"""
+    has_key = bool(config.llm.api_key)
+    if not has_key and not args.list_tools:
+        print("[错误] Function Calling 需要 DASHSCOPE_API_KEY")
+        return
+
+    print("=" * 60)
+    print("Function Calling — 能力注册中心测试")
+    print("=" * 60)
+
+    # 初始化检索器 + 注册中心
+    retriever = create_hybrid_retriever()
+    sample_docs = [
+        {"text": "贵州茅台2024年营收1738.52亿元，同比增长15.66%", "meta": {"source": "maotai_2024"}},
+        {"text": "茅台2024年净利润862.28亿元，同比增长15.38%", "meta": {"source": "maotai_2024"}},
+        {"text": "2024年茅台酒毛利率91.86%，ROE为34.19%", "meta": {"source": "maotai_2024"}},
+        {"text": "茅台酒营收1465.33亿元，系列酒营收246.84亿元", "meta": {"source": "maotai_2024"}},
+        {"text": "2024年茅台经营活动现金流753.29亿元", "meta": {"source": "maotai_2024"}},
+        {"text": "2025年人民币汇率预计在7.0-7.3区间波动", "meta": {"source": "economic_outlook"}},
+        {"text": "央行2025年一季度降准0.5个百分点，释放流动性约1万亿", "meta": {"source": "pboc_policy"}},
+    ]
+    try:
+        retriever.index(sample_docs)
+    except Exception as e:
+        if has_key:
+            print(f"[WARN] 检索器索引失败: {e}")
+
+    registry = create_financial_registry(retriever=retriever)
+    print(registry)
+    print()
+
+    if args.list_tools:
+        print(f"能力清单 ({len(registry)} 个):")
+        for f in registry.functions.values():
+            required = ", ".join(f.parameters.get("required", []))
+            print(f"  [{f.category}] {f.name}")
+            print(f"    {f.description[:80]}...")
+            print(f"    参数: {required}")
+        return
+
+    llm = get_llm(api_key=config.llm.api_key, model=config.llm.model)
+    card = PipelineScoreCard(query=args.query)
+
+    print(f"问题: {args.query}")
+    print(f"模式: {'多轮' if args.multi_turn else '单轮'} | "
+          f"tool_choice: {args.tool_choice} | verbose: {args.verbose}")
+    system = (
+        "你是专业金融分析师。当需要具体数据时，必须调用提供的函数获取。"
+        "不要捏造任何具体数字。如果函数返回了数据，基于数据给出准确分析。"
+    )
+
+    print("\n" + "=" * 60)
+    print("执行 Function Calling 会话...")
+    print("=" * 60)
+
+    session = create_tool_session(
+        llm=llm,
+        retriever=retriever,
+        registry=registry,
+        system_prompt=system,
+        max_rounds=args.max_rounds,
+        verbose=args.verbose,
+    )
+
+    t_start = time.time()
+    stats = session.run(args.query, scorecard=card)
+    t_elapsed = (time.time() - t_start) * 1000
+
+    # 输出结果
+    print(f"\n[会话统计]")
+    print(f"  轮次: {stats.rounds} 轮")
+    print(f"  工具调用: {len(stats.calls)} 次 ({stats.succeeded} 成功, {stats.failed} 失败)")
+    print(f"  使用的能力: {', '.join(stats.tools_used) or '(无)'}")
+    print(f"  总耗时: {stats.total_elapsed_ms:.0f}ms")
+    print(f"  Tokens: {stats.total_tokens}")
+
+    print(f"\n[工具调用详情]")
+    for c in stats.calls:
+        icon = "OK" if c.success else "FAIL"
+        result_preview = str(c.result)[:80] + "..." if len(str(c.result)) > 80 else str(c.result)
+        print(f"  [{icon}] {c.name} ({c.elapsed_ms:.0f}ms) → {result_preview}")
+
+    show_scorecard(card, "📊 Function Calling 全链路打分卡:")
+
+
 # ===================== main =====================
 
 def main():
@@ -592,14 +683,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python -m financial_rag.main demo                          # 演示
-  python -m financial_rag.main query -i                      # 交互查询 (含槽位填充)
-  python -m financial_rag.main query -q "茅台毛利率多少"      # 单次查询
-  python -m financial_rag.main build --dir ./my_reports      # 建知识库
-  python -m financial_rag.main analyze ./report.pdf            # Multi-Agent分析
-  python -m financial_rag.main score "茅台营收增长" -k 5      # 仅检索打分
-  python -m financial_rag.main slot "茅台财报" -t fin_report   # 槽位填充对比测试
-  python -m financial_rag.main slot "茅台利润" -t quick_qa --no-freeform
+  python -m financial_rag.main demo                              # 演示
+  python -m financial_rag.main query -i                          # 交互查询 (含槽位填充)
+  python -m financial_rag.main query -q "茅台毛利率多少"          # 单次查询
+  python -m financial_rag.main build --dir ./my_reports          # 建知识库
+  python -m financial_rag.main analyze ./report.pdf              # Multi-Agent分析
+  python -m financial_rag.main score "茅台营收增长" -k 5          # 仅检索打分
+  python -m financial_rag.main slot "茅台财报" -t financial_report # 槽位填充对比
+  python -m financial_rag.main toolcall "茅台营收增长多少"         # Function Calling
+  python -m financial_rag.main toolcall "对比茅台和五粮液" -v     # 带日志
+  python -m financial_rag.main toolcall -l                        # 列出所有能力
         """
     )
 
@@ -640,9 +733,23 @@ def main():
     slp.add_argument("--no-freeform", action="store_true", help="跳过自由生成对照组")
     slp.add_argument("-v", "--verbose", action="store_true", help="详细日志")
 
+    # toolcall: Function Calling 能力注册中心测试
+    tlp = sub.add_parser("toolcall", help="Function Calling 能力注册中心测试")
+    tlp.add_argument("query", help="查询文本")
+    tlp.add_argument("--tool-choice", default="auto",
+                     choices=["auto", "required", "none"],
+                     help="tool_choice 策略 (默认 auto)")
+    tlp.add_argument("--multi-turn", action="store_true",
+                     help="启用多轮调用 (LLM 可多次选工具)")
+    tlp.add_argument("--max-rounds", type=int, default=5,
+                     help="多轮最大轮次 (默认 5)")
+    tlp.add_argument("-v", "--verbose", action="store_true", help="详细日志")
+    tlp.add_argument("-l", "--list-tools", action="store_true",
+                     help="仅列出已注册能力")
+
     args = parser.parse_args()
 
-    if not setup_environment() and args.command not in ("demo", "score", "slot"):
+    if not setup_environment() and args.command not in ("demo", "score", "slot", "toolcall"):
         sys.exit(1)
 
     if args.command == "query":
@@ -657,6 +764,8 @@ def main():
         cmd_score(args)
     elif args.command == "slot":
         cmd_slot(args)
+    elif args.command == "toolcall":
+        cmd_toolcall(args)
     else:
         parser.print_help()
 

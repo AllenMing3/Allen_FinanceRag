@@ -4,8 +4,9 @@
 
 ## 功能特性
 
-- **全链路阿里百炼**：LLM (Qwen) + Embedding (text-embedding-v3) + Rerank (gte-rerank)
+- **全链路阿里百炼**：LLM (Qwen) + Embedding (text-embedding-v3) + Rerank (gte-rerank) + **Function Calling**
 - **三大核心架构**：Coordinate（多 Agent 协调）、Indexer（混合检索）、Reflection（反思防幻觉）
+- **能力注册中心**：集中管理所有 Agent 能力，LLM 通过 Function Calling 动态选择调用
 - **混合检索**：BM25 关键词 + 向量语义检索 → RRF 融合 → gte-rerank 精排
 - **Multi-Agent 流水线**：Ingestion → Extraction → Analysis → Forecast → Report
 - **六层防幻觉**：来源验证 → 一致性 → 事实性 → 完整性 → 引用 → 综合评分
@@ -37,6 +38,7 @@ llamaindex/
     │   └── dashscope_client.py   # 阿里百炼客户端封装
     ├── templates.py               # 槽位模板定义 (4 种预置模板)
     ├── slot_filler.py             # 槽位填充引擎 (并行填充 + TTFT 测量)
+    ├── tools.py                   # 能力注册中心 (Function Calling 能力管理)
     ├── retrievers/               # 混合检索器（BM25 + Embedding + Rerank）
     └── ingestion/                # 文档导入处理
 ```
@@ -361,6 +363,88 @@ my_template = SlottedTemplate(
   [GOOD] [槽位] 利润概况      0.85 (   210ms)
   [GOOD] 槽位填充汇总         0.90 (   600ms)
 ```
+
+## 能力注册中心 + Function Calling
+
+**核心思路**: 所有 Agent 的能力集中注册在一个地方，LLM 根据用户意图通过 Function Calling 自动选择调用哪个能力。
+
+```
+传统方式:  LLM 收到问题 → 自由生成回答 → 容易幻觉/数据不精确
+能力注册:  LLM 收到问题 → 判断需要哪些能力 → 调用工具获取精确数据 →  基于数据生成回答
+```
+
+### 内置能力
+
+| 分类 | 能力 | 说明 |
+|------|------|------|
+| retrieval | `search_financial_data` | 从知识库检索金融数据 |
+| analysis | `calculate_growth_rate` | 计算同比增长率 |
+| analysis | `calculate_financial_ratio` | 计算财务比率（毛利率/ROE等） |
+| analysis | `compare_metrics` | 横向对比公司指标 |
+| analysis | `summarize_financials` | 汇总多项指标为自然语言 |
+
+### 命令行使用
+
+```bash
+# 列出所有已注册能力
+python -m financial_rag.main toolcall -l temp
+
+# Function Calling 模式
+python -m financial_rag.main toolcall "茅台营收增长多少" -v
+
+# 强制 LLM 必须调用工具
+python -m financial_rag.main toolcall "计算茅台毛利率" --tool-choice required
+
+# 多轮调用 (LLM 可多次选择工具)
+python -m financial_rag.main toolcall "茅台和五粮液利润对比" --multi-turn -v
+```
+
+### 编程方式：注册自定义能力
+
+```python
+from financial_rag.tools import (
+    FunctionRegistry, FunctionDef, ToolExecutor, ToolCallSession, create_tool_session
+)
+
+# 创建注册中心
+registry = FunctionRegistry(name="my_agent")
+
+# 方式1: 装饰器注册
+@registry.register(category="data", description="获取实时股价")
+def get_stock_price(symbol: str, exchange: str = "SH") -> dict:
+    return {"symbol": symbol, "price": 1850.00, "exchange": exchange}
+
+# 方式2: 显式注册
+registry.add(FunctionDef(
+    name="get_pe_ratio",
+    description="查询公司市盈率",
+    parameters={
+        "type": "object",
+        "properties": {"symbol": {"type": "string", "description": "股票代码"}},
+        "required": ["symbol"],
+    },
+    callback=lambda symbol: {"pe": 28.5, "industry_avg": 35.2},
+    category="data",
+))
+
+# LLM 自动选择调用
+session = create_tool_session(llm=llm, registry=registry)
+stats = session.run("茅台当前市盈率是多少？", scorecard=card)
+# LLM 自动选择 get_pe_ratio("600519") → 返回结果 → 生成最终回答
+```
+
+### 工作原理
+
+```
+用户问题 → [LLM + tools] → 返回 tool_calls["get_pe_ratio", {"symbol": "600519"}]
+         → [ToolExecutor] → 执行 get_pe_ratio，返回 {"pe": 28.5}
+         → [tool result 回传 LLM] → "贵州茅台当前市盈率 28.5，低于行业平均 35.2"
+```
+
+- **自动选择**: LLM 判断需要哪个能力，自动填充参数
+- **多轮调用**: 支持 LLM 在单次对话中调用多个工具
+- **并行执行**: 同一轮多个 tool_calls 并行执行（ThreadPoolExecutor）
+- **打分集成**: 每个工具调用独立评分，汇总到全链路打分卡
 
 ## 环境变量
 

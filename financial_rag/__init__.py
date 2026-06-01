@@ -35,8 +35,13 @@ from financial_rag.templates import (
     get_template, ALL_TEMPLATES,
 )
 from financial_rag.slot_filler import SlotFiller, SlotResult, FillStats, create_slot_filler
+from financial_rag.tools import (
+    FunctionRegistry, FunctionDef, ToolExecutor, ToolCallSession,
+    ToolCallStats, ToolCallResult, ToolCallRequest,
+    CATEGORIES, create_financial_registry, create_tool_session,
+)
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 __all__ = [
     # 配置
     "config", "AppConfig",
@@ -59,4 +64,8 @@ __all__ = [
     "QUICK_QA_TEMPLATE", "DEEP_ANALYSIS_TEMPLATE",
     "get_template", "ALL_TEMPLATES",
     "SlotFiller", "SlotResult", "FillStats", "create_slot_filler",
+    # Function Registry & Tool Calling
+    "FunctionRegistry", "FunctionDef", "ToolExecutor", "ToolCallSession",
+    "ToolCallStats", "ToolCallResult", "ToolCallRequest",
+    "CATEGORIES", "create_financial_registry", "create_tool_session",
 ]
