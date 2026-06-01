@@ -9,6 +9,7 @@
 - **混合检索**：BM25 关键词 + 向量语义检索 → RRF 融合 → gte-rerank 精排
 - **Multi-Agent 流水线**：Ingestion → Extraction → Analysis → Forecast → Report
 - **六层防幻觉**：来源验证 → 一致性 → 事实性 → 完整性 → 引用 → 综合评分
+- **全链路打分系统**：每个环节独立评分，精确诊断薄弱环节（metadata解析、Jieba分词、BM25、Vector、RRF、Rerank、LLM、防幻觉）
 - **多模式降级**：无 API Key 自动回退纯本地检索模式
 
 ## 项目结构
@@ -26,10 +27,11 @@ llamaindex/
     ├── main.py                   # CLI 主入口
     ├── config.py                 # 配置（阿里百炼）
     ├── agents/                   # Multi-Agent 子模块
-    ├── core/                     # 三大架构核心
+    ├── core/                     # 三大架构核心 + 打分
     │   ├── coordinator.py        # Coordinate 多 Agent 协调
     │   ├── indexer.py            # Indexer 混合检索流水线
-    │   └── reflector.py          # Reflection 反思防幻觉
+    │   ├── reflector.py          # Reflection 反思防幻觉
+    │   └── scorer.py             # 全链路打分系统
     ├── llm/
     │   └── dashscope_client.py   # 阿里百炼客户端封装
     ├── retrievers/               # 混合检索器（BM25 + Embedding + Rerank）
@@ -168,6 +170,101 @@ python -m financial_rag.main --help
 python -m financial_rag.main query --help
 python -m financial_rag.main build --help
 python -m financial_rag.main analyze --help
+
+# 仅检索打分测试（不调用 LLM）
+python -m financial_rag.main score "茅台营收增长" -k 5
+python -m financial_rag.main score "汇率走势" --json scores.json  # 导出 JSON
+```
+
+## 全链路打分系统
+
+每个管道阶段独立评分 (0~1.0)，直接定位哪个环节表现不好：
+
+```
+========================================================================
+  Pipeline 全链路打分卡 — 综合: 0.72  (一般, C)
+========================================================================
+  查询: 茅台营收增长
+
+── 文本预处理 & 分词 [B] 均分 0.85 ──
+  [GOOD] Jieba 分词       0.85 (    10ms)
+
+── 混合检索 (BM25+Vector+RRF+Rerank) [B] 均分 0.80 ──
+  [GOOD] BM25 关键词检索     0.90 (    15ms)
+  [ OK ] RRF 融合排序       0.66 (     5ms)
+  [GOOD] Rerank 精排      0.83 (    20ms)
+
+── LLM 生成 & 防幻觉校验 [B] 均分 0.89 ──
+  [GOOD] LLM 生成         0.90 (   500ms)
+  [GOOD] 六层防幻觉校验        0.88 (     0ms)
+========================================================================
+```
+
+### 评分维度
+
+| 大类 | 阶段 | 评分依据 |
+|------|------|----------|
+| **摄取** | 元数据解析 | 字段覆盖率（source/company/date 等 7 个字段） |
+| **预处理** | Jieba 分词 | token 数量、唯一性、平均词长 |
+| **预处理** | 关键词抽取 | 关键词数量、覆盖率 |
+| **检索** | BM25 检索 | 匹配率、结果数量、top 分数 |
+| **检索** | 向量检索 | 余弦相似度、结果数量 |
+| **检索** | RRF 融合 | 两个检索器共识度 |
+| **检索** | Rerank 精排 | 高相关文档占比、rerank 分数 |
+| **生成** | LLM 生成 | 输出长度、token 消耗 |
+| **生成** | 防幻觉校验 | L1~L6 六层加权评分 |
+
+### 诊断输出
+
+分数低的阶段会自动生成诊断信息：
+
+- **`[!]` 诊断**：精确描述问题（如"仅解析出 2/7 个字段"）
+- **`[W]` 警告**：严重程度标记（如"元数据覆盖率过低 (29%)"）
+- **`[>]` 建议**：修复方向（如"检查文档格式是否规范"）
+
+### 编程方式使用
+
+```python
+from financial_rag.core.scorer import PipelineScoreCard
+
+card = PipelineScoreCard(query="茅台营收增长")
+
+# 逐阶段记录
+card.record_metadata(score=0.85, fields_found=6, fields_expected=7)
+card.record_tokenization(score=0.8, token_count=15, unique_tokens=12, avg_token_len=2.5)
+
+# BM25 检索
+card.record_bm25(result_count=3, top_score=0.92, avg_score=0.65,
+                 query_terms=8, matched_terms=6)
+
+# Rerank
+card.record_rerank(result_count=3, top_rerank_score=0.95,
+                   avg_rerank_score=0.78, high_count=2)
+
+# LLM + 防幻觉
+card.record_llm(score=0.9, token_count=350, model="qwen-plus")
+card.record_hallucination(overall_score=0.88,
+    layer_scores={"L1": 0.9, "L2": 0.85, "L3": 0.92, "L4": 0.8, "L5": 0.9, "L6": 0.88})
+
+# 查看结果
+print(card.summary())      # 带诊断的文本摘要
+print(card.table())        # 纯表格形式
+print(card.to_dict())      # JSON 字典，可对接监控系统
+```
+
+### 检索器集成
+
+`HybridRetriever` 内置打分支持，只需调用 `search_with_scores()`：
+
+```python
+from financial_rag.retrievers import HybridRetriever
+
+retriever = HybridRetriever(tokenizer=jieba_tokenizer())
+retriever.index(documents)
+
+# 自动在每个子阶段（分词/BM25/Vector/RRF/Rerank）记录评分
+results, card = retriever.search_with_scores("茅台营收", top_k=5)
+print(card.summary())
 ```
 
 ## 环境变量

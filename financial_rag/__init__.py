@@ -20,15 +20,16 @@ from financial_rag.core import (
     AgentOrchestrator, ExecutionMode,
     PipelineOrchestrator, PipelineConfig, PipelineStatus,
     ReflectionLoop, ReflectionConfig, HallucinationGuard,
+    PipelineScoreCard, StageScore, ScoreGrade, create_scorecard,
 )
 from financial_rag.agents import (
     IngestionAgent, ExtractionAgent,
     AnalysisAgent, ForecastAgent, ReportAgent,
 )
-from financial_rag.retrievers import HybridRetriever
+from financial_rag.retrievers import HybridRetriever, jieba_tokenizer
 from financial_rag.middleware import FinancialHallucinationGuard
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __all__ = [
     # 配置
     "config", "AppConfig",
@@ -38,9 +39,11 @@ __all__ = [
     "PipelineOrchestrator", "PipelineConfig", "PipelineStatus",
     # Core - Reflection
     "ReflectionLoop", "ReflectionConfig", "HallucinationGuard",
+    # Core - Scorer
+    "PipelineScoreCard", "StageScore", "ScoreGrade", "create_scorecard",
     # Agents
     "IngestionAgent", "ExtractionAgent",
     "AnalysisAgent", "ForecastAgent", "ReportAgent",
     # Retrievers / Middleware
-    "HybridRetriever", "FinancialHallucinationGuard",
+    "HybridRetriever", "jieba_tokenizer", "FinancialHallucinationGuard",
 ]

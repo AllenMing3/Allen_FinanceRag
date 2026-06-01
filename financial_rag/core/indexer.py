@@ -171,8 +171,15 @@ class PipelineOrchestrator:
         self.stages[name] = stage
         return self
 
-    def run(self, input_text: str, context: Optional[Dict] = None) -> PipelineResult:
-        """执行完整流水线"""
+    def run(self, input_text: str, context: Optional[Dict] = None,
+            scorecard=None) -> PipelineResult:
+        """执行完整流水线
+
+        Args:
+            input_text: 输入文本
+            context: 上下文
+            scorecard: PipelineScoreCard 实例（可选），传入则自动记录每阶段评分
+        """
         context = context or {}
         t0 = time.time()
         trace = []
@@ -182,47 +189,82 @@ class PipelineOrchestrator:
             # === Stage 1: Clean ===
             t1 = time.time()
             clean_out = self.stages["clean"].process(input_text, context)
+            original_len = len(input_text)
+            cleaned_len = len(clean_out.get("text", ""))
+            clean_elapsed = (time.time() - t1) * 1000
             result.clean = StageResult(
                 stage_name="clean", success=True, output=clean_out,
-                elapsed_ms=(time.time() - t1) * 1000,
-                metadata={"original_len": len(input_text), "cleaned_len": len(clean_out.get("text", ""))}
+                elapsed_ms=clean_elapsed,
+                metadata={"original_len": original_len, "cleaned_len": cleaned_len}
             )
             trace.append({"stage": 1, "elapsed": result.clean.elapsed_ms})
+            if scorecard:
+                clean_score = min(1.0, cleaned_len / max(original_len, 1) * 0.8 + 0.2)
+                scorecard.record_clean(clean_score, original_len, cleaned_len,
+                                       elapsed_ms=clean_elapsed)
 
             # === Stage 2: Extract ===
             t2 = time.time()
             extract_out = self.stages["extract"].process(clean_out.get("text", input_text), context)
+            extract_elapsed = (time.time() - t2) * 1000
+            kw_count = len(extract_out.get("keywords", []))
             result.extract = StageResult(
                 stage_name="extract", success=True, output=extract_out,
-                elapsed_ms=(time.time() - t2) * 1000,
-                metadata={"keywords": len(extract_out.get("keywords", []))}
+                elapsed_ms=extract_elapsed,
+                metadata={"keywords": kw_count}
             )
             trace.append({"stage": 2, "elapsed": result.extract.elapsed_ms})
+            if scorecard:
+                kw_score = min(1.0, kw_count / 5) if kw_count > 0 else 0.1
+                scorecard.record_keyword_extract(kw_score, kw_count,
+                                                 elapsed_ms=extract_elapsed)
 
             # === Stage 3: Retrieve ===
             t3 = time.time()
             retrieve_out = self.stages["retrieve"].process(
                 extract_out.get("queries", [input_text]), context
             )
+            retrieve_elapsed = (time.time() - t3) * 1000
+            sources = retrieve_out.get("sources", [])
             result.retrieve = StageResult(
-                stage_name="retrieve", success=bool(retrieve_out.get("sources")),
+                stage_name="retrieve", success=bool(sources),
                 output=retrieve_out,
-                elapsed_ms=(time.time() - t3) * 1000,
-                metadata={"sources": len(retrieve_out.get("sources", []))}
+                elapsed_ms=retrieve_elapsed,
+                metadata={"sources": len(sources)}
             )
             trace.append({"stage": 3, "elapsed": result.retrieve.elapsed_ms})
+            if scorecard:
+                # 检索评分: 基于来源数量和质量
+                src_count = len(sources)
+                has_scores = any(s.get("score") is not None for s in sources)
+                if has_scores:
+                    src_scores = [s.get("score", 0) for s in sources]
+                    ret_score = (min(1.0, src_count / 3) * 0.4 +
+                                 (sum(src_scores) / max(len(src_scores), 1)) * 0.6)
+                else:
+                    ret_score = min(1.0, src_count / 3)
+                from .scorer import PipelineScoreCard
+                # 直接 record 以免覆盖 HybridRetriever 内部已经记录的子阶段评分
+                if scorecard.get_by_name("bm25_retrieval") is None:
+                    scorecard.record_retrieval(
+                        "bm25_retrieval", "BM25 检索", ret_score,
+                        result_count=src_count, top_score=src_scores[0] if has_scores and src_scores else 0.0,
+                        avg_score=sum(src_scores)/len(src_scores) if has_scores and src_scores else 0.0,
+                        elapsed_ms=retrieve_elapsed,
+                    )
 
             # === Stage 4: Verify ===
             t4 = time.time()
             verify_out = self.stages["verify"].process(
                 answer=retrieve_out.get("answer", ""),
-                sources=retrieve_out.get("sources", []),
+                sources=sources,
                 context=context
             )
+            verify_elapsed = (time.time() - t4) * 1000
             result.verify = StageResult(
                 stage_name="verify", success=verify_out.get("passed", False),
                 output=verify_out,
-                elapsed_ms=(time.time() - t4) * 1000,
+                elapsed_ms=verify_elapsed,
                 metadata={"risk": verify_out.get("risk", "unknown")}
             )
             trace.append({"stage": 4, "elapsed": result.verify.elapsed_ms})
@@ -240,4 +282,7 @@ class PipelineOrchestrator:
 
         result.total_elapsed_ms = (time.time() - t0) * 1000
         result.trace = trace
+        # 附带打分卡
+        if scorecard:
+            result.scorecard = scorecard
         return result

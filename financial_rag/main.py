@@ -20,6 +20,7 @@ Financial RAG — 主入口（阿里百炼 DashScope）
 import argparse
 import os
 import sys
+import time
 
 from financial_rag.config import config
 from financial_rag.core.coordinator import (
@@ -29,9 +30,10 @@ from financial_rag.core.indexer import (
     PipelineOrchestrator, PipelineConfig, PipelineStatus
 )
 from financial_rag.core.reflector import HallucinationGuard
+from financial_rag.core.scorer import PipelineScoreCard
 
 from financial_rag.llm import get_llm, get_embedding, get_reranker
-from financial_rag.retrievers import HybridRetriever
+from financial_rag.retrievers import HybridRetriever, jieba_tokenizer
 
 from financial_rag.agents.ingestion_agent import IngestionAgent
 from financial_rag.agents.extraction_agent import ExtractionAgent
@@ -61,20 +63,42 @@ def create_orchestrator() -> AgentOrchestrator:
 
 def create_hybrid_retriever() -> HybridRetriever:
     """
-    创建带阿里 Embedding + Rerank 的混合检索器
+    创建带阿里 Embedding + Rerank + Jieba 分词的混合检索器
 
-    全链路: BM25 → text-embedding-v3 → RRF → gte-rerank → Top-K
+    全链路: Jieba 分词 → BM25 → text-embedding-v3 → RRF → gte-rerank → Top-K
     """
     api_key = config.llm.api_key
+
+    # 尝试加载 jieba 分词器
+    tokenizer = None
+    try:
+        tokenizer = jieba_tokenizer()
+    except ImportError:
+        pass  # 回退到正则分词
+
     if not api_key:
-        # 无 API Key → 纯本地模式（BM25 + Jaccard）
+        # 无 API Key → 纯本地模式（Jieba/正则 + BM25 + Jaccard）
         print("[WARN] 未设置 DASHSCOPE_API_KEY，回退到纯本地检索")
-        return HybridRetriever()
+        return HybridRetriever(tokenizer=tokenizer)
 
     return HybridRetriever(
         embedder=get_embedding(api_key=api_key),
         reranker=get_reranker(api_key=api_key),
+        tokenizer=tokenizer,
     )
+
+
+# ===================== 打分展示工具 =====================
+
+def show_scorecard(card: PipelineScoreCard, title: str = None):
+    """打印评分卡详细信息"""
+    if not card or not card.stages:
+        print("\n[无评分数据]")
+        return
+    print()
+    if title:
+        print(title)
+    print(card.summary())
 
 
 # ===================== 命令处理器 =====================
@@ -103,7 +127,8 @@ def cmd_query(args):
     has_key = bool(config.llm.api_key)
 
     if args.interactive:
-        print("\n交互模式，输入 'q' 退出\n")
+        print("\n交互模式，输入 'q' 退出，输入 'score' 查看上次打分\n")
+        last_card = None
         while True:
             try:
                 q = input("输入问题: ").strip()
@@ -111,21 +136,60 @@ def cmd_query(args):
                     break
                 if not q:
                     continue
+                if q.lower() == 'score':
+                    show_scorecard(last_card, "📊 上次检索打分卡:")
+                    continue
 
                 try:
+                    # 创建打分卡
+                    card = PipelineScoreCard(query=q)
+                    last_card = card
+
                     if has_key:
-                        # 全链路: LLM 生成 + 防幻觉校验
+                        # 全链路: 检索 → LLM 生成 → 防幻觉校验
+                        retriever = create_hybrid_retriever()
+                        # 模拟知识库
+                        sample_docs = [
+                            {"text": "贵州茅台2024年营收1738.52亿元，同比增长15.66%", "meta": {"source": "maotai_2024"}},
+                            {"text": "茅台2024年净利润862.28亿元，同比增长15.38%", "meta": {"source": "maotai_2024"}},
+                            {"text": "2024年茅台酒毛利率91.86%，ROE为34.19%", "meta": {"source": "maotai_2024"}},
+                            {"text": "2025年人民币汇率预计在7.0-7.3区间波动", "meta": {"source": "economic_outlook"}},
+                            {"text": "央行2025年一季度降准0.5个百分点，释放流动性约1万亿", "meta": {"source": "pboc_policy"}},
+                        ]
+                        retriever.index(sample_docs)
+                        results, ret_card = retriever.search_with_scores(q, top_k=3)
+                        # 合并检索打分
+                        card.stages.extend(ret_card.stages)
+
+                        # LLM 生成
                         llm = get_llm(api_key=config.llm.api_key, model=config.llm.model)
+                        context_text = "\n".join(r.get("text", "")[:200] for r in results[:3])
+                        t_llm = time.time()
                         response = llm.chat(
-                            messages=f"你是财报分析专家。请用中文回答: {q}",
-                            system="你是一个专业的金融分析师，回答必须准确、有依据。",
+                            messages=f"根据以下参考信息回答问题。\n参考:\n{context_text}\n\n问题: {q}",
+                            system="你是专业金融分析师，回答必须准确有依据。不确定请说明。",
                         )
                         answer = response.content
+                        llm_elapsed = (time.time() - t_llm) * 1000
+                        card.record_llm(
+                            score=min(1.0, len(answer) / 200) if answer else 0.1,
+                            token_count=response.usage.get('total_tokens', len(answer)),
+                            model=config.llm.model,
+                            elapsed_ms=llm_elapsed,
+                        )
+
+                        # 防幻觉校验
                         guard = HallucinationGuard()
-                        check = guard.check(answer, [])
-                        print(f"\n[Qwen] {answer}\n")
-                        print(f"[防幻觉] 评分: {check['overall_score']:.2f}, 风险: {check['risk']}")
-                        print(f"[Token] {response.usage.get('total_tokens', 0)}")
+                        check = guard.check(answer, results)
+                        card.record_hallucination(
+                            overall_score=check['overall_score'],
+                            layer_scores={k: v.get("score", 0) for k, v in check.get('checks', {}).items()},
+                            risk=check['risk'],
+                        )
+
+                        print(f"\n[回答] {answer[:300]}{'...' if len(answer)>300 else ''}")
+                        print(f"[综合] 时间: {response.usage.get('total_tokens', 0)} tokens")
+                        show_scorecard(card)
                     else:
                         print(f"\n[模拟] 关于 {q} 的分析...\n")
                         print("[提示] 设置 DASHSCOPE_API_KEY 启用真实 LLM\n")
@@ -178,18 +242,19 @@ def cmd_build(args):
     retriever.index(sample_docs)
     print(f"已索引 {len(sample_docs)} 篇文档\n")
 
-    # 测试检索
+    # 测试检索（带打分）
     test_qs = ["茅台营收多少", "汇率走势如何"]
     for q in test_qs:
-        results = retriever.search(q, top_k=3)
+        results, card = retriever.search_with_scores(q, top_k=3)
         print(f"Q: {q}")
         for r in results:
             print(f"  [{r.get('retriever', '?')}] score={r.get('score', 0):.4f} | {r['text'][:60]}")
+        show_scorecard(card)
         print()
 
 
 def cmd_analyze(args):
-    """Multi-Agent 财报分析"""
+    """Multi-Agent 财报分析（带打分）"""
     print("=" * 60)
     print("Multi-Agent 财报分析 (阿里百炼)")
     print("=" * 60)
@@ -209,11 +274,41 @@ def cmd_analyze(args):
         print(f"LLM: {config.llm.model} | Embedding: {config.llm.embedding_model} | Rerank: {config.llm.rerank_model}")
     print("=" * 60)
 
+    # 创建打分卡
+    card = PipelineScoreCard(query=os.path.basename(args.file))
+
     result = orch.execute(args.file)
     print(f"\n完成: {result.success}, 耗时: {result.execution_time:.1f}s")
-    for r in result.agent_results:
+
+    # 记录每个 Agent 的评分
+    for i, r in enumerate(result.agent_results):
         icon = "OK" if r.success else "FAIL"
-        print(f"  [{icon}] {r.agent_name}: {r.message}")
+        # 计算 Agent 阶段评分
+        agent_score = 0.0
+        if r.success:
+            if r.agent_name == "IngestionAgent":
+                # 从 context_updates 中提取 metadata 评分
+                meta = r.context_updates.get("metadata", {})
+                agent_score = meta.get("metadata_score", 0.5)
+                fields_found = meta.get("metadata_fields_found", 0)
+                fields_expected = meta.get("metadata_fields_expected", 7)
+                card.record_metadata(agent_score, fields_found, fields_expected,
+                                     elapsed_ms=r.execution_time * 1000)
+            elif r.agent_name == "ExtractionAgent":
+                data = r.data or {}
+                agent_score = data.get("_scores", {}).get("extraction", 0.5)
+                card.record_keyword_extract(agent_score,
+                    keyword_count=len(data.get("metrics", {})),
+                    elapsed_ms=r.execution_time * 1000)
+                query_score = data.get("_scores", {}).get("query_rewrite", 0.5)
+                card.record_query_rewrite(query_score, result.context.raw_input if result.context else "",
+                    rewritten_queries=data.get("queries", []),
+                    elapsed_ms=0)
+            else:
+                agent_score = 0.5 + (0.3 if r.success else 0)
+        print(f"  [{icon}] {r.agent_name}: {r.message} (评分: {agent_score:.2f})")
+
+    show_scorecard(card, "📊 Multi-Agent 全链路打分卡:")
 
 
 def cmd_demo():
@@ -286,21 +381,71 @@ def cmd_demo():
             ]
             retriever.index(test_docs, precompute_embeddings=True)
 
-            print("[全链路检索测试]")
+            print("[全链路检索测试 (含打分)]")
             for q in ["茅台2024年盈利情况", "茅台各产品线营收"]:
-                results = retriever.search(q, top_k=3, use_rerank=True)
+                results, card = retriever.search_with_scores(q, top_k=3, use_rerank=True)
                 print(f"\n  Q: {q}")
                 for r in results:
                     label = r.get('relevance_level', '?')
                     print(f"    [{r['retriever']}] relev={label} score={r.get('score', 0):.4f} | {r['text'][:60]}")
+                show_scorecard(card)
             print()
         except Exception as e:
             print(f"[注意] 检索demo失败: {e}\n")
 
     print("使用方法:")
-    print("  python -m financial_rag.main query -i          # 交互查询")
-    print("  python -m financial_rag.main analyze <文件>    # Multi-Agent分析")
-    print("  python -m financial_rag.main build --dir <目录> # 构建知识库")
+    print("  python -m financial_rag.main query -i          # 交互查询 (含打分)")
+    print("  python -m financial_rag.main analyze <文件>    # Multi-Agent分析 (含打分)")
+    print("  python -m financial_rag.main build --dir <目录> # 构建知识库 (含打分)")
+    print("  python -m financial_rag.main score <查询文本>  # 仅跑检索打分")
+
+
+def cmd_score(args):
+    """仅运行检索打分（不调用 LLM）"""
+    print("=" * 60)
+    print("检索全链路打分测试")
+    print("=" * 60)
+    print(f"查询: {args.query}")
+
+    if args.local:
+        # 纯本地模式
+        tokenizer = None
+        try:
+            tokenizer = jieba_tokenizer()
+            print("分词器: Jieba (已加载金融词典)")
+        except ImportError:
+            print("分词器: 正则 (pip install jieba 启用中文分词)")
+        retriever = HybridRetriever(tokenizer=tokenizer)
+    else:
+        retriever = create_hybrid_retriever()
+
+    # 示例文档
+    sample_docs = [
+        {"text": "贵州茅台2024年营收1738.52亿元，同比增长15.66%", "meta": {"source": "maotai_2024"}},
+        {"text": "茅台2024年净利润862.28亿元，同比增长15.38%", "meta": {"source": "maotai_2024"}},
+        {"text": "2024年茅台酒毛利率91.86%，ROE为34.19%", "meta": {"source": "maotai_2024"}},
+        {"text": "茅台酒营收1465.33亿元，系列酒营收246.84亿元", "meta": {"source": "maotai_2024"}},
+        {"text": "2025年人民币汇率预计在7.0-7.3区间波动", "meta": {"source": "economic_outlook"}},
+        {"text": "央行2025年一季度降准0.5个百分点", "meta": {"source": "pboc_policy"}},
+        {"text": "2024年茅台经营活动现金流量净额753.29亿元", "meta": {"source": "maotai_2024"}},
+    ]
+    retriever.index(sample_docs)
+
+    results, card = retriever.search_with_scores(args.query, top_k=args.top_k)
+
+    print(f"\n检索结果 ({len(results)} 条):")
+    for r in results:
+        label = r.get('relevance_level', '?')
+        print(f"  [{r['retriever']}] relev={label} score={r.get('score', 0):.4f} | {r['text'][:70]}")
+
+    show_scorecard(card, "📊 检索全链路打分卡:")
+
+    if args.json:
+        import json
+        json_path = args.json
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(card.to_dict(), f, ensure_ascii=False, indent=2)
+        print(f"\n评分详情已导出: {json_path}")
 
 
 # ===================== main =====================
@@ -312,37 +457,45 @@ def main():
         epilog="""
 示例:
   python -m financial_rag.main demo                          # 演示
-  python -m financial_rag.main query -i                      # 交互查询
+  python -m financial_rag.main query -i                      # 交互查询 (含打分)
   python -m financial_rag.main query -q "茅台毛利率多少"      # 单次查询
   python -m financial_rag.main build --dir ./my_reports      # 建知识库
-  python -m financial_rag.main analyze ./report.pdf            # Multi-Agent分析
-  python -m financial_rag.main analyze ./report.pdf --parallel # 并行分析
+  python -m financial_rag.main analyze ./report.pdf            # Multi-Agent分析 (含打分)
+  python -m financial_rag.main score "茅台营收增长" -k 5      # 仅检索打分
+  python -m financial_rag.main score "汇率走势" --json scores.json  # 导出打分JSON
         """
     )
 
     sub = parser.add_subparsers(dest="command", help="命令")
 
     # query
-    qp = sub.add_parser("query", help="查询模式")
+    qp = sub.add_parser("query", help="查询模式 (含全链路打分)")
     qp.add_argument("-q", "--question", help="查询问题")
     qp.add_argument("-i", "--interactive", action="store_true", help="交互模式")
 
     # build
-    bp = sub.add_parser("build", help="构建知识库")
+    bp = sub.add_parser("build", help="构建知识库 (含检索打分)")
     bp.add_argument("--dir", help="财报/新闻目录")
 
     # analyze
-    ap = sub.add_parser("analyze", help="Multi-Agent 分析")
+    ap = sub.add_parser("analyze", help="Multi-Agent 分析 (含全链路打分)")
     ap.add_argument("file", help="财报文件路径")
     ap.add_argument("--parallel", action="store_true", help="并行执行")
     ap.add_argument("--output", help="输出路径")
 
     # demo
-    sub.add_parser("demo", help="演示模式")
+    sub.add_parser("demo", help="演示模式 (含全链路打分)")
+
+    # score: 纯检索打分
+    sp = sub.add_parser("score", help="仅检索链路打分测试")
+    sp.add_argument("query", help="查询文本")
+    sp.add_argument("-k", "--top-k", type=int, default=5, help="返回数量 (默认5)")
+    sp.add_argument("--json", help="导出打分JSON文件路径")
+    sp.add_argument("--local", action="store_true", help="纯本地模式 (不使用 API)")
 
     args = parser.parse_args()
 
-    if not setup_environment() and args.command != "demo":
+    if not setup_environment() and args.command not in ("demo", "score"):
         sys.exit(1)
 
     if args.command == "query":
@@ -353,6 +506,8 @@ def main():
         cmd_analyze(args)
     elif args.command == "demo":
         cmd_demo()
+    elif args.command == "score":
+        cmd_score(args)
     else:
         parser.print_help()
 

@@ -5,6 +5,7 @@ ExtractionAgent — 关键财务指标抽取
 - 从财报中抽取: 营收、利润、毛利率、现金流等
 - 从新闻中抽取: 事件、影响、关联公司
 - 结构化输出供后续分析使用
+- 【打分】关键词抽取质量 & 查询改写质量评分
 """
 from typing import Dict, Any, List
 
@@ -55,21 +56,51 @@ class ExtractionAgent(BaseAgent):
         # 3. 生成多角度查询
         queries = self._generate_queries(documents, metrics, entities)
 
+        # 评估抽取质量
+        metric_score = self._evaluate_extraction(metrics, entities)
+        query_score = self._evaluate_queries(queries, documents)
+
         result_data = {
             "metrics": metrics,
             "entities": entities,
             "queries": queries,
+            "_scores": {
+                "extraction": metric_score,
+                "query_rewrite": query_score,
+            }
         }
 
         return AgentResult(
             success=True,
-            message=f"抽取 {len(metrics)} 项指标, {len(entities)} 个实体",
+            message=f"抽取 {len(metrics)} 项指标, {len(entities)} 个实体, 生成 {len(queries)} 个查询",
             data=result_data,
             context_updates={
                 "extracted_features": result_data,
-                "intermediate_findings": [{"stage": "extraction", "metrics": list(metrics.keys())}]
+                "intermediate_findings": [{"stage": "extraction", "metrics": list(metrics.keys()),
+                                           "extraction_score": metric_score, "query_score": query_score}]
             }
         )
+
+    def _evaluate_extraction(self, metrics: Dict, entities: List[Dict]) -> float:
+        """评估指标和实体抽取的覆盖率"""
+        metric_hit = sum(1 for m in self.FINANCIAL_METRICS if m in metrics)
+        metric_rate = metric_hit / max(len(self.FINANCIAL_METRICS), 1)
+
+        entity_hit = min(len(entities), len(self.NEWS_ENTITIES))
+        entity_rate = entity_hit / max(len(self.NEWS_ENTITIES), 1)
+
+        return 0.6 * metric_rate + 0.4 * entity_rate
+
+    def _evaluate_queries(self, queries: List[str], documents: List[Dict]) -> float:
+        """评估生成查询的多样性和覆盖率"""
+        if not queries:
+            return 0.0
+        # 查询数量评分
+        count_score = min(1.0, len(queries) / 3)
+        # 多样性：基于长度和内容差异的简单评估
+        lengths = [len(q) for q in queries]
+        diversity = 1.0 if len(set(lengths)) > 1 else 0.6
+        return 0.4 * count_score + 0.6 * diversity
 
     def _extract_metrics(self, documents: List[Dict]) -> Dict[str, Any]:
         """从文档中抽取财务指标"""
