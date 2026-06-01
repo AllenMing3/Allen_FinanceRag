@@ -1,0 +1,46 @@
+"""
+Financial RAG — 财报/经济新闻智能分析系统
+
+三大核心架构：
+  1. Coordinate  — 多 Agent 协调调度
+  2. Indexer     — 多文本索引流水线
+  3. Reflection  — ReAct 反思 + 六层防幻觉
+
+五个专业化 Agent：
+  - IngestionAgent   财报/新闻数据摄取
+  - ExtractionAgent  关键财务指标抽取
+  - AnalysisAgent    多维度财务分析
+  - ForecastAgent    趋势预测与情景分析
+  - ReportAgent      多格式报告生成
+
+与业务完全脱钩 — 所有核心架构通过抽象接口定义，可替换任意领域
+"""
+from financial_rag.config import config, AppConfig
+from financial_rag.core import (
+    AgentOrchestrator, ExecutionMode,
+    PipelineOrchestrator, PipelineConfig, PipelineStatus,
+    ReflectionLoop, ReflectionConfig, HallucinationGuard,
+)
+from financial_rag.agents import (
+    IngestionAgent, ExtractionAgent,
+    AnalysisAgent, ForecastAgent, ReportAgent,
+)
+from financial_rag.retrievers import HybridRetriever
+from financial_rag.middleware import FinancialHallucinationGuard
+
+__version__ = "1.0.0"
+__all__ = [
+    # 配置
+    "config", "AppConfig",
+    # Core - Coordinate
+    "AgentOrchestrator", "ExecutionMode",
+    # Core - Indexer
+    "PipelineOrchestrator", "PipelineConfig", "PipelineStatus",
+    # Core - Reflection
+    "ReflectionLoop", "ReflectionConfig", "HallucinationGuard",
+    # Agents
+    "IngestionAgent", "ExtractionAgent",
+    "AnalysisAgent", "ForecastAgent", "ReportAgent",
+    # Retrievers / Middleware
+    "HybridRetriever", "FinancialHallucinationGuard",
+]
