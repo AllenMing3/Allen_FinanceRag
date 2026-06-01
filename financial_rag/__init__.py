@@ -28,8 +28,15 @@ from financial_rag.agents import (
 )
 from financial_rag.retrievers import HybridRetriever, jieba_tokenizer
 from financial_rag.middleware import FinancialHallucinationGuard
+from financial_rag.templates import (
+    SlottedTemplate, SlotDef,
+    FINANCIAL_REPORT_TEMPLATE, NEWS_BRIEF_TEMPLATE,
+    QUICK_QA_TEMPLATE, DEEP_ANALYSIS_TEMPLATE,
+    get_template, ALL_TEMPLATES,
+)
+from financial_rag.slot_filler import SlotFiller, SlotResult, FillStats, create_slot_filler
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __all__ = [
     # 配置
     "config", "AppConfig",
@@ -46,4 +53,10 @@ __all__ = [
     "AnalysisAgent", "ForecastAgent", "ReportAgent",
     # Retrievers / Middleware
     "HybridRetriever", "jieba_tokenizer", "FinancialHallucinationGuard",
+    # Templates & Slot-Filling
+    "SlottedTemplate", "SlotDef",
+    "FINANCIAL_REPORT_TEMPLATE", "NEWS_BRIEF_TEMPLATE",
+    "QUICK_QA_TEMPLATE", "DEEP_ANALYSIS_TEMPLATE",
+    "get_template", "ALL_TEMPLATES",
+    "SlotFiller", "SlotResult", "FillStats", "create_slot_filler",
 ]

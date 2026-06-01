@@ -10,6 +10,7 @@
 - **Multi-Agent 流水线**：Ingestion → Extraction → Analysis → Forecast → Report
 - **六层防幻觉**：来源验证 → 一致性 → 事实性 → 完整性 → 引用 → 综合评分
 - **全链路打分系统**：每个环节独立评分，精确诊断薄弱环节（metadata解析、Jieba分词、BM25、Vector、RRF、Rerank、LLM、防幻觉）
+- **模板 + 槽位填充**：用槽位填充替代长文自由生成，首 Token 延迟降低 60~80%，每槽位独立打分
 - **多模式降级**：无 API Key 自动回退纯本地检索模式
 
 ## 项目结构
@@ -34,6 +35,8 @@ llamaindex/
     │   └── scorer.py             # 全链路打分系统
     ├── llm/
     │   └── dashscope_client.py   # 阿里百炼客户端封装
+    ├── templates.py               # 槽位模板定义 (4 种预置模板)
+    ├── slot_filler.py             # 槽位填充引擎 (并行填充 + TTFT 测量)
     ├── retrievers/               # 混合检索器（BM25 + Embedding + Rerank）
     └── ingestion/                # 文档导入处理
 ```
@@ -265,6 +268,98 @@ retriever.index(documents)
 # 自动在每个子阶段（分词/BM25/Vector/RRF/Rerank）记录评分
 results, card = retriever.search_with_scores("茅台营收", top_k=5)
 print(card.summary())
+```
+
+## 模板 + 槽位填充系统
+
+**核心思路**: 用模板 + 槽位填充替代长文自由生成，大幅降低首 Token 延迟。
+
+```
+传统自由生成:  "分析茅台财报" → LLM 输出 500 字 → 首Token 2~5s
+槽位填充:      拆成 9 个槽位 → 每槽位输出 20~80 字 → 首Token 0.3~0.8s
+```
+
+### 预置模板
+
+| 模板 | 槽位数 | 阶段数 | 适用场景 |
+|------|--------|--------|----------|
+| `quick_qa` | 4 | 1 | 快速问答（直接回答 + 数据支撑 + 可信度） |
+| `financial_report` | 9 | 3 | 财报核心摘要（营收/利润/指标/风险） |
+| `news_brief` | 7 | 2 | 经济新闻快读（事件/影响/展望） |
+| `deep_analysis` | 6 | 3 | 深度分析（盈利/成长/健康/估值/建议） |
+
+### 命令行使用
+
+```bash
+# 交互模式 — 支持运行时切换模板
+python -m financial_rag.main query -i
+# 在交互中: 输入 "fin" 切财报模板, "quick" 切快答, "news" 切新闻, "deep" 切深度
+
+# 对比测试 — 自由生成 vs 槽位填充
+python -m financial_rag.main slot "茅台2024年利润增长情况" -t financial_report
+# 输出对照组和实验组的首Token延迟对比
+
+# 槽位填充仅测试（不跑对照组）
+python -m financial_rag.main slot "茅台营收" -t quick_qa --no-freeform
+```
+
+### 编程方式使用
+
+```python
+from financial_rag.templates import QUICK_QA_TEMPLATE, FINANCIAL_REPORT_TEMPLATE
+from financial_rag.slot_filler import SlotFiller, create_slot_filler
+
+# 创建填充器（带打分卡）
+filler = create_slot_filler(llm=llm, scorecard=card)
+
+# 填充槽位
+fill_stats = filler.fill(
+    template=QUICK_QA_TEMPLATE,
+    query="茅台毛利率多少",
+    context_docs=["茅台2024年毛利率91.86%..."]
+)
+
+# 渲染为最终文本
+output = filler.render(QUICK_QA_TEMPLATE, fill_stats)
+print(output)
+
+# 查看每个槽位的首Token延迟
+for key, r in fill_stats.slot_results.items():
+    print(f"  {r.label}: TTFT={r.ttft_ms:.0f}ms, tokens={r.token_count}")
+
+# 性能统计
+print(f"总耗时: {fill_stats.total_elapsed_ms:.0f}ms")
+print(f"平均首Token: {fill_stats.avg_ttft_ms:.0f}ms")
+print(f"并行增益: {fill_stats.parallel_gain:.0%}")
+```
+
+### 自定义模板
+
+```python
+from financial_rag.templates import SlottedTemplate, SlotDef
+
+my_template = SlottedTemplate(
+    name="my_analysis",
+    description="自定义分析模板",
+    slots=[
+        SlotDef("summary", "摘要", prompt="用1句话概括。最多30字。", max_tokens=40, required=True),
+        SlotDef("detail", "详情", prompt="展开分析。最多50字。", max_tokens=60),
+    ],
+    phases=[["summary", "detail"]],  # 同一phase可并行
+    render="# {summary}\n\n{detail}",
+)
+```
+
+### 打分卡集成
+
+槽位填充结果自动纳入全链路打分卡，每个槽位独立评分：
+
+```
+── LLM 生成 & 防幻觉校验 [A] 均分 0.91 ──
+  [GOOD] [槽位] 公司名称      0.95 (   120ms)
+  [GOOD] [槽位] 营收概况      0.88 (   180ms)
+  [GOOD] [槽位] 利润概况      0.85 (   210ms)
+  [GOOD] 槽位填充汇总         0.90 (   600ms)
 ```
 
 ## 环境变量

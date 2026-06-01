@@ -34,6 +34,12 @@ from financial_rag.core.scorer import PipelineScoreCard
 
 from financial_rag.llm import get_llm, get_embedding, get_reranker
 from financial_rag.retrievers import HybridRetriever, jieba_tokenizer
+from financial_rag.templates import (
+    SlottedTemplate, FINANCIAL_REPORT_TEMPLATE, NEWS_BRIEF_TEMPLATE,
+    QUICK_QA_TEMPLATE, DEEP_ANALYSIS_TEMPLATE,
+    get_template, ALL_TEMPLATES,
+)
+from financial_rag.slot_filler import SlotFiller, FillStats, create_slot_filler
 
 from financial_rag.agents.ingestion_agent import IngestionAgent
 from financial_rag.agents.extraction_agent import ExtractionAgent
@@ -127,8 +133,10 @@ def cmd_query(args):
     has_key = bool(config.llm.api_key)
 
     if args.interactive:
-        print("\n交互模式，输入 'q' 退出，输入 'score' 查看上次打分\n")
+        print("\n交互模式，输入 'q' 退出，输入 'score' 查看上次打分")
+        print("模板: quick=快答, fin=财报, news=新闻, deep=深度分析 (默认 quick)\n")
         last_card = None
+        current_template = QUICK_QA_TEMPLATE
         while True:
             try:
                 q = input("输入问题: ").strip()
@@ -137,62 +145,82 @@ def cmd_query(args):
                 if not q:
                     continue
                 if q.lower() == 'score':
-                    show_scorecard(last_card, "📊 上次检索打分卡:")
+                    show_scorecard(last_card, "上次全链路打分卡:")
+                    continue
+
+                # 切换模板
+                template_map = {
+                    "quick": QUICK_QA_TEMPLATE, "fin": FINANCIAL_REPORT_TEMPLATE,
+                    "news": NEWS_BRIEF_TEMPLATE, "deep": DEEP_ANALYSIS_TEMPLATE,
+                }
+                if q.lower() in template_map:
+                    current_template = template_map[q.lower()]
+                    print(f"[模板] 已切换到: {current_template.description}")
                     continue
 
                 try:
-                    # 创建打分卡
                     card = PipelineScoreCard(query=q)
                     last_card = card
 
                     if has_key:
-                        # 全链路: 检索 → LLM 生成 → 防幻觉校验
+                        # 检索
                         retriever = create_hybrid_retriever()
-                        # 模拟知识库
                         sample_docs = [
                             {"text": "贵州茅台2024年营收1738.52亿元，同比增长15.66%", "meta": {"source": "maotai_2024"}},
                             {"text": "茅台2024年净利润862.28亿元，同比增长15.38%", "meta": {"source": "maotai_2024"}},
                             {"text": "2024年茅台酒毛利率91.86%，ROE为34.19%", "meta": {"source": "maotai_2024"}},
+                            {"text": "茅台酒营收1465.33亿元，系列酒营收246.84亿元", "meta": {"source": "maotai_2024"}},
+                            {"text": "2024年茅台经营活动现金流753.29亿元", "meta": {"source": "maotai_2024"}},
                             {"text": "2025年人民币汇率预计在7.0-7.3区间波动", "meta": {"source": "economic_outlook"}},
                             {"text": "央行2025年一季度降准0.5个百分点，释放流动性约1万亿", "meta": {"source": "pboc_policy"}},
                         ]
                         retriever.index(sample_docs)
                         results, ret_card = retriever.search_with_scores(q, top_k=3)
-                        # 合并检索打分
                         card.stages.extend(ret_card.stages)
 
-                        # LLM 生成
+                        # ---- 槽位填充替代自由生成 ----
                         llm = get_llm(api_key=config.llm.api_key, model=config.llm.model)
-                        context_text = "\n".join(r.get("text", "")[:200] for r in results[:3])
-                        t_llm = time.time()
-                        response = llm.chat(
-                            messages=f"根据以下参考信息回答问题。\n参考:\n{context_text}\n\n问题: {q}",
-                            system="你是专业金融分析师，回答必须准确有依据。不确定请说明。",
-                        )
-                        answer = response.content
-                        llm_elapsed = (time.time() - t_llm) * 1000
+                        filler = create_slot_filler(llm=llm, scorecard=card, verbose=False)
+                        context_docs = [r.get("text", "") for r in results[:3]]
+
+                        t_fill = time.time()
+                        fill_stats = filler.fill(current_template, query=q, context_docs=context_docs)
+                        final_output = filler.render(current_template, fill_stats)
+                        fill_elapsed = (time.time() - t_fill) * 1000
+
+                        # 记录 LLM 生成汇总
                         card.record_llm(
-                            score=min(1.0, len(answer) / 200) if answer else 0.1,
-                            token_count=response.usage.get('total_tokens', len(answer)),
+                            score=fill_stats.filled_slots / max(fill_stats.total_slots, 1),
+                            token_count=fill_stats.total_tokens,
                             model=config.llm.model,
-                            elapsed_ms=llm_elapsed,
+                            elapsed_ms=fill_elapsed,
                         )
 
-                        # 防幻觉校验
+                        # 防幻觉校验（对最终渲染文本）
                         guard = HallucinationGuard()
-                        check = guard.check(answer, results)
+                        check = guard.check(final_output, results)
                         card.record_hallucination(
                             overall_score=check['overall_score'],
                             layer_scores={k: v.get("score", 0) for k, v in check.get('checks', {}).items()},
                             risk=check['risk'],
                         )
 
-                        print(f"\n[回答] {answer[:300]}{'...' if len(answer)>300 else ''}")
-                        print(f"[综合] 时间: {response.usage.get('total_tokens', 0)} tokens")
+                        # ---- 输出 ----
+                        print(f"\n[模板] {current_template.description}")
+                        print(f"[结果]")
+                        print(final_output[:400])
+                        if len(final_output) > 400:
+                            print("...")
+
+                        print(f"\n[性能] 总耗时 {fill_elapsed:.0f}ms, "
+                              f"首Token avg={fill_stats.avg_ttft_ms:.0f}ms | "
+                              f"槽位 {fill_stats.filled_slots}/{fill_stats.total_slots}"
+                              f" (并行增益 {fill_stats.parallel_gain:.0%})")
+
                         show_scorecard(card)
                     else:
                         print(f"\n[模拟] 关于 {q} 的分析...\n")
-                        print("[提示] 设置 DASHSCOPE_API_KEY 启用真实 LLM\n")
+                        print("[提示] 设置 DASHSCOPE_API_KEY 启用真实 LLM + 槽位填充\n")
                 except Exception as e:
                     print(f"\n[错误] API 调用失败: {e}")
                     print("[提示] 请检查 DASHSCOPE_API_KEY 是否正确\n")
@@ -202,12 +230,29 @@ def cmd_query(args):
                 break
     elif args.question:
         print(f"\n问题: {args.question}")
-        print("分析中...")
+        print("分析中 (槽位填充)...\n")
         try:
             if has_key:
+                card = PipelineScoreCard(query=args.question)
+                # 检索
+                retriever = create_hybrid_retriever()
+                sample_docs = [
+                    {"text": "贵州茅台2024年营收1738.52亿元，同比增长15.66%", "meta": {"source": "maotai_2024"}},
+                    {"text": "茅台2024年净利润862.28亿元，同比增长15.38%", "meta": {"source": "maotai_2024"}},
+                    {"text": "2024年茅台酒毛利率91.86%，ROE为34.19%", "meta": {"source": "maotai_2024"}},
+                ]
+                retriever.index(sample_docs)
+                results, ret_card = retriever.search_with_scores(args.question, top_k=3)
+                card.stages.extend(ret_card.stages)
+                # 槽位填充
                 llm = get_llm(api_key=config.llm.api_key, model=config.llm.model)
-                response = llm.chat(args.question)
-                print(f"\n{response.content}\n")
+                filler = create_slot_filler(llm=llm, scorecard=card, verbose=False)
+                fill_stats = filler.fill(QUICK_QA_TEMPLATE, query=args.question,
+                                         context_docs=[r.get("text", "") for r in results[:3]])
+                final_output = filler.render(QUICK_QA_TEMPLATE, fill_stats)
+                print(final_output)
+                print(f"\n[性能] 槽位 {fill_stats.filled_slots}/{fill_stats.total_slots}, "
+                      f"TTFT avg={fill_stats.avg_ttft_ms:.0f}ms")
         except Exception as e:
             print(f"\n[错误] API 调用失败: {e}")
 
@@ -408,7 +453,6 @@ def cmd_score(args):
     print(f"查询: {args.query}")
 
     if args.local:
-        # 纯本地模式
         tokenizer = None
         try:
             tokenizer = jieba_tokenizer()
@@ -419,7 +463,6 @@ def cmd_score(args):
     else:
         retriever = create_hybrid_retriever()
 
-    # 示例文档
     sample_docs = [
         {"text": "贵州茅台2024年营收1738.52亿元，同比增长15.66%", "meta": {"source": "maotai_2024"}},
         {"text": "茅台2024年净利润862.28亿元，同比增长15.38%", "meta": {"source": "maotai_2024"}},
@@ -438,7 +481,7 @@ def cmd_score(args):
         label = r.get('relevance_level', '?')
         print(f"  [{r['retriever']}] relev={label} score={r.get('score', 0):.4f} | {r['text'][:70]}")
 
-    show_scorecard(card, "📊 检索全链路打分卡:")
+    show_scorecard(card, "检索全链路打分卡:")
 
     if args.json:
         import json
@@ -446,6 +489,99 @@ def cmd_score(args):
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(card.to_dict(), f, ensure_ascii=False, indent=2)
         print(f"\n评分详情已导出: {json_path}")
+
+
+def cmd_slot(args):
+    """槽位填充测试 — 对比自由生成 vs 槽位填充的首 Token 延迟"""
+    has_key = bool(config.llm.api_key)
+    if not has_key:
+        print("[错误] 槽位填充需要 DASHSCOPE_API_KEY")
+        return
+
+    print("=" * 60)
+    print("槽位填充测试 — 首 Token 延迟对比")
+    print("=" * 60)
+
+    template = get_template(args.template)
+    if not template:
+        print(f"未知模板: {args.template}")
+        print(f"可选: {', '.join(ALL_TEMPLATES.keys())}")
+        return
+
+    print(f"模板: {template.name} — {template.description}")
+    print(f"槽位: {len(template.slots)} 个, {len(template.phases)} 个阶段")
+    print(f"查询: {args.query}")
+    print("=" * 60)
+
+    # 检索
+    retriever = create_hybrid_retriever()
+    sample_docs = [
+        {"text": "贵州茅台2024年营收1738.52亿元，同比增长15.66%", "meta": {"source": "maotai_2024"}},
+        {"text": "茅台2024年净利润862.28亿元，同比增长15.38%", "meta": {"source": "maotai_2024"}},
+        {"text": "2024年茅台酒毛利率91.86%，ROE为34.19%", "meta": {"source": "maotai_2024"}},
+        {"text": "茅台酒营收1465.33亿元，系列酒营收246.84亿元", "meta": {"source": "maotai_2024"}},
+        {"text": "2024年茅台经营活动现金流753.29亿元", "meta": {"source": "maotai_2024"}},
+        {"text": "2025年人民币汇率预计在7.0-7.3区间波动", "meta": {"source": "economic_outlook"}},
+        {"text": "央行2025年一季度降准0.5个百分点", "meta": {"source": "pboc_policy"}},
+    ]
+    retriever.index(sample_docs)
+    results, ret_card = retriever.search_with_scores(args.query, top_k=args.top_k)
+    context_docs = [r.get("text", "") for r in results[:args.top_k]]
+
+    # ---- 对比测试 ----
+    llm = get_llm(api_key=config.llm.api_key, model=config.llm.model)
+    card = PipelineScoreCard(query=args.query)
+
+    if not args.no_freeform:
+        # 传统自由生成（对照组）
+        print("\n[对照组] 传统自由生成:")
+        context_text = "\n".join(doc[:200] for doc in context_docs[:3])
+        t_f = time.time()
+        resp = llm.chat(
+            messages=f"根据以下参考信息回答问题。\n参考:\n{context_text}\n\n问题: {args.query}",
+            system="你是专业金融分析师，回答必须准确有依据。不确定请说明。",
+            max_tokens=600,
+        )
+        free_elapsed = (time.time() - t_f) * 1000
+        free_tokens = resp.usage.get('total_tokens', len(resp.content))
+        print(f"  耗时: {free_elapsed:.0f}ms")
+        print(f"  Tokens: {free_tokens}")
+        print(f"  输出(前200字): {resp.content[:200]}{'...' if len(resp.content)>200 else ''}")
+
+    # 槽位填充
+    print(f"\n[实验组] 槽位填充:")
+    filler = create_slot_filler(llm=llm, scorecard=card, verbose=args.verbose)
+
+    t_fill = time.time()
+    fill_stats = filler.fill(template, query=args.query, context_docs=context_docs)
+    final_output = filler.render(template, fill_stats)
+    fill_elapsed = (time.time() - t_fill) * 1000
+
+    print(f"  总耗时: {fill_elapsed:.0f}ms")
+    print(f"  总Tokens: {fill_stats.total_tokens}")
+    print(f"  槽位: {fill_stats.filled_slots}/{fill_stats.total_slots} 个")
+    print(f"  首Token: avg={fill_stats.avg_ttft_ms:.0f}ms, peak={fill_stats.peak_ttft_ms:.0f}ms")
+    print(f"  并行增益: {fill_stats.parallel_gain:.0%}")
+
+    if not args.no_freeform:
+        print(f"\n  [对比] 槽位填充 vs 自由生成:")
+        time_diff = free_elapsed - fill_elapsed
+        direction = "更快" if time_diff > 0 else "更慢"
+        print(f"    总耗时: {fill_elapsed:.0f}ms vs {free_elapsed:.0f}ms (槽位 {direction} {abs(time_diff):.0f}ms)")
+        print(f"    Tokens:  {fill_stats.total_tokens} vs {free_tokens}")
+
+    print(f"\n[槽位详情]")
+    for key, r in fill_stats.slot_results.items():
+        status = "OK" if r.filled else "FAIL"
+        val_preview = r.value[:50] + "..." if len(r.value) > 50 else r.value
+        print(f"  [{status}] {r.label:<8s} | TTFT={r.ttft_ms:5.0f}ms | {val_preview}")
+
+    print(f"\n[渲染输出]")
+    print(final_output[:400])
+    if len(final_output) > 400:
+        print("...")
+
+    show_scorecard(card, "全链路打分卡 (含槽位评分):")
 
 
 # ===================== main =====================
@@ -457,12 +593,13 @@ def main():
         epilog="""
 示例:
   python -m financial_rag.main demo                          # 演示
-  python -m financial_rag.main query -i                      # 交互查询 (含打分)
+  python -m financial_rag.main query -i                      # 交互查询 (含槽位填充)
   python -m financial_rag.main query -q "茅台毛利率多少"      # 单次查询
   python -m financial_rag.main build --dir ./my_reports      # 建知识库
-  python -m financial_rag.main analyze ./report.pdf            # Multi-Agent分析 (含打分)
+  python -m financial_rag.main analyze ./report.pdf            # Multi-Agent分析
   python -m financial_rag.main score "茅台营收增长" -k 5      # 仅检索打分
-  python -m financial_rag.main score "汇率走势" --json scores.json  # 导出打分JSON
+  python -m financial_rag.main slot "茅台财报" -t fin_report   # 槽位填充对比测试
+  python -m financial_rag.main slot "茅台利润" -t quick_qa --no-freeform
         """
     )
 
@@ -493,9 +630,19 @@ def main():
     sp.add_argument("--json", help="导出打分JSON文件路径")
     sp.add_argument("--local", action="store_true", help="纯本地模式 (不使用 API)")
 
+    # slot: 槽位填充测试
+    slp = sub.add_parser("slot", help="槽位填充 vs 自由生成 对比测试")
+    slp.add_argument("query", help="查询文本")
+    slp.add_argument("-t", "--template", default="financial_report",
+                     choices=list(ALL_TEMPLATES.keys()),
+                     help=f"模板名称 (默认 financial_report)")
+    slp.add_argument("-k", "--top-k", type=int, default=5, help="检索数量 (默认5)")
+    slp.add_argument("--no-freeform", action="store_true", help="跳过自由生成对照组")
+    slp.add_argument("-v", "--verbose", action="store_true", help="详细日志")
+
     args = parser.parse_args()
 
-    if not setup_environment() and args.command not in ("demo", "score"):
+    if not setup_environment() and args.command not in ("demo", "score", "slot"):
         sys.exit(1)
 
     if args.command == "query":
@@ -508,6 +655,8 @@ def main():
         cmd_demo()
     elif args.command == "score":
         cmd_score(args)
+    elif args.command == "slot":
+        cmd_slot(args)
     else:
         parser.print_help()
 
