@@ -8,6 +8,7 @@
 
 文档: https://help.aliyun.com/document_detail/2712195.html
 """
+import os
 import logging
 from typing import List, Dict, Optional, Union
 from dataclasses import dataclass, field
@@ -395,9 +396,10 @@ def create_client(
     **kwargs,
 ):
     """创建 DashScope 客户端"""
-    import os
-    key = api_key or os.getenv("DASHSCOPE_API_KEY", "")
-    cache_key = f"{client_type}:{kwargs}"
+    # Bug fix: 用 is None 而非 or，避免空字符串被错误回退
+    key = api_key if api_key is not None else os.getenv("DASHSCOPE_API_KEY", "")
+    # Bug fix: 把 api_key 放入 cache key，防止不同 key 返回缓存的旧客户端
+    cache_key = f"{client_type}:{key}:{kwargs}"
 
     if cache_key in _client_cache:
         return _client_cache[cache_key]

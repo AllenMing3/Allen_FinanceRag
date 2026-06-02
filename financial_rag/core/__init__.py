@@ -4,11 +4,13 @@
 - Indexer: 多文本索引流水线
 - Reflector: ReAct 反思 + 六层防幻觉
 - Scorer: 全链路打分卡（每阶段独立评分 + 诊断）
+- Protocol: 统一 Agent 间交互协议（AgentMessage + MessageBus + MessageAdapter）
 """
 from .coordinator import AgentOrchestrator, CoordinatorConfig, ExecutionMode, ExecutionResult
 from .indexer import PipelineOrchestrator, PipelineConfig, PipelineResult, PipelineStatus
 from .reflector import ReflectionLoop, ReflectionConfig, ThoughtStep, ActionType, ReflectionState, HallucinationGuard
 from .scorer import PipelineScoreCard, StageScore, ScoreGrade, StageGroup, create_scorecard
+from .protocol import AgentMessage, MessageBus, MessageAdapter
 
 __all__ = [
     # Coordinate
@@ -20,4 +22,6 @@ __all__ = [
     "HallucinationGuard",
     # Scorer
     "PipelineScoreCard", "StageScore", "ScoreGrade", "StageGroup", "create_scorecard",
+    # Protocol
+    "AgentMessage", "MessageBus", "MessageAdapter",
 ]

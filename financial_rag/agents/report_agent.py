@@ -24,11 +24,12 @@ class ReportAgent(BaseAgent):
     - HTML: 可视化展示（可选）
     """
 
-    def __init__(self):
+    def __init__(self, model_router=None):
         super().__init__(
             name="ReportAgent",
             description="多格式分析报告生成"
         )
+        self.model_router = model_router
         self.hallucination_guard = HallucinationGuard()
 
     def process(self, context: AgentContext) -> AgentResult:

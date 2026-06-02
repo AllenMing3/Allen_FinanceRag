@@ -23,11 +23,12 @@ class ForecastAgent(BaseAgent):
 
     SCENARIOS = ["optimistic", "baseline", "pessimistic"]
 
-    def __init__(self):
+    def __init__(self, model_router=None):
         super().__init__(
             name="ForecastAgent",
             description="财务趋势预测与情景分析"
         )
+        self.model_router = model_router
 
     def process(self, context: AgentContext) -> AgentResult:
         features = context.extracted_features or {}

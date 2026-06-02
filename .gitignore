@@ -1,0 +1,118 @@
+# ===================== 密钥 & 环境变量 — 绝对不能提交 =====================
+.env
+*.env
+!*.env.example
+*.pem
+*.key
+*.crt
+credentials.json
+service-account.json
+secrets.yaml
+secrets.yml
+
+# ===================== Python =====================
+# 虚拟环境
+myenv/
+venv/
+env/
+.venv/
+ENV/
+
+# 编译缓存
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyc
+*.pyd
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# pip
+pip-wheel-metadata/
+pip-log.txt
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+
+# ===================== IDE & 编辑器 =====================
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+
+# Cursor / CodeBuddy（保留 automations，不提交 session 数据）
+.codebuddy/*
+!.codebuddy/automations/
+
+# Sublime / Vim / Emacs
+*.sublime-*
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# ===================== Windows 特有 =====================
+# 缩略图缓存
+Thumbs.db
+ehthumbs.db
+
+# 文件夹图标
+Desktop.ini
+
+# Windows 回收站
+$RECYCLE.BIN/
+
+# ===================== macOS =====================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ===================== Linux =====================
+.directory
+*~
+
+# ===================== 项目数据（按需调整） =====================
+# 本地数据文件 — 如果很大就别提交，用小样本代替
+data/**/*.pdf
+data/**/*.csv
+data/**/*.parquet
+data/**/*.db
+data/**/*.sqlite3
+
+# 但保留样本数据
+!data/**/*.jsonl
+!data/**/*.json
+
+# 日志
+*.log
+logs/
+
+# 运行时数据
+.runtime/
+output/
+dump/
+
+# 临时测试/草稿文件
+case1
+tmp/
+temp/
+*.tmp

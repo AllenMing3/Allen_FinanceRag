@@ -31,11 +31,12 @@ class AnalysisAgent(BaseAgent):
         ("risk", "风险因素（行业风险、经营风险）"),
     ]
 
-    def __init__(self):
+    def __init__(self, model_router=None):
         super().__init__(
             name="AnalysisAgent",
             description="多维度财务分析"
         )
+        self.model_router = model_router
 
     def process(self, context: AgentContext) -> AgentResult:
         documents = context.parsed_data or []

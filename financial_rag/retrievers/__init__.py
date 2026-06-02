@@ -377,6 +377,8 @@ class HybridRetriever:
 
         这是三大架构中 Indexer 的最后一环：
         BM25 + Embedding → RRF → Rerank → 最终 Top-K
+
+        如果 Rerank API 不可用（403/401 等），自动降级为 RRF 融合结果。
         """
         if not candidates:
             return []
@@ -384,12 +386,16 @@ class HybridRetriever:
         # 提取文档文本列表
         doc_texts = [c.get("text", "") for c in candidates]
 
-        # 调用阿里 Rerank API
-        rerank_results = self.reranker.rerank(
-            query=query,
-            documents=doc_texts,
-            top_n=min(top_k, len(candidates)),
-        )
+        try:
+            # 调用阿里 Rerank API
+            rerank_results = self.reranker.rerank(
+                query=query,
+                documents=doc_texts,
+                top_n=min(top_k, len(candidates)),
+            )
+        except Exception as e:
+            logger.warning(f"Rerank 不可用，降级为 RRF 融合结果: {e}")
+            return candidates[:top_k]
 
         # 重新组装结果，注入 rerank 分数
         result = []

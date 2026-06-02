@@ -5,6 +5,9 @@
 - LLM:      qwen-plus / qwen-max / qwen-turbo / qwen3-235b-a22b
 - Embedding: text-embedding-v3
 - Rerank:    gte-rerank
+
+智能路由:
+- ModelRouter: 按任务复杂度自动选择模型
 """
 from .dashscope_client import (
     DashScopeLLM,
@@ -15,6 +18,16 @@ from .dashscope_client import (
     get_embedding,
     get_reranker,
 )
+from .model_router import (
+    ModelRouter,
+    ModelTier,
+    TaskComplexity,
+    BudgetConfig,
+    ModelRouterStats,
+    TIER_MODEL_MAP,
+    TASK_COMPLEXITY_MAP,
+    COMPLEXITY_TO_TIER,
+)
 
 __all__ = [
     "DashScopeLLM",
@@ -24,4 +37,12 @@ __all__ = [
     "get_llm",
     "get_embedding",
     "get_reranker",
+    "ModelRouter",
+    "ModelTier",
+    "TaskComplexity",
+    "BudgetConfig",
+    "ModelRouterStats",
+    "TIER_MODEL_MAP",
+    "TASK_COMPLEXITY_MAP",
+    "COMPLEXITY_TO_TIER",
 ]

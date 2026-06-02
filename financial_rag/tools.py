@@ -458,7 +458,7 @@ CATEGORIES = {
     "retrieval": "检索类 — 从知识库获取数据",
     "analysis": "分析类 — 计算比率、对比、趋势分析",
     "compute": "计算类 — 通用数学/统计计算",
-    "data": "数据类 — 结构化数据查询",
+    "data": "数据类 — 实时数据获取（新闻、公告、行情等）",
 }
 
 
@@ -610,6 +610,66 @@ def create_financial_registry(retriever=None) -> FunctionRegistry:
         callback=summarize_financials,
         category="analysis",
         tags=["汇总", "描述", "报告"],
+    ))
+
+    # ---- 新闻类 ----（基于 akshare，替代 MCP Server）
+    from financial_rag.news_fetcher import fetch_stock_news, fetch_financial_news, fetch_announcements, HAS_AKSHARE
+
+    registry.add(FunctionDef(
+        name="fetch_stock_news",
+        description="获取指定股票的近期新闻，涵盖公告、研报、媒体报道等。"
+                    "当用户问'XX股票最近有什么新闻'或'XX公司最新动态'时使用。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "stock_code": {"type": "string",
+                               "description": "股票代码，如 '600519'(茅台)、'000858'(五粮液)、'300750'(宁德时代)",
+                               "default": "600519"},
+                "max_news": {"type": "integer", "description": "最大返回条数", "default": 10},
+            },
+            "required": ["stock_code"],
+        },
+        callback=fetch_stock_news,
+        category="data",
+        tags=["新闻", "个股", "公告"],
+    ))
+
+    registry.add(FunctionDef(
+        name="fetch_financial_news",
+        description="搜索财经新闻或获取最新财经快讯。可按关键词搜索（如'降准''新能源''茅台'），"
+                    "空关键词返回最新财经电报。当用户问'最近有什么财经大事'或'搜索XX相关新闻'时使用。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "keyword": {"type": "string",
+                            "description": "搜索关键词，如 '降准'、'茅台'、'新能源'。留空获取最新电报",
+                            "default": ""},
+                "max_news": {"type": "integer", "description": "最大返回条数", "default": 20},
+            },
+            "required": [],
+        },
+        callback=fetch_financial_news,
+        category="data",
+        tags=["新闻", "快讯", "搜索", "财经"],
+    ))
+
+    registry.add(FunctionDef(
+        name="fetch_announcements",
+        description="获取上市公司公告（年报、季报、重大事项、分红方案等）。"
+                    "当用户问'XX公司发了什么公告'或'XX公司财报'时使用。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "stock_code": {"type": "string",
+                               "description": "股票代码，如 '600519'(茅台)",
+                               "default": "600519"},
+                "max_news": {"type": "integer", "description": "最大返回条数", "default": 20},
+            },
+            "required": ["stock_code"],
+        },
+        callback=fetch_announcements,
+        category="data",
+        tags=["公告", "财报", "年报", "季报"],
     ))
 
     return registry

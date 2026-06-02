@@ -40,6 +40,10 @@ from financial_rag.tools import (
     ToolCallStats, ToolCallResult, ToolCallRequest,
     CATEGORIES, create_financial_registry, create_tool_session,
 )
+from financial_rag.news_fetcher import (
+    fetch_stock_news, fetch_financial_news, fetch_announcements,
+    get_sample_news_for_rag, NewsItem, NewsResult, HAS_AKSHARE,
+)
 
 __version__ = "1.3.0"
 __all__ = [
@@ -68,4 +72,7 @@ __all__ = [
     "FunctionRegistry", "FunctionDef", "ToolExecutor", "ToolCallSession",
     "ToolCallStats", "ToolCallResult", "ToolCallRequest",
     "CATEGORIES", "create_financial_registry", "create_tool_session",
+    # News Fetcher (akshare-based)
+    "fetch_stock_news", "fetch_financial_news", "fetch_announcements",
+    "get_sample_news_for_rag", "NewsItem", "NewsResult", "HAS_AKSHARE",
 ]

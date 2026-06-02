@@ -2,11 +2,14 @@
 Financial RAG 配置 — 与业务完全脱钩，默认使用阿里百炼 DashScope API
 """
 import os
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
 
-load_dotenv()
+# 确保从任意 CWD 运行都能找到项目根目录的 .env
+_project_root = Path(__file__).resolve().parent.parent
+load_dotenv(dotenv_path=_project_root / ".env", override=True)
 
 
 @dataclass

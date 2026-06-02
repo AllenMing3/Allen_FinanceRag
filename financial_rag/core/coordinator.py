@@ -5,15 +5,23 @@
 - 注册多个专业化 Agent，按 pipeline 顺序/并行/条件执行
 - 共享上下文 AgentContext 在 Agent 之间流转
 - 支持失败重试、超时控制、执行追踪
+- 集成 ModelRouter 实现智能模型选择
 
 与业务完全脱钩 — 通过接口约束而非具体实现
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from enum import Enum
 import time
+import logging
 from concurrent.futures import ThreadPoolExecutor
+
+if TYPE_CHECKING:
+    from .protocol import MessageBus
+    from ..llm.model_router import ModelRouter
+
+logger = logging.getLogger(__name__)
 
 
 class AgentStatus(Enum):
@@ -146,15 +154,31 @@ class AgentOrchestrator:
     4. 支持 SEQUENTIAL / PARALLEL / CONDITIONAL 三种模式
     """
 
-    def __init__(self, config: Optional[CoordinatorConfig] = None):
+    def __init__(self, config: Optional[CoordinatorConfig] = None, model_router: Optional["ModelRouter"] = None):
         self.config = config or CoordinatorConfig()
         self.agents: Dict[str, BaseAgent] = {}
         self.pipeline: List[str] = []
         self.context: Optional[AgentContext] = None
         self.history: List[Dict] = []
+        # MessageBus 集成
+        self.message_bus: Optional["MessageBus"] = None
+        self.use_message_bus: bool = False
+        # ModelRouter 集成 — 统一的模型路由器
+        self.model_router: Optional["ModelRouter"] = model_router
 
     def register(self, agent: BaseAgent, position: Optional[int] = None):
-        """注册 Agent 并排入 pipeline"""
+        """注册 Agent 并排入 pipeline
+
+        如果 Agent 有 model_router 属性且 orchestrator 有统一 router，
+        自动注入（若 Agent 尚未设置自己的 router）。
+        """
+        # 自动注入 ModelRouter
+        if self.model_router is not None:
+            if hasattr(agent, 'model_router') and agent.model_router is None:
+                agent.model_router = self.model_router
+                if self.config.verbose:
+                    logger.debug(f"[Coordinate] 注入 ModelRouter 到 {agent.name}")
+
         self.agents[agent.name] = agent
         if position is not None:
             self.pipeline.insert(position, agent.name)
@@ -285,12 +309,58 @@ class AgentOrchestrator:
         return result
 
     def _apply_updates(self, result: AgentResult):
+        """应用 AgentResult 的 context_updates 到共享上下文，同时可选地发布到 MessageBus。"""
         if result.context_updates:
             for k, v in result.context_updates.items():
                 if hasattr(self.context, k):
                     setattr(self.context, k, v)
                 else:
                     self.context.metadata[k] = v
+
+        # 当启用 MessageBus 时，同步发布消息
+        if self.use_message_bus and self.message_bus is not None:
+            from .protocol import MessageAdapter
+
+            # 获取当前总线上已有的消息 ID 作为 parent
+            parent_ids = list(self.message_bus._messages.keys()) if self.message_bus._messages else []
+
+            msgs = MessageAdapter.from_agent_result(result, parent_msg_ids=parent_ids)
+            for msg in msgs:
+                self.message_bus.publish(msg)
+
+            if self.config.verbose:
+                print(f"[MessageBus] 发布 {len(msgs)} 条消息 (Agent: {result.agent_name})")
+
+    def get_data_lineage(self) -> List[Dict]:
+        """
+        获取完整的数据链路追溯信息。
+
+        要求 use_message_bus=True 且 message_bus 已初始化。
+
+        Returns:
+            每条消息的摘要列表，包含 sender、receiver、msg_type、payload_keys、parent_msg_ids。
+            如果 MessageBus 未启用，返回空列表。
+        """
+        if not self.use_message_bus or self.message_bus is None:
+            return []
+
+        lineage = []
+        # 按时间戳排序所有消息
+        sorted_msgs = sorted(
+            self.message_bus._messages.values(),
+            key=lambda m: m.timestamp,
+        )
+        for msg in sorted_msgs:
+            lineage.append({
+                "msg_id": msg.msg_id,
+                "sender": msg.sender,
+                "receiver": msg.receiver,
+                "msg_type": msg.msg_type,
+                "payload_keys": list(msg.payload.keys()),
+                "parent_msg_ids": msg.parent_msg_ids,
+                "timestamp": msg.timestamp,
+            })
+        return lineage
 
     def reset(self):
         self.context = None
