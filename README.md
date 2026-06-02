@@ -1,6 +1,14 @@
 # Financial RAG — 财报/经济新闻智能分析系统
 
-基于阿里百炼 DashScope (Qwen) 的金融 Multi-Agent 分析系统。
+基于阿里百炼 DashScope (Qwen) + MCP 数据源的金融端到端分析 Pipeline。
+
+## 核心流水线
+
+```
+用户一句话 → MCP 实时获取数据 → RAG 索引与检索 → 加工分析 → 槽位填充输出 → 评分反馈自进化
+```
+
+不再是一个个独立的命令行工具，而是从**获取**到**筛选**到**加工**到**输出**到**进化**的连贯处理链路。
 
 ## 模块索引
 
@@ -8,10 +16,11 @@
 
 ```
 financial_rag/
-├── main.py                     # CLI 入口：所有命令行逻辑 + 工厂函数
+├── main.py                     # CLI 入口：统一 Pipeline 入口 + 工厂函数
 ├── config.py                   # 全局配置：LLM/RAG/Coordinator/Reflection 参数
 ├── tools.py                    # Function Calling 能力注册中心 + ToolExecutor
-├── news_fetcher.py             # 实时新闻获取（akshare → 个股/快讯/公告）
+├── news_fetcher.py             # 实时新闻获取（MCP china-stock-mcp） + akshare 降级
+├── etf_fetcher.py              # ETF 行情数据获取（MCP 优先）
 ├── prompts.py                  # LLM prompt 模板 + Few-shot 示例
 ├── templates.py                # 槽位模板定义（4 种：快答/财报/新闻/深分）
 ├── slot_filler.py              # 槽位填充引擎（并行填充 + TTFT 测量）
@@ -54,7 +63,7 @@ financial_rag/
 | 包 | 用途 | 哪里用到 |
 |---|---|---|
 | `dashscope` | 阿里百炼 SDK，调 Qwen 系列模型 | `llm/dashscope_client.py` |
-| `akshare` | A 股数据源：个股新闻、财经快讯、公告 | `news_fetcher.py` |
+| `akshare` | A 股数据源（MCP 不可用时的降级方案） | `news_fetcher.py`, `etf_fetcher.py` |
 | `llama-index` | RAG 框架：文档加载、切分、向量存储 | `core/indexer.py` |
 | `jieba` | 中文分词，BM25 检索的前置 | `retrievers/__init__.py` |
 | `pandas` | DataFrame 处理，新闻数据清洗 | `news_fetcher.py`, `ingestion_agent.py` |
@@ -64,23 +73,54 @@ financial_rag/
 | `regex` | 高级正则，metadata 自动提取 | `ingestion_agent.py` |
 | `typing-extensions` | 类型注解补丁 (Python 3.10 兼容) | 全局 |
 
-## 为什么没用 MCP
+## MCP 集成 — 数据获取层
 
-本项目用 `akshare` 直接调东方财富接口获取新闻，而不是部署独立的 MCP Server。
+数据获取已统一通过 **china-stock-mcp**（CodeBuddy MCP 扩展）完成，不再直接依赖 akshare。
 
-原因：
-- `akshare` 和 `china-stock-mcp` （一个现成的财经 MCP Server）底层是同一数据源，效果等价
-- 直接调 `akshare` 不需要额外部署 Docker/uv/python3.12，一个 `pip install` 搞定
-- 三个新闻函数注册到了 `FunctionRegistry`，LLM 通过 Function Calling 一样能自动调起
-- 如果后面想换 MCP，三个函数替换为 MCP client 即可，接口不变
+### MCP 工具能力
 
-新闻能力清单（`news_fetcher.py`）：
+MCP 配置文件：`c:\Users\<用户名>\.codebuddy\mcp.json`
 
-| 函数 | 功能 | Function Calling 名 |
+| 工具名 | 功能 | Pipeline 环节 | 状态 |
+|---|---|---|---|
+| `get_hist_data` | 个股/指数历史 K 线 | 获取 | ✅ 已验证 |
+| `get_stock_research_report` | 个股研报 | 获取 | ✅ 已验证 |
+| `get_balance_sheet` | 资产负债表 | 获取 | 待验证 |
+| `get_income_statement` | 利润表 | 获取 | 待验证 |
+| `get_cash_flow` | 现金流量表 | 获取 | 待验证 |
+| `get_financial_metrics` | 财务指标汇总 | 获取+分析 | 待验证 |
+| `get_stock_a_code_name` | 股票代码→名称 | 获取 | 待验证 |
+| `get_stock_basic_info` | 股票基本信息 | 获取 | 待验证 |
+| `get_fund_flow` | 资金流向 | 分析 | 待验证 |
+| `get_inner_trade_data` | 内部交易 | 分析 | 待验证 |
+| `get_macro_data` | 宏观经济数据 | 分析 | 待验证 |
+| `get_investor_sentiment` | 市场情绪 | 分析 | 待验证 |
+| `get_stock_value` | 估值数据 | 分析 | 待验证 |
+| `get_stock_volatility` | 波动率 | 分析 | 待验证 |
+| `get_stock_technical_rank` | 技术面排名 | 分析 | 待验证 |
+| `get_stock_cyq` | 筹码分布 | 分析 | 待验证 |
+| `get_news_data` | 财经新闻（服务端 bug，暂不可用） | 获取 | ❌ 已知问题 |
+| `get_realtime_data` | 实时行情（代理拦截） | 获取 | ❌ 已知问题 |
+
+### akshare 降级
+
+当 MCP 工具不可用或返回异常时，`news_fetcher.py` 和 `etf_fetcher.py` 自动降级到 akshare（本地安装）。接口设计为 MCP 优先，降级对上层透明。
+
+### 新闻能力清单（`news_fetcher.py`）
+
+| 函数 | 功能 | MCP 工具对应 |
 |---|---|---|
-| `fetch_stock_news("600519")` | 个股近期新闻 | `fetch_stock_news` |
-| `fetch_financial_news(keyword="降准")` | 关键词搜索/最新快讯 | `fetch_financial_news` |
-| `fetch_announcements("600519")` | 公司公告 | `fetch_announcements` |
+| `fetch_stock_news("600519")` | 个股近期新闻 | `get_news_data`（故障降级 akshare） |
+| `fetch_financial_news(keyword="降准")` | 关键词搜索/最新快讯 | `get_news_data`（故障降级 akshare） |
+| `fetch_announcements("600519")` | 公司公告 | `get_news_data`（故障降级 akshare） |
+
+### 扩展 MCP 工具
+
+如果要加新的数据能力，流程：
+
+1. 在 CodeBuddy 的 MCP 扩展中安装/添加对应 MCP Server
+2. 在 `financial_rag/tools.py` 的 `FunctionRegistry` 中注册对应的代理函数
+3. Agent / Pipeline 层即可自动发现和调用，无需改上层代码
 
 ---
 
@@ -181,7 +221,20 @@ cp .env.example .env
 
 所有命令都从项目根目录 `d:\llamaindex` 执行，且虚拟环境已激活。
 
-### 演示 & 查询
+### 🆕 统一 Pipeline（推荐，计划中）
+
+> **目标入口**：一条命令跑完整链路，代替下面分散的子命令。
+
+```bash
+# 端到端：MCP获取数据 → RAG索引 → 分析 → 输出 → 打分
+python -m financial_rag.main pipeline "茅台2024年利润增长情况"
+python -m financial_rag.main pipeline "新能源板块最近有什么利好" --output report.md
+python -m financial_rag.main pipeline "帮我分析一下最近要降准对银行股的影响" --verbose
+```
+
+### 当前子命令（逐步迁入 Pipeline）
+
+#### 演示 & 查询
 
 ```bash
 # 演示模式（跑一条内置示例）
@@ -194,7 +247,7 @@ python -m financial_rag.main query -i
 python -m financial_rag.main query -q "茅台2024年营收增长了多少？"
 ```
 
-### 知识库
+#### 知识库
 
 ```bash
 # 构建知识库（指定目录，支持 JSONL/TXT/PDF）
@@ -205,7 +258,7 @@ python -m financial_rag.main score "茅台营收增长" -k 5
 python -m financial_rag.main score "汇率走势" --json scores.json
 ```
 
-### Multi-Agent 分析
+#### Multi-Agent 分析
 
 ```bash
 # 串行执行（默认）
@@ -215,10 +268,10 @@ python -m financial_rag.main analyze ./data/financial/maotai_2024.pdf
 python -m financial_rag.main analyze ./data/financial/maotai_2024.pdf --parallel
 ```
 
-### Function Calling / 工具调用
+#### Function Calling / 工具调用
 
 ```bash
-# 列出所有已注册能力
+# 列出所有已注册能力（包括 MCP 工具）
 python -m financial_rag.main toolcall -l
 
 # Function Calling 单次调用
@@ -231,7 +284,7 @@ python -m financial_rag.main toolcall "计算茅台毛利率" --tool-choice requ
 python -m financial_rag.main toolcall "茅台和五粮液利润对比" --multi-turn -v
 ```
 
-### 槽位填充
+#### 槽位填充
 
 ```bash
 # 交互模式，支持切换模板（输入 fin/quick/news/deep）
@@ -319,7 +372,29 @@ router.override("ingestion_agent", "qwen-turbo")  # 摄取 Agent 用小模型
 
 ## 数据流 & 架构
 
-### Agent 流水线
+### 统一 Pipeline（目标架构）
+
+```
+用户一句话
+  ↓
+┌─ 阶段1: 获取 ─────────────────────────────────────────────┐
+│  MCP (china-stock-mcp) 实时拉取                              │
+│  ├─ get_hist_data / get_income_statement / ...               │
+│  └─ 降级: akshare (MCP 不可用时)                             │
+├─ 阶段2: 索引 ─────────────────────────────────────────────┤
+│  RAG 混合检索 → BM25 + Vector → RRF → gte-rerank              │
+├─ 阶段3: 加工 ─────────────────────────────────────────────┤
+│  Function Calling 自动选工具 → Multi-Agent 串行/并行分析       │
+│  Ingestion → Extraction → Analysis → Forecast → Report        │
+├─ 阶段4: 输出 ─────────────────────────────────────────────┤
+│  槽位填充 (Slot Filling) → 多种模板格式化                     │
+│  FINANCIAL_REPORT / NEWS_BRIEF / QUICK_QA / DEEP_ANALYSIS    │
+├─ 阶段5: 进化 ─────────────────────────────────────────────┤
+│  PipelineScoreCard → 六层防幻觉 → 反馈调优                    │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Agent 流水线（Multi-Agent 模式，阶段3的子步骤）
 
 ```
 输入(文本/PDF/JSONL)
@@ -367,15 +442,17 @@ BM25 关键词检索 ─┐
 
 ### "新闻拉不下来？"
 
-1. 先验证 akshare 是否正常：
+1. **先确认 MCP 是否可用**：检查 `c:\Users\<用户名>\.codebuddy\mcp.json` 中 `china-stock-mcp` 已配置
+2. MCP 工具 `get_news_data` 已知有服务端 bug → 系统会自动降级到 akshare
+3. 验证 akshare 降级链路是否正常：
    ```python
    from financial_rag.news_fetcher import fetch_stock_news
    r = fetch_stock_news("600519", max_news=3)
    print(r["total"], r["elapsed_ms"])
    ```
-2. 如果返回 0 条但没报错：该股票当天确实没新新闻，换只热门股试试
-3. 如果报网络错误：检查网络，akshare 走东方财富接口
-4. 如果需要代理：akshare 支持 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量
+4. 如果返回 0 条但没报错：该股票当天确实没新新闻，换只热门股试试
+5. 如果报网络错误：检查网络，akshare 走东方财富接口
+6. 如果需要代理：akshare 支持 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量
 
 ### "检索结果不准？"
 
@@ -475,12 +552,14 @@ stats = session.run("茅台营收增长多少")
 print(stats.final_answer)
 ```
 
-### 新闻获取
+### MCP 数据获取（推荐）
+
+数据获取首选 MCP，`news_fetcher.py` 已将 MCP 包装为 Function Calling 工具，LLM 自动调用。
 
 ```python
 from financial_rag.news_fetcher import fetch_stock_news, fetch_financial_news, fetch_announcements
 
-# 个股新闻
+# 个股新闻（MCP 优先，失败自动降级 akshare）
 r = fetch_stock_news("600519", max_news=5)
 for item in r["items"]:
     print(item["title"], item["publish_time"])
@@ -509,7 +588,8 @@ llamaindex/
     ├── main.py                   #   CLI 入口 + 工厂函数
     ├── config.py                 #   全局配置
     ├── tools.py                  #   Function Calling 能力注册
-    ├── news_fetcher.py           #   实时新闻（akshare）
+    ├── news_fetcher.py           #   实时新闻（MCP 优先 + akshare 降级）
+    ├── etf_fetcher.py            #   ETF 行情（MCP 优先）
     ├── prompts.py                #   LLM prompt 模板
     ├── templates.py              #   槽位模板
     ├── slot_filler.py            #   槽位填充引擎
