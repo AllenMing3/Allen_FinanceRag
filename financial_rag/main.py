@@ -675,6 +675,313 @@ def cmd_toolcall(args):
     show_scorecard(card, "📊 Function Calling 全链路打分卡:")
 
 
+def cmd_news(args):
+    """拉取新闻并保存为格式化文档"""
+    from datetime import datetime
+    from financial_rag.news_fetcher import _df_to_news_items
+
+    query = args.query
+    output_dir = args.output or config.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+
+    print("=" * 60)
+    print("新闻抓取 & 文档生成")
+    print("=" * 60)
+    print(f"查询: {query}")
+    print(f"输出目录: {output_dir}")
+
+    # Step 1: 提取搜索关键词（有 LLM 用 LLM，没有就用原文 + 中英映射）
+    en_to_cn = {"ai": "人工智能", "AI": "人工智能", "robot": "机器人",
+                 "blockchain": "区块链", "meta": "元宇宙", "ev": "新能源"}
+    keywords = [query]
+    if config.llm.api_key:
+        try:
+            llm_new = get_llm(api_key=config.llm.api_key, model=config.llm.model)
+            resp = llm_new.chat(
+                messages=f"用户问：{query}\n\n请提取用于搜索财经新闻的3-5个中文关键词，只输出逗号分隔的关键词，不要其他内容。",
+                max_tokens=40,
+            )
+            keywords = [k.strip() for k in resp.content.replace("\n", "").replace("、", ",").split(",") if k.strip()]
+        except Exception:
+            pass
+    # 把英文词映射为中文词，提高命中率
+    mapped = []
+    for kw in keywords:
+        mapped.append(kw)
+        for en, cn in en_to_cn.items():
+            if en.lower() in kw.lower() and cn not in mapped:
+                mapped.append(cn)
+    keywords = list(dict.fromkeys(mapped))  # 去重保序
+
+    print(f"关键词: {keywords}")
+
+    # Step 2: 拉取全球财经快讯
+    import akshare as ak
+    all_news = []
+
+    try:
+        df = ak.stock_info_global_em()
+        if df is not None and not df.empty:
+            items = _df_to_news_items(df, max_news=200)
+            for item in items:
+                text = item.get("title", "") + " " + item.get("content", "")
+                if any(kw in text for kw in keywords if len(kw) >= 2):
+                    all_news.append(item)
+    except Exception as e:
+        print(f"[错误] 获取新闻失败: {e}")
+        return
+
+    print(f"获取到 {len(all_news)} 条相关新闻")
+
+    # Step 3: 生成 Markdown 文档
+    today = datetime.now().strftime("%Y-%m-%d")
+    # 取第一个关键词 + 去特殊字符作为文件名
+    safe_kw = keywords[0].replace("/", "_").replace("\\", "_").replace("、", "").replace("，", "")[:15]
+    filename = args.name if args.name else f"{today}_{safe_kw}_新闻汇总.md"
+    filepath = os.path.join(output_dir, filename)
+
+    lines = [
+        f"# {'、'.join(keywords[:3])} 新闻汇总",
+        "",
+        f"> 查询: {query}",
+        f"> 日期: {today}",
+        f"> 条数: {len(all_news)}",
+        f"> 数据源: 东方财富全球财经快讯",
+        "",
+        "---",
+        "",
+    ]
+
+    # Step 4: 可选 LLM 摘要
+    summary_text = ""
+    if config.llm.api_key and all_news and args.summarize:
+        print("\n[AI 摘要] 生成中...")
+        try:
+            news_headlines = "\n".join(f"- [{n.get('publish_time', '')[:10]}] {n['title']}"
+                                       for n in all_news[:30])
+            resp = llm_new.chat(
+                messages=f"以下是关于{'、'.join(keywords)}的最新财经新闻标题。请用300字以内做摘要，概括主要动态和趋势：\n\n{news_headlines}",
+                max_tokens=400,
+            )
+            summary_text = resp.content
+        except Exception as e:
+            print(f"  [注意] 摘要生成失败: {e}")
+
+    # Step 5: 写入文档
+    if summary_text:
+        lines.insert(lines.index("---") + 1, "")
+        lines.insert(lines.index("---") + 1, summary_text)
+        lines.insert(lines.index("---") + 1, "")
+        lines.insert(lines.index("---") + 1, "## AI 摘要")
+
+    if all_news:
+        for i, item in enumerate(all_news, 1):
+            title = item.get("title", "无标题")
+            content = item.get("content", "")
+            source = item.get("source", "未知")
+            pub_time = item.get("publish_time", "")
+            url = item.get("url", "")
+            # TODO: 情绪分析后续接入 RAG，届时取消注释并传入实际结果
+            # sentiment = item.get("sentiment", "中性")
+
+            lines.append(f"## {i}. {title}")
+            lines.append("")
+            lines.append(f"- **来源**: {source}")
+            lines.append(f"- **时间**: {pub_time}")
+            lines.append(f"- **链接**: {url}")
+            lines.append("")
+            if content:
+                lines.append(f">{content}")
+                lines.append("")
+            lines.append("---")
+            lines.append("")
+    else:
+        lines.append("暂无相关新闻，请尝试更宽泛的关键词。")
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    print(f"\n[OK] 已保存到: {filepath}")
+    print(f"    共 {len(all_news)} 条新闻" + (" + AI摘要" if summary_text else ""))
+
+
+def cmd_kline(args):
+    """拉取 ETF K线数据并保存为分析文档"""
+    from datetime import datetime
+    from financial_rag.etf_fetcher import search_etf, fetch_etf_kline, compute_kline_stats
+
+    query = args.query
+    output_dir = args.output or config.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+
+    print("=" * 60)
+    print("ETF K线 数据获取 & 分析")
+    print("=" * 60)
+    print(f"查询: {query}")
+
+    # Step 1: 提取搜索关键词 + 回溯天数
+    keyword = query
+    lookback_days = args.days or 30
+    if config.llm.api_key:
+        try:
+            llm_new = get_llm(api_key=config.llm.api_key, model=config.llm.model)
+            resp = llm_new.chat(
+                messages=f"从用户查询中提取两个信息，只输出 JSON：\n"
+                         f"1. keyword: ETF主题关键词（如 人工智能、芯片、半导体、新能源，只输出一个词）\n"
+                         f"2. days: 回溯天数数字（如 30、60、90，没有则默认30）\n\n"
+                         f"用户查询: {query}\n\n"
+                         f'输出格式: {{"keyword":"xx","days":30}}',
+                max_tokens=60,
+            )
+            import json
+            content = resp.content.strip()
+            if "{" in content:
+                parsed = json.loads(content[content.index("{"):content.rindex("}")+1])
+                keyword = parsed.get("keyword", keyword)
+                lookback_days = int(parsed.get("days", lookback_days))
+        except Exception:
+            pass
+
+    # 把常见英文/缩写映射为中文 ETF 搜索词
+    topic_map = {"AI": "人工智能", "ai": "人工智能", "芯片": "芯片", "半导体": "半导体",
+                 "5G": "5G", "通信": "通信", "云计算": "云计算", "大数据": "大数据",
+                 "新能源": "新能源", "智能汽车": "智能汽车", "智能驾驶": "智能驾驶",
+                 "机器人": "机器人", "智能制造": "智能制造"}
+    keyword = topic_map.get(keyword, keyword)
+
+    print(f"关键词: {keyword}, 回溯: {lookback_days}天")
+
+    # Step 2: 搜索 ETF
+    results = search_etf(keyword, limit=10)
+    if not results:
+        print(f"[!] 未找到与 '{keyword}' 相关的 ETF")
+        return
+
+    print(f"\n找到 {len(results)} 只相关 ETF:")
+    for i, etf in enumerate(results[:5]):
+        print(f"  [{i+1}] {etf['code']}  {etf['name']}  "
+              f"(现价: {etf.get('price','-')}, 涨跌: {etf.get('change_pct','-')}%)")
+
+    # 取第一只作为主分析对象
+    target = results[0]
+    if args.code:
+        # 用户指定 code 则优先用
+        matched = [e for e in results if e["code"] == args.code or e["code"].endswith(args.code)]
+        if matched:
+            target = matched[0]
+
+    print(f"\n分析目标: {target['code']} {target['name']}")
+
+    # Step 3: 拉取 K 线
+    print(f"正在获取近 {lookback_days} 个交易日 K线...")
+    df = fetch_etf_kline(target["code"], days=lookback_days)
+    if df.empty:
+        print("[!] 未获取到 K 线数据")
+        return
+    print(f"获取到 {len(df)} 条 K 线记录")
+
+    # Step 4: 计算统计指标
+    stats = compute_kline_stats(df)
+
+    # Step 5: 生成 Markdown 文档
+    today = datetime.now().strftime("%Y-%m-%d")
+    safe_name = target["name"].replace("/", "_").replace("\\", "_")
+    filename = args.name if args.name else f"{today}_{safe_name}_K线分析.md"
+    filepath = os.path.join(output_dir, filename)
+
+    # K线表格
+    col_map = {"date": "日期", "open": "开盘", "close": "收盘",
+               "high": "最高", "low": "最低", "volume": "成交量", "amount": "成交额"}
+    table_cols = [c for c in col_map if c in df.columns]
+    header = "| " + " | ".join(col_map[c] for c in table_cols) + " |"
+    sep = "| " + " | ".join("---" for _ in table_cols) + " |"
+    rows = []
+    for _, row in df.iterrows():
+        vals = []
+        for c in table_cols:
+            v = row[c]
+            if c == "date":
+                vals.append(str(v)[:10])
+            elif c in ("volume",):
+                vals.append(f"{v/10000:.0f}万")
+            elif c in ("amount",):
+                vals.append(f"{v/10000:.0f}万")
+            else:
+                vals.append(str(v))
+        rows.append("| " + " | ".join(vals) + " |")
+    table_md = "\n".join([header, sep] + rows)
+
+    lines = [
+        f"# {target['name']} ({target['code']}) K线分析",
+        "",
+        f"> 查询: {query}",
+        f"> 日期: {today}",
+        f"> 回溯: {lookback_days} 个交易日",
+        f"> 数据源: 新浪财经 (akshare)",
+        "",
+        "---",
+        "",
+        "## 基础统计",
+        "",
+        f"| 指标 | 数值 |",
+        f"| --- | --- |",
+        f"| 最新收盘价 | {stats.get('latest_close', '-')} |",
+        f"| 区间最高 | {stats.get('period_high', '-')} |",
+        f"| 区间最低 | {stats.get('period_low', '-')} |",
+        f"| 区间涨跌幅 | {stats.get('period_change_pct', '-')}% |",
+        f"| 上涨天数 | {stats.get('up_days', '-')} |",
+        f"| 下跌天数 | {stats.get('down_days', '-')} |",
+        f"| 平均成交量 | {stats.get('avg_volume', 0)/10000:.0f}万 |" if stats.get('avg_volume') else "",
+    ]
+    if stats.get("ma5"):
+        lines.append(f"| MA5 | {stats['ma5']} |")
+    if stats.get("ma10"):
+        lines.append(f"| MA10 | {stats['ma10']} |")
+
+    # Step 6: 可选 LLM 技术分析
+    analysis_text = ""
+    if config.llm.api_key and args.summarize:
+        print("\n[AI 分析] 生成中...")
+        try:
+            stats_str = (
+                f"ETF: {target['name']} ({target['code']})\n"
+                f"周期: 近{lookback_days}个交易日\n"
+                f"最新收盘: {stats.get('latest_close')}\n"
+                f"区间涨跌幅: {stats.get('period_change_pct')}%\n"
+                f"区间最高: {stats.get('period_high')}, 最低: {stats.get('period_low')}\n"
+                f"MA5: {stats.get('ma5')}, MA10: {stats.get('ma10')}\n"
+                f"上涨天数: {stats.get('up_days')}, 下跌天数: {stats.get('down_days')}"
+            )
+            resp = llm_new.chat(
+                messages=f"以下是一只ETF近期的K线数据统计，请用200字以内做简要技术分析，"
+                         f"包括趋势判断、支撑/压力位、短期展望：\n\n{stats_str}",
+                max_tokens=300,
+            )
+            analysis_text = resp.content
+        except Exception as e:
+            print(f"  [注意] 分析生成失败: {e}")
+
+    # 插入 AI 分析
+    if analysis_text:
+        lines.insert(lines.index("---\n", lines.index("## 基础统计")), "")
+        lines.insert(lines.index("---\n", lines.index("## 基础统计")), analysis_text)
+        lines.insert(lines.index("---\n", lines.index("## 基础统计")), "")
+        lines.insert(lines.index("---\n", lines.index("## 基础统计")), "## AI 技术分析")
+
+    lines += [
+        "",
+        "## K线数据",
+        "",
+        table_md,
+    ]
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    print(f"\n[OK] 已保存到: {filepath}")
+    print(f"    {len(df)} 条 K 线 + 统计" + (" + AI分析" if analysis_text else ""))
+
+
 # ===================== main =====================
 
 def main():
@@ -693,6 +1000,8 @@ def main():
   python -m financial_rag.main toolcall "茅台营收增长多少"         # Function Calling
   python -m financial_rag.main toolcall "对比茅台和五粮液" -v     # 带日志
   python -m financial_rag.main toolcall -l                        # 列出所有能力
+  python -m financial_rag.main news "今天最大的AI新闻" -s          # 拉新闻+保存为文档
+  python -m financial_rag.main news "新能源" -o ./output -s        # 指定输出目录
         """
     )
 
@@ -747,9 +1056,16 @@ def main():
     tlp.add_argument("-l", "--list-tools", action="store_true",
                      help="仅列出已注册能力")
 
+    # news: 拉取新闻并保存为文档
+    np = sub.add_parser("news", help="拉取财经新闻并保存为格式化文档")
+    np.add_argument("query", help="搜索主题，如 '今天最大的AI新闻是什么'")
+    np.add_argument("-o", "--output", help="输出目录 (默认 config.output_dir)")
+    np.add_argument("-n", "--name", help="文件名 (默认 日期_关键词_新闻汇总.md)")
+    np.add_argument("-s", "--summarize", action="store_true", help="用 LLM 生成摘要")
+
     args = parser.parse_args()
 
-    if not setup_environment() and args.command not in ("demo", "score", "slot", "toolcall"):
+    if not setup_environment() and args.command not in ("demo", "score", "slot", "toolcall", "news"):
         sys.exit(1)
 
     if args.command == "query":
@@ -766,6 +1082,8 @@ def main():
         cmd_slot(args)
     elif args.command == "toolcall":
         cmd_toolcall(args)
+    elif args.command == "news":
+        cmd_news(args)
     else:
         parser.print_help()
 
