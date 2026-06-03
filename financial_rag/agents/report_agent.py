@@ -10,7 +10,7 @@ import json
 import os
 from typing import Dict, Any, List, Optional
 
-from financial_rag.core.coordinator import BaseAgent, AgentContext, AgentResult
+from financial_rag.core.base import BaseAgent, AgentContext, AgentResult
 from financial_rag.core.reflector import HallucinationGuard
 
 

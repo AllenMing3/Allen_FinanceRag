@@ -8,7 +8,7 @@ ForecastAgent — 趋势预测与情景分析
 """
 from typing import Dict, Any, List
 
-from financial_rag.core.coordinator import BaseAgent, AgentContext, AgentResult
+from financial_rag.core.base import BaseAgent, AgentContext, AgentResult
 
 
 class ForecastAgent(BaseAgent):

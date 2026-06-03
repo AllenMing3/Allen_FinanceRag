@@ -12,7 +12,7 @@ import re
 from typing import Dict, Any, List, Optional
 
 from financial_rag.config import config
-from financial_rag.core.coordinator import BaseAgent, AgentContext, AgentResult
+from financial_rag.core.base import BaseAgent, AgentContext, AgentResult
 from financial_rag.llm.dashscope_client import get_llm
 from financial_rag.prompts import (
     FINANCIAL_METRICS_EXTRACTION_SYSTEM,
@@ -166,8 +166,8 @@ class ExtractionAgent(BaseAgent):
         if llm is None:
             return {}
 
-        # 只取前 3000 字符
-        prompt_text = text[:3000]
+        # 取前 8000 字符保留完整财务上下文
+        prompt_text = text[:8000]
 
         # 构建 few-shot 增强的 prompt
         user_prompt = FINANCIAL_METRICS_EXTRACTION_PROMPT.format(text=prompt_text)
@@ -335,7 +335,7 @@ class ExtractionAgent(BaseAgent):
         if llm is None:
             return []
 
-        prompt_text = text[:3000]
+        prompt_text = text[:8000]
         user_prompt = ENTITY_EXTRACTION_PROMPT.format(text=prompt_text)
         system_prompt = ENTITY_EXTRACTION_SYSTEM
 
@@ -462,8 +462,8 @@ class ExtractionAgent(BaseAgent):
         """
         queries = []
 
-        # 合并文本用于上下文
-        combined_text = " ".join(d.get("text", "")[:200] for d in documents if d.get("text"))
+        # 合并文本用于上下文 — 保留更多原文信息
+        combined_text = " ".join(d.get("text", "")[:500] for d in documents if d.get("text"))
 
         # 基于财务指标的查询
         if "revenue" in metrics:

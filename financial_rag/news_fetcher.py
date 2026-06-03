@@ -38,9 +38,10 @@ class NewsItem:
     sentiment: str = ""  # 正面/负面/中性
 
     def to_dict(self) -> Dict:
+        """导出为字典，保留完整 content 供下游 RAG 分析。"""
         return {
             "title": self.title,
-            "content": self.content[:500],
+            "content": self.content,
             "source": self.source,
             "publish_time": self.publish_time,
             "url": self.url,

@@ -326,10 +326,9 @@ class SlotFiller:
         """为单个槽位构建短 prompt"""
         parts = []
 
-        # 上下文（检索到的文档）
+        # 上下文（检索到的文档） — 完整内容交给 LLM 深入分析
         if context_docs:
-            # 只取最相关的片段（节省 tokens）
-            short_context = "\n".join(doc[:150] for doc in context_docs[:3])
+            short_context = "\n---\n".join(doc for doc in context_docs[:5])
             parts.append(f"参考信息:\n{short_context}")
 
         # 用户问题

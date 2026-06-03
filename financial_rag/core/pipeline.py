@@ -1,0 +1,475 @@
+"""
+PipelineScheduler — 端到端 Pipeline 中央调度器
+
+五次阶段:
+  获取 → 索引(RAG) → 加工(Agent/FC) → 输出(SlotFiller) → 进化(Scoring)
+
+用法:
+    from financial_rag.core.pipeline import PipelineScheduler, PipelineConfig
+    scheduler = PipelineScheduler(orchestrator, retriever, registry, llm)
+    result = scheduler.run("茅台2024年营收增长了多少？")
+"""
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
+import time
+import logging
+
+from financial_rag.core.orchestrator import AgentOrchestrator, ExecutionResult
+
+if TYPE_CHECKING:
+    from financial_rag.tools import FunctionRegistry, ToolCallSession, ToolExecutor
+    from financial_rag.templates import SlottedTemplate
+    from financial_rag.slot_filler import SlotFiller
+    from financial_rag.core.scorer import PipelineScoreCard
+    from financial_rag.core.reflector import HallucinationGuard
+    from financial_rag.retrievers import HybridRetriever
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PipelineConfig:
+    """Pipeline 调度配置"""
+
+    enable_data_fetch: bool = True  # 阶段1: 是否获取实时数据(akshare)
+    enable_index: bool = True  # 阶段2: 是否建索引
+    enable_agent_analysis: bool = True  # 阶段3: 是否跑Multi-Agent
+    enable_slot_output: bool = True  # 阶段4: 是否槽位填充
+    enable_scoring: bool = True  # 阶段5: 是否全链路打分
+    verbose: bool = True
+
+
+@dataclass
+class PipelineResult:
+    """Pipeline 执行结果 — 包含各阶段完整产物"""
+
+    query: str = ""
+    success: bool = False
+
+    # 阶段1: 获取
+    fetched_data: List[Dict] = field(default_factory=list)
+    fetch_result: Optional[Dict] = None
+    fetch_elapsed_ms: float = 0.0
+
+    # 阶段2: 索引
+    indexed_docs: int = 0
+    retrieved_items: List[Dict] = field(default_factory=list)
+    index_elapsed_ms: float = 0.0
+
+    # 阶段3: 加工
+    tool_call_stats: Any = None  # ToolCallStats
+    agent_exec_result: Optional[ExecutionResult] = None
+    process_elapsed_ms: float = 0.0
+
+    # 阶段4: 输出
+    final_output: str = ""
+    fill_stats: Any = None  # FillStats
+    output_elapsed_ms: float = 0.0
+
+    # 阶段5: 进化
+    scorecard: Any = None  # PipelineScoreCard
+    hallucination_check: Optional[Dict] = None
+
+    # 汇总
+    total_elapsed_ms: float = 0.0
+    errors: List[str] = field(default_factory=list)
+
+
+class PipelineScheduler:
+    """
+    端到端 Pipeline 中央调度器
+
+    接管 main.py 中散落的编排逻辑，实现五次阶段:
+      获取 → 索引(RAG) → 加工(Agent/FC) → 输出(SlotFiller) → 进化(Scoring)
+
+    用法:
+        from financial_rag.core.pipeline import PipelineScheduler, PipelineConfig
+        scheduler = PipelineScheduler(orchestrator, retriever, registry, llm)
+        result = scheduler.run("茅台2024年营收增长了多少？")
+    """
+
+    def __init__(
+        self,
+        orchestrator: AgentOrchestrator,
+        retriever: Any = None,  # HybridRetriever
+        registry: Any = None,  # FunctionRegistry
+        executor: Any = None,  # ToolExecutor
+        llm: Any = None,  # DashScopeLLM
+        filler: Any = None,  # SlotFiller
+        config: Optional[PipelineConfig] = None,
+    ):
+        self.orchestrator = orchestrator
+        self.retriever = retriever
+        self.registry = registry
+        self.executor = executor
+        self.llm = llm
+        self.filler = filler
+        self.config = config or PipelineConfig()
+        self._logger = logging.getLogger(f"{__name__}.PipelineScheduler")
+
+    def run(
+        self,
+        query: str,
+        template: Any = None,  # SlottedTemplate
+        max_fetch_news: int = 10,
+        max_retrieve: int = 5,
+    ) -> PipelineResult:
+        """
+        执行完整 Pipeline：获取 → 索引 → 加工 → 输出 → 进化
+
+        Args:
+            query: 用户自然语言查询
+            template: 槽位模板，默认 QUICK_QA
+            max_fetch_news: 最多获取几条新闻
+            max_retrieve: 检索返回条数
+        """
+        result = PipelineResult(query=query)
+        t_start = time.time()
+
+        try:
+            # ====== 阶段1: 获取 ======
+            result = self._phase_fetch(query, result, max_fetch_news)
+
+            # ====== 阶段2: 索引 (RAG) ======
+            result = self._phase_index(query, result, max_retrieve)
+
+            # ====== 阶段3: 加工 (Agent/FC) ======
+            result = self._phase_process(query, result)
+
+            # ====== 阶段4: 输出 (SlotFiller) ======
+            result = self._phase_output(query, result, template)
+
+            # ====== 阶段5: 进化 (Scoring + Reflection) ======
+            result = self._phase_evolve(result)
+
+            result.success = True
+        except Exception as e:
+            result.errors.append(str(e))
+            self._logger.error(f"Pipeline 执行失败: {e}")
+            result.success = False
+
+        result.total_elapsed_ms = (time.time() - t_start) * 1000
+
+        if self.config.verbose:
+            print(
+                f"\n[Pipeline] 完成: {'OK' if result.success else 'FAIL'}"
+                f" | 总耗时 {result.total_elapsed_ms:.0f}ms"
+                f" | 获取={result.fetch_elapsed_ms:.0f}ms"
+                f" | 索引={result.index_elapsed_ms:.0f}ms"
+                f" | 加工={result.process_elapsed_ms:.0f}ms"
+                f" | 输出={result.output_elapsed_ms:.0f}ms"
+            )
+
+        return result
+
+    # ==================== 阶段1: 获取 ====================
+
+    def _phase_fetch(
+        self, query: str, result: PipelineResult, max_news: int
+    ) -> PipelineResult:
+        """通过 Function Calling 自动选择数据工具获取数据"""
+        t0 = time.time()
+
+        if not self.config.enable_data_fetch or not self.registry or not self.llm:
+            if self.config.verbose:
+                print("[Pipeline] 阶段1: 获取 — 跳过 (未启用)")
+            return result
+
+        if self.config.verbose:
+            print("[Pipeline] 阶段1: 获取 — 通过 Function Calling 选择数据源...")
+
+        try:
+            # 创建一个简短的 FC 会话，只负责拉起数据
+            from financial_rag.tools import ToolCallSession
+
+            session = ToolCallSession(
+                llm=self.llm,
+                registry=self.registry,
+                executor=self.executor,
+                max_rounds=2,
+                verbose=False,
+                system_prompt=(
+                    "你是数据获取助手。根据用户问题，调用合适的数据工具获取信息。"
+                    "只获取数据，不要分析，不要总结，不要截断。"
+                ),
+            )
+            stats = session.run(
+                query=f"获取以下查询需要的所有数据，保留完整内容: {query}",
+            )
+
+            result.tool_call_stats = stats
+
+            # 提取获取到的原始数据
+            for call in stats.calls:
+                if call.success and call.name.startswith("fetch_"):
+                    data = call.result
+                    if isinstance(data, dict):
+                        items = data.get("items", [])
+                        result.fetched_data.extend(items)
+                        result.fetch_result = data
+
+            if self.config.verbose:
+                print(
+                    f"  [获取] {len(stats.calls)} 次工具调用, "
+                    f"获得 {len(result.fetched_data)} 条数据"
+                )
+        except Exception as e:
+            self._logger.warning(f"阶段1 获取失败: {e}")
+            result.errors.append(f"获取阶段: {e}")
+
+        result.fetch_elapsed_ms = (time.time() - t0) * 1000
+        return result
+
+    # ==================== 阶段2: 索引 ====================
+
+    def _phase_index(
+        self, query: str, result: PipelineResult, max_retrieve: int
+    ) -> PipelineResult:
+        """将获取到的数据入 RAG 索引，并检索相关内容"""
+        t0 = time.time()
+
+        if not self.config.enable_index or not self.retriever:
+            if self.config.verbose:
+                print("[Pipeline] 阶段2: 索引 — 跳过 (未启用)")
+            return result
+
+        if self.config.verbose:
+            print("[Pipeline] 阶段2: 索引 — 数据入RAG库 + 混合检索...")
+
+        try:
+            # 将阶段1获取的数据转为文档并索引
+            if result.fetched_data:
+                docs = []
+                for item in result.fetched_data:
+                    title = item.get("title", "")
+                    content = item.get("content", "")
+                    text = f"{title}\n{content}" if title else content
+                    meta = {
+                        "source": item.get("source", "akshare"),
+                        "publish_time": item.get("publish_time", ""),
+                        "url": item.get("url", ""),
+                    }
+                    if text.strip():
+                        docs.append({"text": text, "meta": meta})
+
+                if docs:
+                    self.retriever.index(docs)
+                    result.indexed_docs = len(docs)
+                    if self.config.verbose:
+                        print(f"  [索引] 入库 {len(docs)} 篇文档")
+
+            # 检索
+            if hasattr(self.retriever, "search"):
+                items, _ = self.retriever.search(query, top_k=max_retrieve)
+                result.retrieved_items = items
+                if self.config.verbose:
+                    print(f"  [检索] 命中 {len(items)} 条")
+        except Exception as e:
+            self._logger.warning(f"阶段2 索引失败: {e}")
+            result.errors.append(f"索引阶段: {e}")
+
+        result.index_elapsed_ms = (time.time() - t0) * 1000
+        return result
+
+    # ==================== 阶段3: 加工 ====================
+
+    def _phase_process(self, query: str, result: PipelineResult) -> PipelineResult:
+        """Multi-Agent 分析 + Function Calling 深度处理"""
+        t0 = time.time()
+
+        if not self.config.enable_agent_analysis:
+            if self.config.verbose:
+                print("[Pipeline] 阶段3: 加工 — 跳过 (未启用)")
+            return result
+
+        if self.config.verbose:
+            print("[Pipeline] 阶段3: 加工 — Multi-Agent 分析...")
+
+        try:
+            # 将检索结果构建为上下文传给 Agent
+            context_text = query
+            if result.retrieved_items:
+                chunks = []
+                for r in result.retrieved_items[:5]:
+                    text = r.get("text", "")
+                    if text:
+                        chunks.append(text)
+                if chunks:
+                    context_text = (
+                        f"查询: {query}\n\n参考数据:\n" + "\n---\n".join(chunks)
+                    )
+
+            agent_result = self.orchestrator.execute(context_text)
+            result.agent_exec_result = agent_result
+
+            if self.config.verbose:
+                ok_count = sum(
+                    1 for r in agent_result.agent_results if r.success
+                )
+                print(
+                    f"  [加工] {ok_count}/{len(agent_result.agent_results)} Agent 成功"
+                )
+        except Exception as e:
+            self._logger.warning(f"阶段3 加工失败: {e}")
+            result.errors.append(f"加工阶段: {e}")
+
+        result.process_elapsed_ms = (time.time() - t0) * 1000
+        return result
+
+    # ==================== 阶段4: 输出 ====================
+
+    def _phase_output(
+        self, query: str, result: PipelineResult, template: Any = None
+    ) -> PipelineResult:
+        """槽位填充输出"""
+        t0 = time.time()
+
+        if not self.config.enable_slot_output or not self.filler:
+            if self.config.verbose:
+                print("[Pipeline] 阶段4: 输出 — 跳过 (未启用)")
+            return result
+
+        if self.config.verbose:
+            print("[Pipeline] 阶段4: 输出 — 槽位填充...")
+
+        try:
+            from financial_rag.templates import QUICK_QA_TEMPLATE
+
+            tmpl = template or QUICK_QA_TEMPLATE
+
+            # 构建上下文（检索结果 + 完整文章）
+            context_docs = []
+            if result.retrieved_items:
+                for r in result.retrieved_items:
+                    text = r.get("text", "")
+                    if text:
+                        context_docs.append(text)
+            if result.fetched_data:
+                for item in result.fetched_data[:5]:
+                    title = item.get("title", "")
+                    content = item.get("content", "")
+                    full_text = f"【{title}】\n{content}" if title else content
+                    if full_text.strip():
+                        context_docs.append(full_text)
+
+            if not context_docs:
+                context_docs = [f"查询: {query} (暂无外部数据)"]
+
+            fill_stats = self.filler.fill(tmpl, query=query, context_docs=context_docs)
+            result.fill_stats = fill_stats
+            result.final_output = self.filler.render(tmpl, fill_stats)
+
+            if self.config.verbose:
+                print(
+                    f"  [输出] {fill_stats.filled_slots}/{fill_stats.total_slots} 槽位"
+                    f" | TTFT avg={fill_stats.avg_ttft_ms:.0f}ms"
+                )
+        except Exception as e:
+            self._logger.warning(f"阶段4 输出失败: {e}")
+            result.errors.append(f"输出阶段: {e}")
+            # 兜底输出
+            if not result.final_output:
+                result.final_output = query
+
+        result.output_elapsed_ms = (time.time() - t0) * 1000
+        return result
+
+    # ==================== 阶段5: 进化 ====================
+
+    def _phase_evolve(self, result: PipelineResult) -> PipelineResult:
+        """全链路打分 + 防幻觉校验"""
+        if not self.config.enable_scoring:
+            return result
+
+        if self.config.verbose:
+            print("[Pipeline] 阶段5: 进化 — 全链路打分 + 防幻觉...")
+
+        try:
+            from financial_rag.core.scorer import PipelineScoreCard
+            from financial_rag.core.reflector import HallucinationGuard
+
+            card = PipelineScoreCard(query=result.query)
+            result.scorecard = card
+
+            # 记录各阶段评分
+            if result.fetched_data:
+                card.record(
+                    "fetch",
+                    "数据获取",
+                    0.9 if len(result.fetched_data) > 0 else 0.3,
+                    elapsed_ms=result.fetch_elapsed_ms,
+                )
+            if result.retrieved_items:
+                card.record(
+                    "index",
+                    "RAG检索",
+                    0.85,
+                    elapsed_ms=result.index_elapsed_ms,
+                    details={"hit_count": len(result.retrieved_items)},
+                )
+            if result.agent_exec_result:
+                agent_ok = sum(
+                    1 for r in result.agent_exec_result.agent_results if r.success
+                )
+                agent_total = len(result.agent_exec_result.agent_results)
+                card.record(
+                    "process",
+                    "Multi-Agent加工",
+                    0.8 if agent_total > 0 else 0,
+                    elapsed_ms=result.process_elapsed_ms,
+                    details={"agents_ok": f"{agent_ok}/{agent_total}"},
+                )
+            if result.fill_stats:
+                fill_rate = result.fill_stats.filled_slots / max(
+                    result.fill_stats.total_slots, 1
+                )
+                card.record(
+                    "output",
+                    "槽位输出",
+                    fill_rate,
+                    elapsed_ms=result.output_elapsed_ms,
+                    details={"template": result.fill_stats.template_name},
+                )
+
+            # 防幻觉校验
+            if result.final_output:
+                guard = HallucinationGuard()
+                raw_items = result.retrieved_items or []
+                check = guard.check(result.final_output, raw_items)
+                result.hallucination_check = check
+                card.record(
+                    "hallucination",
+                    "防幻觉校验",
+                    check.get("overall_score", 1.0),
+                    details={"risk": check.get("risk", "low")},
+                )
+
+        except Exception as e:
+            self._logger.warning(f"阶段5 进化失败: {e}")
+            result.errors.append(f"进化阶段: {e}")
+
+        return result
+
+
+# ===================== 工厂函数 =====================
+
+
+def create_pipeline_scheduler(
+    orchestrator: AgentOrchestrator,
+    retriever: Any = None,
+    registry: Any = None,
+    executor: Any = None,
+    llm: Any = None,
+    filler: Any = None,
+    config: Optional[PipelineConfig] = None,
+) -> PipelineScheduler:
+    """快速创建 Pipeline 调度器"""
+    return PipelineScheduler(
+        orchestrator=orchestrator,
+        retriever=retriever,
+        registry=registry,
+        executor=executor,
+        llm=llm,
+        filler=filler,
+        config=config,
+    )

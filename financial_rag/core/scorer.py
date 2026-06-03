@@ -590,6 +590,17 @@ class PipelineScoreCard:
         return sorted(self.stages, key=lambda s: s.score)[:n]
 
 
+    def print_summary(self, title: str = None):
+        """打印评分卡详细信息（便捷方法）"""
+        if not self.stages:
+            print("\n[无评分数据]")
+            return
+        print()
+        if title:
+            print(title)
+        print(self.summary())
+
+
 # 便捷工厂
 def create_scorecard(query: str = "") -> PipelineScoreCard:
     return PipelineScoreCard(query=query)

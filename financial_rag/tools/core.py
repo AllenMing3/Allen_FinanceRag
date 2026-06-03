@@ -320,7 +320,7 @@ def _make_search_tool():
             if source_filter and meta.get("source", "") != source_filter:
                 continue
             items.append({
-                "text": text[:300],
+                "text": text,
                 "source": meta.get("source", "unknown"),
                 "score": round(r.get("score", 0), 4),
             })
@@ -612,13 +612,28 @@ def create_financial_registry(retriever=None) -> FunctionRegistry:
         tags=["汇总", "描述", "报告"],
     ))
 
-    # ---- 新闻类 ----（基于 akshare，替代 MCP Server）
-    from financial_rag.news_fetcher import fetch_stock_news, fetch_financial_news, fetch_announcements, HAS_AKSHARE
+    # ---- 新闻类 ----（MCP 优先，akshare 兜底）
+    from financial_rag.mcp_client.news_client import NewsMCPClient
+
+    _news_client = NewsMCPClient()
+
+    def _fetch_stock_news(stock_code: str = "600519", max_news: int = 10) -> Dict:
+        """获取个股新闻 (MCP 优先，akshare 兜底)"""
+        return _news_client.get_news(stock_code=stock_code, max_news=max_news)
+
+    def _fetch_financial_news(keyword: str = "", max_news: int = 20) -> Dict:
+        """搜索财经新闻 (MCP 优先，akshare 兜底)"""
+        return _news_client.get_financial_news(keyword=keyword, max_news=max_news)
+
+    def _fetch_announcements(stock_code: str = "600519", max_news: int = 20) -> Dict:
+        """获取公司公告 (MCP 优先，akshare 兜底)"""
+        return _news_client.get_announcements(stock_code=stock_code, max_news=max_news)
 
     registry.add(FunctionDef(
         name="fetch_stock_news",
         description="获取指定股票的近期新闻，涵盖公告、研报、媒体报道等。"
-                    "当用户问'XX股票最近有什么新闻'或'XX公司最新动态'时使用。",
+                    "当用户问'XX股票最近有什么新闻'或'XX公司最新动态'时使用。"
+                    + (" [数据源: MCP (china-stock-mcp)]" if _news_client.is_mcp_enabled else " [数据源: akshare]"),
         parameters={
             "type": "object",
             "properties": {
@@ -629,9 +644,9 @@ def create_financial_registry(retriever=None) -> FunctionRegistry:
             },
             "required": ["stock_code"],
         },
-        callback=fetch_stock_news,
+        callback=_fetch_stock_news,
         category="data",
-        tags=["新闻", "个股", "公告"],
+        tags=["新闻", "个股", "公告", "MCP"],
     ))
 
     registry.add(FunctionDef(
@@ -648,7 +663,7 @@ def create_financial_registry(retriever=None) -> FunctionRegistry:
             },
             "required": [],
         },
-        callback=fetch_financial_news,
+        callback=_fetch_financial_news,
         category="data",
         tags=["新闻", "快讯", "搜索", "财经"],
     ))
@@ -667,10 +682,18 @@ def create_financial_registry(retriever=None) -> FunctionRegistry:
             },
             "required": ["stock_code"],
         },
-        callback=fetch_announcements,
+        callback=_fetch_announcements,
         category="data",
         tags=["公告", "财报", "年报", "季报"],
     ))
+
+    # ---- 新闻报告类（高级封装，含保存 Markdown）----
+    from financial_rag.tools.news_tools import NEWS_REPORT_TOOL
+    registry.add(NEWS_REPORT_TOOL)
+
+    # ---- ETF K线报告类（高级封装，含统计分析 + Markdown）----
+    from financial_rag.tools.kline_tools import KLINE_REPORT_TOOL
+    registry.add(KLINE_REPORT_TOOL)
 
     return registry
 

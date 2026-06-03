@@ -1,20 +1,36 @@
 """
-核心架构三大件 + 全链路打分:
-- Coordinate: 多 Agent 协调调度
-- Indexer: 多文本索引流水线
-- Reflector: ReAct 反思 + 六层防幻觉
-- Scorer: 全链路打分卡（每阶段独立评分 + 诊断）
-- Protocol: 统一 Agent 间交互协议（AgentMessage + MessageBus + MessageAdapter）
+核心架构模块:
+- base:        基础抽象 (BaseAgent, AgentContext, AgentResult)
+- orchestrator: Agent 调度编排 (SEQUENTIAL / PARALLEL / CONDITIONAL)
+- pipeline:    5 阶段流水线 (Fetch → Index → Process → Output → Evolve)
+- router:      CLI 命令路由 (CommandRouter)
+- factory:     工厂函数 (create_orchestrator, setup_environment)
+- indexer:     混合检索 + RRF 融合
+- reflector:   ReAct 反思 + 防幻觉
+- scorer:      全链路打分卡
+- protocol:    Agent 间消息总线 (MessageBus)
 """
-from .coordinator import AgentOrchestrator, CoordinatorConfig, ExecutionMode, ExecutionResult
+from .base import BaseAgent, AgentContext, AgentResult, AgentStatus, ExecutionMode
+from .orchestrator import AgentOrchestrator, CoordinatorConfig, ExecutionResult
+from .pipeline import PipelineScheduler, PipelineConfig as SchedulerPipelineConfig, PipelineResult as SchedulerPipelineResult
+from .factory import create_orchestrator, create_hybrid_retriever, setup_environment
+from .router import CommandRouter
 from .indexer import PipelineOrchestrator, PipelineConfig, PipelineResult, PipelineStatus
 from .reflector import ReflectionLoop, ReflectionConfig, ThoughtStep, ActionType, ReflectionState, HallucinationGuard
 from .scorer import PipelineScoreCard, StageScore, ScoreGrade, StageGroup, create_scorecard
 from .protocol import AgentMessage, MessageBus, MessageAdapter
 
 __all__ = [
-    # Coordinate
-    "AgentOrchestrator", "CoordinatorConfig", "ExecutionMode", "ExecutionResult",
+    # Base
+    "BaseAgent", "AgentContext", "AgentResult", "AgentStatus", "ExecutionMode",
+    # Orchestrator
+    "AgentOrchestrator", "CoordinatorConfig", "ExecutionResult",
+    # Pipeline Scheduler
+    "PipelineScheduler", "SchedulerPipelineConfig", "SchedulerPipelineResult",
+    # Factory
+    "create_orchestrator", "create_hybrid_retriever", "setup_environment",
+    # Router
+    "CommandRouter",
     # Indexer
     "PipelineOrchestrator", "PipelineConfig", "PipelineResult", "PipelineStatus",
     # Reflector

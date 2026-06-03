@@ -8,7 +8,7 @@ AnalysisAgent — 多维度财务分析
 """
 from typing import Dict, Any, List, Optional
 
-from financial_rag.core.coordinator import BaseAgent, AgentContext, AgentResult
+from financial_rag.core.base import BaseAgent, AgentContext, AgentResult
 
 
 class AnalysisAgent(BaseAgent):

@@ -1,116 +1,30 @@
 """
-架构一: Coordinate — 多 Agent 协调调度器
+AgentOrchestrator — 多 Agent 协调调度引擎
 
-核心设计:
-- 注册多个专业化 Agent，按 pipeline 顺序/并行/条件执行
-- 共享上下文 AgentContext 在 Agent 之间流转
-- 支持失败重试、超时控制、执行追踪
-- 集成 ModelRouter 实现智能模型选择
-
-与业务完全脱钩 — 通过接口约束而非具体实现
+职责:
+1. 注册和管理多个 Agent
+2. 决定 Agent 执行顺序
+3. 处理 Agent 之间的数据传递
+4. 支持 SEQUENTIAL / PARALLEL / CONDITIONAL 三种模式
 """
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, TYPE_CHECKING
-from enum import Enum
 import time
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+from financial_rag.core.base import (
+    BaseAgent,
+    AgentContext,
+    AgentResult,
+    ExecutionMode,
+)
+
 if TYPE_CHECKING:
-    from .protocol import MessageBus
-    from ..llm.model_router import ModelRouter
+    from financial_rag.core.protocol import MessageBus
+    from financial_rag.llm.model_router import ModelRouter
 
 logger = logging.getLogger(__name__)
-
-
-class AgentStatus(Enum):
-    IDLE = "idle"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-class ExecutionMode(Enum):
-    SEQUENTIAL = "sequential"
-    PARALLEL = "parallel"
-    CONDITIONAL = "conditional"
-
-
-# ===================== 共享上下文 =====================
-
-@dataclass
-class AgentContext:
-    """在 Multi-Agent 之间流转的共享数据容器"""
-    raw_input: str = ""
-    parsed_data: Any = None
-    extracted_features: Dict = field(default_factory=dict)
-    intermediate_findings: List[Dict] = field(default_factory=list)
-    final_answer: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> Dict:
-        return {
-            "raw_input": self.raw_input[:200],
-            "has_parsed_data": self.parsed_data is not None,
-            "features_count": len(self.extracted_features),
-            "findings_count": len(self.intermediate_findings),
-            "metadata_keys": list(self.metadata.keys()),
-        }
-
-
-@dataclass
-class AgentResult:
-    """Agent 执行后的标准响应"""
-    success: bool
-    message: str = ""
-    data: Any = None
-    agent_name: str = ""
-    execution_time: float = 0.0
-    context_updates: Dict[str, Any] = field(default_factory=dict)
-
-
-# ===================== Agent 基类 =====================
-
-class BaseAgent(ABC):
-    """Agent 抽象基类 — 与业务完全解耦"""
-
-    def __init__(self, name: str, description: str = ""):
-        self.name = name
-        self.description = description
-        self.status = AgentStatus.IDLE
-
-    @abstractmethod
-    def process(self, context: AgentContext) -> AgentResult:
-        """子类实现：处理上下文的业务逻辑"""
-        pass
-
-    def can_handle(self, context: AgentContext) -> bool:
-        """判断当前 Agent 是否能处理该上下文（用于条件执行）"""
-        return True
-
-    def run(self, context: AgentContext) -> AgentResult:
-        """包装方法：状态管理 + 计时"""
-        self.status = AgentStatus.RUNNING
-        t0 = time.time()
-        try:
-            result = self.process(context)
-            result.execution_time = time.time() - t0
-            result.agent_name = self.name
-            self.status = AgentStatus.COMPLETED if result.success else AgentStatus.FAILED
-            return result
-        except Exception as e:
-            self.status = AgentStatus.FAILED
-            return AgentResult(
-                success=False,
-                message=str(e),
-                agent_name=self.name,
-                execution_time=time.time() - t0,
-            )
-
-    def reset(self):
-        """重置 Agent 状态"""
-        self.status = AgentStatus.IDLE
 
 
 # ===================== 协调器配置 =====================
@@ -154,7 +68,11 @@ class AgentOrchestrator:
     4. 支持 SEQUENTIAL / PARALLEL / CONDITIONAL 三种模式
     """
 
-    def __init__(self, config: Optional[CoordinatorConfig] = None, model_router: Optional["ModelRouter"] = None):
+    def __init__(
+        self,
+        config: Optional[CoordinatorConfig] = None,
+        model_router: Optional["ModelRouter"] = None,
+    ):
         self.config = config or CoordinatorConfig()
         self.agents: Dict[str, BaseAgent] = {}
         self.pipeline: List[str] = []
@@ -174,7 +92,7 @@ class AgentOrchestrator:
         """
         # 自动注入 ModelRouter
         if self.model_router is not None:
-            if hasattr(agent, 'model_router') and agent.model_router is None:
+            if hasattr(agent, "model_router") and agent.model_router is None:
                 agent.model_router = self.model_router
                 if self.config.verbose:
                     logger.debug(f"[Coordinate] 注入 ModelRouter 到 {agent.name}")
@@ -203,7 +121,9 @@ class AgentOrchestrator:
 
     # -------------------- 主入口 --------------------
 
-    def execute(self, raw_input: str, context: Optional[AgentContext] = None) -> ExecutionResult:
+    def execute(
+        self, raw_input: str, context: Optional[AgentContext] = None
+    ) -> ExecutionResult:
         t0 = time.time()
         self.context = context or AgentContext(raw_input=raw_input)
         if raw_input:
@@ -213,10 +133,10 @@ class AgentOrchestrator:
         results = []
 
         if self.config.verbose:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"[Coordinate] 执行模式: {self.config.execution_mode.value}")
             print(f"[Coordinate] Pipeline: {' → '.join(self.pipeline)}")
-            print(f"{'='*60}\n")
+            print(f"{'=' * 60}\n")
 
         try:
             if self.config.execution_mode == ExecutionMode.SEQUENTIAL:
@@ -271,7 +191,13 @@ class AgentOrchestrator:
                     results.append(r)
                     self._apply_updates(r)
                 except Exception as e:
-                    results.append(AgentResult(success=False, message=str(e), agent_name=futures[f].name))
+                    results.append(
+                        AgentResult(
+                            success=False,
+                            message=str(e),
+                            agent_name=futures[f].name,
+                        )
+                    )
         return results
 
     def _run_conditional(self, log: List) -> List[AgentResult]:
@@ -303,7 +229,11 @@ class AgentOrchestrator:
                 if retry < self.config.max_retries:
                     time.sleep(1)
                 else:
-                    result = AgentResult(success=False, message=f"重试{self.config.max_retries}次后失败", agent_name=agent.name)
+                    result = AgentResult(
+                        success=False,
+                        message=f"重试{self.config.max_retries}次后失败",
+                        agent_name=agent.name,
+                    )
 
         entry.update({"end": time.time(), "ok": result.success})
         return result
@@ -319,17 +249,23 @@ class AgentOrchestrator:
 
         # 当启用 MessageBus 时，同步发布消息
         if self.use_message_bus and self.message_bus is not None:
-            from .protocol import MessageAdapter
+            from financial_rag.core.protocol import MessageAdapter
 
             # 获取当前总线上已有的消息 ID 作为 parent
-            parent_ids = list(self.message_bus._messages.keys()) if self.message_bus._messages else []
+            parent_ids = (
+                list(self.message_bus._messages.keys())
+                if self.message_bus._messages
+                else []
+            )
 
             msgs = MessageAdapter.from_agent_result(result, parent_msg_ids=parent_ids)
             for msg in msgs:
                 self.message_bus.publish(msg)
 
             if self.config.verbose:
-                print(f"[MessageBus] 发布 {len(msgs)} 条消息 (Agent: {result.agent_name})")
+                print(
+                    f"[MessageBus] 发布 {len(msgs)} 条消息 (Agent: {result.agent_name})"
+                )
 
     def get_data_lineage(self) -> List[Dict]:
         """
@@ -351,15 +287,17 @@ class AgentOrchestrator:
             key=lambda m: m.timestamp,
         )
         for msg in sorted_msgs:
-            lineage.append({
-                "msg_id": msg.msg_id,
-                "sender": msg.sender,
-                "receiver": msg.receiver,
-                "msg_type": msg.msg_type,
-                "payload_keys": list(msg.payload.keys()),
-                "parent_msg_ids": msg.parent_msg_ids,
-                "timestamp": msg.timestamp,
-            })
+            lineage.append(
+                {
+                    "msg_id": msg.msg_id,
+                    "sender": msg.sender,
+                    "receiver": msg.receiver,
+                    "msg_type": msg.msg_type,
+                    "payload_keys": list(msg.payload.keys()),
+                    "parent_msg_ids": msg.parent_msg_ids,
+                    "timestamp": msg.timestamp,
+                }
+            )
         return lineage
 
     def reset(self):

@@ -13,7 +13,7 @@ import json
 from typing import Dict, Any, List, Optional
 
 from financial_rag.config import config
-from financial_rag.core.coordinator import BaseAgent, AgentContext, AgentResult
+from financial_rag.core.base import BaseAgent, AgentContext, AgentResult
 from financial_rag.llm.dashscope_client import get_llm
 from financial_rag.prompts import (
     METADATA_EXTRACTION_SYSTEM,
@@ -392,8 +392,8 @@ class IngestionAgent(BaseAgent):
         if llm is None:
             return None
 
-        # 只取前 2000 字符发送给 LLM（节省 token）
-        prompt_text = text[:2000]
+        # 取前 8000 字符发送给 LLM，保留足够的原文信息
+        prompt_text = text[:8000]
         user_prompt = METADATA_EXTRACTION_PROMPT.format(text=prompt_text)
 
         try:
