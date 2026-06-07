@@ -28,6 +28,29 @@ Three core engines power the system. All are domain-agnostic and defined by abst
 └─────────────┴───────────────────┴────────────────────────────┘
 ```
 
+### Knowledge Base Lifecycle
+
+Data flows through a persistent KB pipeline, surviving server restarts:
+
+```
+📥 Ingest                    🏗️ Build                    🔍 Query
+┌─────────────┐              ┌─────────────┐             ┌─────────────┐
+│ News Search ─┤ append      │ BM25 Index  │             │ Hybrid Query│
+│ File Import ─┤──→ JSONL   ─┤ Embedding   ─┤──→ Index  ─┤ RRF Fusion  │
+│ Sample Data ─┤   archive   │ 1024-dim    │             │ Rerank      │
+└─────────────┘              └─────────────┘             │ Slot Fill   │
+       ↓                                                   └─────┬───────┘
+ data/knowledge_base/                                            ↓
+ ├─ news_archive.jsonl  ← raw news (append)            Answer + Sources
+ └─ kb_docs.json        ← KB buffer (persist)           with citations
+```
+
+| File | Purpose |
+|------|---------|
+| `data/knowledge_base/kb_docs.json` | Persistent KB buffer — loaded on server start, saved after every ingest |
+| `data/knowledge_base/news_archive.jsonl` | Cumulative raw news archive — each search appends with full metadata |
+| `output/*.md` | Markdown reports (news summaries, analysis reports) |
+
 | Engine | File | Responsibility |
 |--------|------|----------------|
 | **Coordinate** | `core/orchestrator.py` | Register agents, decide execution order, pass context between them. Supports 3 modes: sequential, parallel, conditional. |
@@ -84,7 +107,7 @@ ReportAgent      → 3-format output (summary/detailed/PPT outline)
 | `main.py` | Thin wrapper — delegates to `financial_rag.main.main()` |
 | `config.py` → `financial_rag/config.py` | All settings: LLM, RAG, Coordinator, Pipeline, Reflection, MCP |
 | `.env.example` | Env var template (`DASHSCOPE_API_KEY`) |
-| `requirements.txt` | pip dependencies |
+| `requirements.txt` | pip dependencies (incl. fastapi, uvicorn) |
 
 ### `financial_rag/` — Core Package
 
@@ -98,6 +121,7 @@ ReportAgent      → 3-format output (summary/detailed/PPT outline)
 | `slot_filler.py` | Parallel slot filling engine with TTFT measurement | `SlotFiller`, `create_slot_filler` |
 | `news_fetcher.py` | Real-time news via akshare (stock/financial/announcements) | `fetch_stock_news`, `fetch_financial_news` |
 | `etf_fetcher.py` | ETF market data via akshare | `search_etf`, `fetch_etf_kline` |
+| `web.py` | FastAPI Web UI server — KB pipeline endpoints + static file serving | FastAPI app, `/api/*` endpoints |
 
 ### `financial_rag/core/` — Architecture Layer
 
@@ -157,6 +181,13 @@ ReportAgent      → 3-format output (summary/detailed/PPT outline)
 |------|------|
 | `financial_news.jsonl` | Sample training data (3 news articles) |
 
+### `data/knowledge_base/` — Persistent KB Storage
+
+| File | Role |
+|------|------|
+| `kb_docs.json` | Persistent KB document buffer — auto-loaded on server start |
+| `news_archive.jsonl` | Cumulative raw news archive — appended on every news search |
+
 ---
 
 ## CLI Quick Reference
@@ -164,7 +195,11 @@ ReportAgent      → 3-format output (summary/detailed/PPT outline)
 All commands run from project root `d:\llamaindex` with venv activated.
 
 ```bash
-# Unified Pipeline (recommended)
+# Web UI (recommended for most users)
+python -m financial_rag.main web                          # http://127.0.0.1:8000
+python -m financial_rag.main web --host 0.0.0.0 --port 9000
+
+# Unified Pipeline (CLI)
 python -m financial_rag.main pipeline "茅台2024年利润增长情况"
 python -m financial_rag.main pipeline "新能源板块利好" -t news -v
 python -m financial_rag.main pipeline "降准对银行股的影响" -t deep -o ./output
@@ -298,6 +333,50 @@ python -c "from financial_rag.llm import get_llm; print('llm ok')"
 | `Activate.ps1` blocked | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
 | `lxml` build fails | `pip install akshare --only-binary :all:` |
 | Chinese output garbled | Use PowerShell instead of CMD |
+
+---
+
+## Web UI (FastAPI)
+
+The recommended interface. Start with:
+
+```bash
+python -m financial_rag.main web
+# → http://127.0.0.1:8000
+```
+
+The UI guides you through the KB pipeline:
+
+| Step | Action | Result |
+|------|--------|--------|
+| 📥 **数据摄取** | Browse directories, click "导入全部", or fetch news | Files loaded into KB buffer + persisted to `kb_docs.json` |
+| 🏗️ **构建知识库** | Click "构建索引" | BM25 index + 1024-dim embeddings built |
+| 🔍 **RAG 查询** | Ask questions against your KB | Hybrid retrieval with source citations |
+| 🔧 **分析工具** | News search, K-line, slot fill, score diagnostic | Standalone analysis tools |
+
+**Key features:**
+- Directory browser shows all data sources with file counts and one-click import
+- News search auto-saves to `news_archive.jsonl` and auto-ingests to KB
+- KB persists across server restarts (loaded from `kb_docs.json` on start)
+- Query results show retrieved sources with scores, retriever types, and source tags
+
+**API endpoints:**
+
+| Endpoint | Method | Purpose |
+|----------|--------|--------|
+| `/api/config` | GET | Server config (models, API key status) |
+| `/api/directories` | GET | Scan data directories with file listings |
+| `/api/ingest/files` | POST | Load files from directory into KB |
+| `/api/ingest/news` | POST | Fetch news and add to KB |
+| `/api/ingest/sample` | POST | Load built-in sample data |
+| `/api/build` | POST | Build BM25 + Embedding index |
+| `/api/kb/status` | GET | KB stats (doc count, path, size, sources) |
+| `/api/kb/clear` | POST | Clear KB from memory and disk |
+| `/api/kb-query` | POST | RAG query against built KB |
+| `/api/news` | POST | News search (saves to archive + auto-ingests) |
+| `/api/kline` | POST | ETF K-line analysis |
+| `/api/slot` | POST | Slot filling test |
+| `/api/pipeline` | POST | Full 5-phase pipeline |
 
 ---
 

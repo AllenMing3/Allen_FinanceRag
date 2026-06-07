@@ -42,6 +42,12 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 
 /* Source panel - Ingest */
 .source-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.dir-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; background: var(--card-bg); transition: border-color 0.2s; }
+.dir-card:hover { border-color: var(--accent); }
+.dir-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.dir-files { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.dir-file { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; }
+.tag-off { background: #444; color: #999; }
 .source-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
 .source-card h3 { font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 .source-card h3 .icon { font-size: 20px; }
@@ -177,15 +183,21 @@ th { color: var(--text2); font-weight: 500; }
   <!-- ========== STEP 1: INGEST ========== -->
   <div class="panel active" id="panel-ingest">
     <div class="source-grid">
-      <!-- File upload -->
-      <div class="source-card">
-        <h3><span class="icon">📁</span> 文件导入</h3>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">从本地目录加载 JSONL / TXT / PDF 文件</p>
-        <div class="form-row">
-          <input class="input" id="ingest-dir" placeholder="目录路径，如 ./data/financial" value="./data/financial" />
-          <button class="btn btn-primary" onclick="ingestFiles()">导入</button>
+      <!-- Directory browser -->
+      <div class="source-card" style="grid-column: 1 / -1">
+        <h3><span class="icon">📁</span> 数据源目录</h3>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">点击「导入」按钮将文件加载到知识库，新闻搜索后会自动存入 <code>news_archive.jsonl</code></p>
+        <div id="dirBrowser">
+          <div style="text-align:center;color:var(--text2);padding:16px"><div class="spinner" style="margin:0 auto"></div></div>
         </div>
-        <div id="ingest-file-result"></div>
+        <details style="margin-top:12px">
+          <summary style="font-size:12px;color:var(--text2);cursor:pointer">⚙️ 自定义目录</summary>
+          <div class="form-row" style="margin-top:8px">
+            <input class="input" id="ingest-dir" placeholder="输入自定义目录路径..." />
+            <button class="btn btn-secondary" onclick="ingestFiles()">导入</button>
+          </div>
+          <div id="ingest-file-result"></div>
+        </details>
       </div>
 
       <!-- News fetch -->
@@ -406,6 +418,77 @@ function renderDocList(docs) {
 }
 
 // ===== STEP 1: Ingest =====
+
+// Directory browser
+async function loadDirBrowser() {
+  try {
+    const d = await fetch('/api/directories').then(r => r.json());
+    renderDirBrowser(d.directories);
+  } catch(e) {
+    document.getElementById('dirBrowser').innerHTML =
+      `<div style="color:var(--danger)">加载目录失败: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderDirBrowser(dirs) {
+  const el = document.getElementById('dirBrowser');
+  let h = '';
+  dirs.forEach(dir => {
+    const icon = dir.exists ? '📂' : '📭';
+    const status = dir.exists
+      ? `${dir.file_count} 个文件 · ${dir.total_size_kb} KB`
+      : '目录不存在';
+    h += `<div class="dir-card">
+      <div class="dir-header">
+        <div>
+          <span style="font-size:18px">${icon}</span>
+          <strong>${escHtml(dir.label)}</strong>
+          <span style="font-size:12px;color:var(--text2);margin-left:8px">${escHtml(dir.path)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="tag ${dir.file_count > 0 ? 'tag-info' : 'tag-off'}">${status}</span>
+          ${dir.exists && dir.file_count > 0 ? `<button class="btn btn-primary btn-sm" onclick="ingestDir('${escHtml(dir.path)}', this)">导入全部</button>` : ''}
+        </div>
+      </div>`;
+    if (dir.exists && dir.files.length > 0) {
+      h += '<div class="dir-files">';
+      dir.files.forEach(f => {
+        const typeIcon = f.ext === '.jsonl' ? '📝' : f.ext === '.json' ? '📦' : f.ext === '.txt' ? '📄' : '📎';
+        const lineInfo = f.line_count > 0 ? ` · ${f.line_count} 条` : '';
+        h += `<div class="dir-file">
+          <span>${typeIcon} ${escHtml(f.name)}</span>
+          <span style="color:var(--text2)">${f.size_kb} KB${lineInfo}</span>
+        </div>`;
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+  });
+  el.innerHTML = h;
+}
+
+async function ingestDir(dirPath, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '导入中...';
+  }
+  try {
+    const d = await api('/api/ingest/files', { dir: dirPath });
+    kbDocs = d.documents || [];
+    updateKBStatus(kbDocs.length);
+    renderDocList(kbDocs);
+    if (btn) {
+      btn.textContent = `✓ ${d.loaded} 篇`;
+      btn.className = 'btn btn-success btn-sm';
+    }
+    refreshKBStatus();
+  } catch(e) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '失败';
+    }
+  }
+}
 async function ingestFiles() {
   const dir = document.getElementById('ingest-dir').value.trim();
   if (!dir) return;
@@ -693,6 +776,8 @@ fetch('/api/config').then(r=>r.json()).then(d => {
   }
   // Load KB status from server
   refreshKBStatus();
+  // Load directory browser
+  loadDirBrowser();
 }).catch(() => {});
 </script>
 </body>

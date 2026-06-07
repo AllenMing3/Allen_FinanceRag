@@ -222,6 +222,70 @@ def api_config():
 
 # ===================== KB Pipeline (Ingest → Build → Query) =====================
 
+# Known data directories to scan
+_KNOWN_DIRS = [
+    ("./data/financial", "财务数据"),
+    ("./data/knowledge_base", "知识库 & 新闻存档"),
+    ("./financial_rag/data", "内置示例数据"),
+]
+
+
+@app.get("/api/directories")
+def api_directories():
+    """Scan known data directories and return file listings"""
+    import json as _json
+
+    results = []
+    for dir_rel, label in _KNOWN_DIRS:
+        dir_path = os.path.normpath(dir_rel)
+        if not os.path.isdir(dir_path):
+            results.append({"path": dir_rel, "label": label, "exists": False, "files": []})
+            continue
+
+        files = []
+        total_size = 0
+        for fname in sorted(os.listdir(dir_path)):
+            fpath = os.path.join(dir_path, fname)
+            if not os.path.isfile(fpath):
+                continue
+            ext = os.path.splitext(fname)[1].lower()
+            fsize = os.path.getsize(fpath)
+            total_size += fsize
+            # Count lines for JSONL files
+            line_count = 0
+            if ext == ".jsonl":
+                try:
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        line_count = sum(1 for line in f if line.strip())
+                except Exception:
+                    pass
+            # Preview first 100 chars for text files
+            preview = ""
+            if ext in (".txt", ".jsonl", ".json"):
+                try:
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        preview = f.read(200).strip()
+                except Exception:
+                    pass
+            files.append({
+                "name": fname,
+                "ext": ext,
+                "size_kb": round(fsize / 1024, 1),
+                "line_count": line_count,
+                "preview": preview[:150],
+            })
+
+        results.append({
+            "path": dir_rel,
+            "label": label,
+            "exists": True,
+            "file_count": len(files),
+            "total_size_kb": round(total_size / 1024, 1),
+            "files": files,
+        })
+    return {"directories": results}
+
+
 @app.post("/api/ingest/files")
 def api_ingest_files(req: IngestFilesRequest):
     """Load documents from a local directory into the KB buffer"""
