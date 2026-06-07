@@ -392,6 +392,7 @@ python -m financial_rag.main toolcall "查询" -v
 
 | 命令 | 用途 | 最常用写法 |
 |------|------|-----------|
+| `web` | 启动 Web UI | `python -m financial_rag.main web` |
 | `demo` | 跑内置演示 | `python -m financial_rag.main demo` |
 | `pipeline` | 端到端分析 | `python -m financial_rag.main pipeline "查询" -t quick -v` |
 | `query` | 交互/单次查询 | `python -m financial_rag.main query -i` |

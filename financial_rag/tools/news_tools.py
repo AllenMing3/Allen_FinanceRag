@@ -22,6 +22,7 @@ def fetch_news_report(
     max_news: int = 30,
     output_dir: str = "",
     filename: str = "",
+    filter_keywords: str = "",
 ) -> Dict:
     """搜索财经新闻并保存为 Markdown 格式化报告。
 
@@ -33,6 +34,7 @@ def fetch_news_report(
         max_news: 最大返回条数，默认 30
         output_dir: 输出目录，默认系统 output 目录
         filename: 自定义文件名（不含扩展名），默认自动生成
+        filter_keywords: 过滤关键词（可选，默认同 keyword）
     """
     from financial_rag.config import config
     from financial_rag.news_fetcher import fetch_financial_news
@@ -46,13 +48,14 @@ def fetch_news_report(
     items = raw.get("items", [])
 
     # 按关键词过滤（二次过滤，akshare 有时返回宽泛结果）
+    filter_kw = filter_keywords or keyword
     filtered = []
     for item in items:
         title = item.get("title", "")
         content = item.get("content", "")
         text = title + " " + content
         # 分词式匹配：关键词拆分为多个子词，至少匹配一个
-        kw_parts = [kw.strip() for kw in keyword.replace("、", ",").replace("，", ",").split(",") if kw.strip()]
+        kw_parts = [kw.strip() for kw in filter_kw.replace("、", ",").replace("，", ",").split(",") if kw.strip()]
         if any(p in text for p in kw_parts if len(p) >= 2):
             filtered.append(item)
         elif not kw_parts:
@@ -224,12 +227,15 @@ def run_news_pipeline(
 
     # 1. 关键词提取
     keywords = _extract_keywords(llm, query)
-    main_kw = "、".join(keywords[:3])
-    logger.info(f"新闻流水线: query='{query}' keywords='{main_kw}'")
+    # 只用第一个关键词搜索（多个关键词拼接会导致 akshare 匹配失败）
+    search_kw = keywords[0] if keywords else query
+    main_kw = "、".join(keywords[:3])  # 用于过滤
+    logger.info(f"新闻流水线: query='{query}' search='{search_kw}' filter='{main_kw}'")
 
-    # 2. 拉取 + 保存
+    # 2. 拉取（用第一个关键词搜索）+ 保存（用所有关键词过滤）
     data = fetch_news_report(
-        keyword=main_kw, max_news=max_news,
+        keyword=search_kw, filter_keywords=main_kw,
+        max_news=max_news,
         output_dir=out_dir, filename=filename,
     )
 

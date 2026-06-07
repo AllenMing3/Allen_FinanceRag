@@ -13,6 +13,7 @@ Financial RAG — 主入口
     python -m financial_rag.main toolbar -l                              # 列出所有能力
     python -m financial_rag.main news "今天最大的AI新闻" -s               # 拉新闻
     python -m financial_rag.main kline "人工智能ETF" --days 30 -s         # ETF K线分析
+    python -m financial_rag.main web                                      # 启动 Web UI
 
 所有业务逻辑已迁至:
     - financial_rag.core.router.CommandRouter          (命令分发)
@@ -127,11 +128,25 @@ def main():
     kp.add_argument("--code", help="指定 ETF 代码")
     kp.add_argument("-s", "--summarize", action="store_true", help="用 LLM 生成技术分析")
 
+    # web: 启动 Web UI
+    wp = sub.add_parser("web", help="启动 Web UI (FastAPI)")
+    wp.add_argument("--host", default="127.0.0.1", help="监听地址")
+    wp.add_argument("--port", type=int, default=8000, help="监听端口")
+
     args = parser.parse_args()
 
     # 初始化环境
     if not setup_environment() and args.command not in ("demo", "score"):
         sys.exit(1)
+
+    # web 命令单独处理
+    if args.command == "web":
+        from financial_rag.web import main as web_main
+        import os
+        os.environ["WEB_HOST"] = args.host
+        os.environ["WEB_PORT"] = str(args.port)
+        web_main()
+        return
 
     # 交给 CommandRouter 处理
     router = CommandRouter()
