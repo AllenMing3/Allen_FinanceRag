@@ -162,13 +162,14 @@ th { color: var(--text2); font-weight: 500; }
 <div class="topbar">
   <div class="logo">Financial RAG <small>v2.0</small></div>
   <div class="kb-badge" id="kbBadge"><span class="dot dot-off"></span> <span id="kbStatus">未构建知识库</span></div>
+  <div class="kb-badge" id="metaBadge" style="background:rgba(255,217,61,.1)"><span style="font-size:14px">📰</span> <span id="metaStatus">元数据: 0</span></div>
   <div class="spacer"></div>
   <div class="model-info" id="modelInfo">Loading...</div>
 </div>
 
 <!-- Pipeline flow navigation -->
 <div class="pipeline-flow">
-  <div class="flow-step active" data-panel="ingest"><span class="step-icon">📥</span> 数据摄取 <span class="step-count" id="ingestCount">0</span></div>
+  <div class="flow-step active" data-panel="ingest"><span class="step-icon">📥</span> 数据源 <span class="step-count" id="ingestCount">0</span></div>
   <span class="flow-arrow">→</span>
   <div class="flow-step" data-panel="build"><span class="step-icon">🏗️</span> 构建知识库 <span class="step-count" id="buildCount">0</span></div>
   <span class="flow-arrow">→</span>
@@ -186,7 +187,7 @@ th { color: var(--text2); font-weight: 500; }
       <!-- Directory browser -->
       <div class="source-card" style="grid-column: 1 / -1">
         <h3><span class="icon">📁</span> 数据源目录</h3>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">点击「导入」按钮将文件加载到知识库，新闻搜索后会自动存入 <code>news_archive.jsonl</code></p>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">导入文件经 <strong style="color:var(--accent)">Agent 分析</strong>后成为知识库内容；新闻搜索仅收集元数据（上下文标签）</p>
         <div id="dirBrowser">
           <div style="text-align:center;color:var(--text2);padding:16px"><div class="spinner" style="margin:0 auto"></div></div>
         </div>
@@ -202,8 +203,8 @@ th { color: var(--text2); font-weight: 500; }
 
       <!-- News fetch -->
       <div class="source-card">
-        <h3><span class="icon">📰</span> 新闻抓取</h3>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">从东方财富拉取实时财经新闻</p>
+        <h3><span class="icon">📰</span> 新闻抓取（元数据收集）</h3>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">从东方财富拉取实时新闻，存储为元数据上下文（不进入知识库）</p>
         <div class="form-row">
           <input class="input" id="ingest-news-q" placeholder="主题: AI、茅台、降准..." />
           <button class="btn btn-primary" onclick="ingestNews()">抓取</button>
@@ -275,7 +276,7 @@ th { color: var(--text2); font-weight: 500; }
     <div class="source-grid">
       <!-- News search tool -->
       <div class="source-card">
-        <h3><span class="icon">📰</span> 新闻搜索 + AI 摘要</h3>
+        <h3><span class="icon">📰</span> 新闻搜索（元数据收集）</h3>
         <div class="form-row">
           <input class="input" id="tool-news-q" placeholder="搜索主题" />
           <button class="btn btn-primary btn-sm" onclick="runNewsTool()">搜索</button>
@@ -388,6 +389,11 @@ function updateKBStatus(count) {
   }
 }
 
+function updateMetaStatus(count) {
+  const el = document.getElementById('metaStatus');
+  el.textContent = `元数据: ${count}`;
+}
+
 function showKBStorage(path, size, built) {
   const card = document.getElementById('kbStorageCard');
   const stats = document.getElementById('kbStorageStats');
@@ -447,7 +453,7 @@ function renderDirBrowser(dirs) {
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <span class="tag ${dir.file_count > 0 ? 'tag-info' : 'tag-off'}">${status}</span>
-          ${dir.exists && dir.file_count > 0 ? `<button class="btn btn-primary btn-sm" onclick="ingestDir('${escHtml(dir.path)}', this)">导入全部</button>` : ''}
+          ${dir.exists && dir.file_count > 0 ? `<button class="btn btn-primary btn-sm" onclick="ingestDir('${escHtml(dir.path)}', this)">分析并导入</button>` : ''}
         </div>
       </div>`;
     if (dir.exists && dir.files.length > 0) {
@@ -470,15 +476,17 @@ function renderDirBrowser(dirs) {
 async function ingestDir(dirPath, btn) {
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '导入中...';
+    btn.textContent = '分析中...';
   }
   try {
-    const d = await api('/api/ingest/files', { dir: dirPath });
+    const d = await api('/api/ingest/files', { dir: dirPath, analyze: true });
     kbDocs = d.documents || [];
     updateKBStatus(kbDocs.length);
     renderDocList(kbDocs);
     if (btn) {
-      btn.textContent = `✓ ${d.loaded} 篇`;
+      let label = `✓ ${d.loaded} 篇`;
+      if (d.analyzed > 0) label += ` (${d.analyzed} 篇已分析)`;
+      btn.textContent = label;
       btn.className = 'btn btn-success btn-sm';
     }
     refreshKBStatus();
@@ -511,13 +519,10 @@ async function ingestNews() {
   if (!q) return;
   try {
     const d = await api('/api/ingest/news', { query: q, max_news: 30 });
-    const newDocs = d.documents || [];
-    kbDocs = kbDocs.concat(newDocs);
-    updateKBStatus(kbDocs.length);
-    renderDocList(kbDocs);
-    let h = `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 抓取 ${d.fetched} 条新闻`;
+    let h = `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 抓取 ${d.fetched} 条新闻 → 元数据`;
     if (d.has_summary) h += ' + AI摘要';
-    h += ` (共 ${kbDocs.length} 篇)</div>`;
+    h += ` (累计元数据: ${d.meta_total} 条)</div>`;
+    updateMetaStatus(d.meta_total);
     if (d.headlines && d.headlines.length) {
       h += '<div style="margin-top:8px">';
       d.headlines.slice(0, 5).forEach(item => {
@@ -587,10 +592,12 @@ async function buildKB() {
 async function clearKB() {
   try {
     await fetch('/api/kb/clear', {method:'POST'});
+    await fetch('/api/metadata/clear', {method:'POST'});
   } catch(e) {}
   kbDocs = [];
   kbBuilt = false;
   updateKBStatus(0);
+  updateMetaStatus(0);
   renderDocList([]);
   document.getElementById('buildCount').textContent = '0';
   document.getElementById('build-result').innerHTML = '';
@@ -652,6 +659,15 @@ async function runKBQuery() {
       h += `<div class="answer-section"><h3>💡 基于知识库的回答</h3><div class="answer-text">${escHtml(d.answer)}</div></div>`;
     }
 
+    // News metadata context
+    if (d.news_context && d.news_context.length) {
+      h += `<div class="card" style="margin-top:12px"><h3>📰 相关新闻动态 (${d.news_context.length} 条)</h3>`;
+      d.news_context.forEach(n => {
+        h += `<div class="news-item"><h4>${escHtml(n.title)}</h4><div class="meta">${escHtml(n.source)} · ${escHtml(n.publish_time)} · <span class="tag tag-info" style="font-size:10px">${escHtml(n.keyword)}</span></div></div>`;
+      });
+      h += '</div>';
+    }
+
     // Fill stats
     if (d.fill_stats) {
       const fs = d.fill_stats;
@@ -679,12 +695,10 @@ async function runNewsTool() {
     const d = await api('/api/news', { query: q, summarize: true });
     let h = `<div class="stats"><div class="stat">关键词 <strong>${escHtml(d.keyword)}</strong></div><div class="stat">数量 <strong>${d.total_found}</strong></div>`;
     if (d.filepath) h += `<div class="stat">📁 <strong style="font-size:11px;word-break:break-all">${escHtml(d.filepath)}</strong></div>`;
-    if (d.ingested_to_kb > 0) h += `<div class="stat"><span class="tag tag-ok">✓ ${d.ingested_to_kb} 条已导入知识库</span> (共 ${d.kb_total} 篇)</div>`;
+    if (d.meta_stored > 0) h += `<div class="stat"><span class="tag tag-ok">✓ ${d.meta_stored} 条元数据已收集</span> (累计 ${d.meta_total} 条)</div>`;
     h += '</div>';
-    if (d.kb_path) h += `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">💾 知识库存储: ${escHtml(d.kb_path)}</div>`;
-    if (d.news_archive_path) h += `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">📰 新闻数据源: ${escHtml(d.news_archive_path)} (累计 ${d.news_archive_count} 条)</div>`;
-    // Update KB badge
-    if (d.kb_total > 0) updateKBStatus(d.kb_total);
+    updateMetaStatus(d.meta_total);
+    if (d.news_archive_path) h += `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">📰 新闻存档: ${escHtml(d.news_archive_path)} (累计 ${d.news_archive_count} 条)</div>`;
     if (d.summary) h += `<div class="card" style="margin-top:8px"><h3>AI 摘要</h3><div style="font-size:13px;line-height:1.6">${escHtml(d.summary)}</div></div>`;
     if (d.headlines && d.headlines.length) {
       d.headlines.slice(0, 8).forEach(item => {
@@ -764,6 +778,9 @@ async function refreshKBStatus() {
     if (d.doc_count > 0) {
       updateKBStatus(d.doc_count);
       showKBStorage(d.kb_path, d.file_size_kb, d.kb_built);
+    }
+    if (d.meta_count > 0) {
+      updateMetaStatus(d.meta_count);
     }
   } catch(e) {}
 }

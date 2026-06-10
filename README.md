@@ -33,21 +33,23 @@ Three core engines power the system. All are domain-agnostic and defined by abst
 Data flows through a persistent KB pipeline, surviving server restarts:
 
 ```
-📥 Ingest                    🏗️ Build                    🔍 Query
-┌─────────────┐              ┌─────────────┐             ┌─────────────┐
-│ News Search ─┤ append      │ BM25 Index  │             │ Hybrid Query│
-│ File Import ─┤──→ JSONL   ─┤ Embedding   ─┤──→ Index  ─┤ RRF Fusion  │
-│ Sample Data ─┤   archive   │ 1024-dim    │             │ Rerank      │
-└─────────────┘              └─────────────┘             │ Slot Fill   │
-       ↓                                                   └─────┬───────┘
- data/knowledge_base/                                            ↓
- ├─ news_archive.jsonl  ← raw news (append)            Answer + Sources
- └─ kb_docs.json        ← KB buffer (persist)           with citations
+📥 Data Sources                    🏗️ Build                    🔍 Query
+┌─────────────────┐              ┌─────────────┐             ┌─────────────┐
+│ File Import ──────┤ Agent       │ BM25 Index  │             │ Hybrid Query│
+│  (analyzed)       ─┤ Analysis   ─┤ Embedding   ─┤──→ Index  ─┤ RRF Fusion  │
+│ News Search ──────┤ → metadata  │ 1024-dim    │             │ Rerank      │
+│  (context only)   ─┤ only        └─────────────┘             │ Slot Fill   │
+└─────────────────┘              (auto-rebuild)              └─────┬───────┘
+ data/knowledge_base/                                                ↓
+ ├─ kb_docs.json          ← analyzed KB documents       Answer + KB Sources
+ ├─ news_metadata.json    ← news context labels           + News Context
+ └─ news_archive.jsonl    ← raw news archive (append)
 ```
 
 | File | Purpose |
-|------|---------|
-| `data/knowledge_base/kb_docs.json` | Persistent KB buffer — loaded on server start, saved after every ingest |
+|------|--------|
+| `data/knowledge_base/kb_docs.json` | Analyzed KB documents — loaded on server start, saved after file import with agent analysis |
+| `data/knowledge_base/news_metadata.json` | News context labels — titles, keywords, timestamps for query-time context injection |
 | `data/knowledge_base/news_archive.jsonl` | Cumulative raw news archive — each search appends with full metadata |
 | `output/*.md` | Markdown reports (news summaries, analysis reports) |
 
@@ -181,7 +183,8 @@ ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 
 | File | Role |
 |------|------|
-| `kb_docs.json` | Persistent KB document buffer — auto-loaded on server start |
+| `kb_docs.json` | Analyzed KB documents — file imports go through IngestionAgent + ExtractionAgent before entry |
+| `news_metadata.json` | News context labels — keyword, title, source, publish_time (used for query-time context injection, NOT indexed) |
 | `news_archive.jsonl` | Cumulative raw news archive — appended on every news search |
 
 ---

@@ -89,6 +89,30 @@ def _append_news_archive(items: list, keyword: str) -> str:
         logger.info(f"News archive: appended {count} items → {_NEWS_DB_PATH}")
     return _NEWS_DB_PATH
 
+# Metadata store — news context data (NOT indexed into KB)
+_META_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "knowledge_base", "news_metadata.json")
+_META_PATH = os.path.normpath(_META_PATH)
+
+
+def _load_meta() -> list:
+    """Load news metadata from disk (or empty list)"""
+    if os.path.exists(_META_PATH):
+        try:
+            import json
+            with open(_META_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def _save_meta(meta: list):
+    """Persist news metadata to disk"""
+    import json
+    with open(_META_PATH, "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    logger.info(f"Metadata saved: {len(meta)} items → {_META_PATH}")
+
 # Lazy-init holder so import doesn't block
 _state: dict = {}
 
@@ -144,6 +168,7 @@ def _ensure_init():
         except Exception as e:
             logger.warning(f"KB auto-rebuild failed: {e}")
     _state["kb_path"] = _KB_PATH
+    _state["meta_store"] = _load_meta()
     _state["ready"] = True
 
 
@@ -193,6 +218,7 @@ class ScoreRequest(BaseModel):
 
 class IngestFilesRequest(BaseModel):
     dir: str = "./data/financial"
+    analyze: bool = False
 
 
 class IngestNewsRequest(BaseModel):
@@ -288,7 +314,11 @@ def api_directories():
 
 @app.post("/api/ingest/files")
 def api_ingest_files(req: IngestFilesRequest):
-    """Load documents from a local directory into the KB buffer"""
+    """Load and optionally analyze documents from a directory into the KB.
+
+    analyze=True runs IngestionAgent + ExtractionAgent on each document
+    to extract structured features (metrics, entities) before KB entry.
+    """
     _ensure_init()
     import json
 
@@ -296,7 +326,7 @@ def api_ingest_files(req: IngestFilesRequest):
     if not os.path.isdir(dir_path):
         raise HTTPException(400, f"目录不存在: {dir_path}")
 
-    documents = []
+    raw_docs = []
     for fname in os.listdir(dir_path):
         fpath = os.path.join(dir_path, fname)
         if not os.path.isfile(fpath):
@@ -311,15 +341,14 @@ def api_ingest_files(req: IngestFilesRequest):
                         obj = json.loads(line)
                         text = obj.get("content", obj.get("text", obj.get("title", "")))
                         if text:
-                            # Preserve original metadata if present
                             orig_meta = obj.get("metadata", obj.get("meta", {}))
                             meta = {**orig_meta, "source": orig_meta.get("source", fname), "file": fpath}
-                            documents.append({"text": text, "meta": meta})
+                            raw_docs.append({"text": text, "meta": meta})
             elif fname.endswith(".txt"):
                 with open(fpath, "r", encoding="utf-8") as f:
                     text = f.read().strip()
                     if text:
-                        documents.append({"text": text, "meta": {"source": fname, "file": fpath}})
+                        raw_docs.append({"text": text, "meta": {"source": fname, "file": fpath}})
             elif fname.endswith(".json"):
                 with open(fpath, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -327,24 +356,58 @@ def api_ingest_files(req: IngestFilesRequest):
                         for item in data:
                             text = item.get("content", item.get("text", ""))
                             if text:
-                                documents.append({"text": text, "meta": {"source": fname}})
+                                raw_docs.append({"text": text, "meta": {"source": fname}})
                     elif isinstance(data, dict):
                         text = data.get("content", data.get("text", ""))
                         if text:
-                            documents.append({"text": text, "meta": {"source": fname}})
+                            raw_docs.append({"text": text, "meta": {"source": fname}})
         except Exception as e:
             logger.warning(f"Skip {fname}: {e}")
 
-    # Store in server-side KB buffer
-    _state["kb_docs"] = _state.get("kb_docs", []) + documents
+    # Optional: run agent analysis on loaded documents
+    analyzed_count = 0
+    if req.analyze and raw_docs:
+        from financial_rag.core.base import AgentContext
+        from financial_rag.agents.ingestion_agent import IngestionAgent
+        from financial_rag.agents.extraction_agent import ExtractionAgent
+
+        ingest_agent = IngestionAgent()
+        extract_agent = ExtractionAgent()
+
+        for doc in raw_docs:
+            try:
+                ctx = AgentContext(raw_input=doc["text"][:500])
+                ctx.parsed_data = [doc]
+                ir = ingest_agent.run(ctx)
+                if ir.success and ir.context_updates:
+                    for k, v in ir.context_updates.items():
+                        setattr(ctx, k, v)
+                er = extract_agent.run(ctx)
+                if er.success and er.context_updates:
+                    features = er.context_updates.get("extracted_features", {})
+                    doc["meta"]["analyzed"] = True
+                    doc["meta"]["metrics"] = features.get("metrics", {})
+                    doc["meta"]["entities"] = features.get("entities", [])
+                    analyzed_count += 1
+            except Exception as e:
+                logger.warning(f"Analysis failed for doc: {e}")
+                doc["meta"]["analyzed"] = False
+
+    # Store in KB
+    _state["kb_docs"] = _state.get("kb_docs", []) + raw_docs
     _save_kb(_state["kb_docs"])
-    return {"loaded": len(documents), "total": len(_state["kb_docs"]), "documents": _state["kb_docs"],
-            "kb_path": _KB_PATH}
+    return {
+        "loaded": len(raw_docs),
+        "analyzed": analyzed_count,
+        "total": len(_state["kb_docs"]),
+        "documents": _state["kb_docs"],
+        "kb_path": _KB_PATH,
+    }
 
 
 @app.post("/api/ingest/news")
 def api_ingest_news(req: IngestNewsRequest):
-    """Fetch news and add to KB buffer"""
+    """Fetch news and store as metadata only (NOT added to KB)"""
     _ensure_init()
     from financial_rag.tools.news_tools import run_news_pipeline
 
@@ -355,31 +418,32 @@ def api_ingest_news(req: IngestNewsRequest):
         max_news=req.max_news,
     )
 
-    # Convert news items to KB documents
-    documents = []
+    # Store as metadata only — news has no nutritional value for KB
+    from datetime import datetime
+    fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    meta_items = []
     for item in data.get("items", []):
-        text = f"{item.get('title', '')} {item.get('content', '')}"
-        if text.strip():
-            documents.append({
-                "text": text.strip(),
-                "meta": {
-                    "source": "news",
-                    "title": item.get("title", ""),
-                    "publish_time": item.get("publish_time", ""),
-                },
-            })
+        meta_items.append({
+            "keyword": data.get("main_keyword", ""),
+            "title": item.get("title", ""),
+            "source": item.get("source", ""),
+            "publish_time": item.get("publish_time", ""),
+            "fetched_at": fetched_at,
+        })
 
-    _state["kb_docs"] = _state.get("kb_docs", []) + documents
-    _save_kb(_state["kb_docs"])
+    _state["meta_store"] = _state.get("meta_store", []) + meta_items
+    _save_meta(_state["meta_store"])
+
+    # Also append to archive JSONL
+    _append_news_archive(data.get("items", []), data.get("main_keyword", ""))
+
     return {
-        "fetched": len(documents),
-        "total": len(_state["kb_docs"]),
-        "documents": _state["kb_docs"],
-        "kb_path": _KB_PATH,
+        "fetched": len(meta_items),
         "keyword": data.get("main_keyword", ""),
         "has_summary": data.get("has_summary", False),
         "summary": data.get("summary", ""),
         "headlines": data.get("headlines", [])[:10],
+        "meta_total": len(_state["meta_store"]),
     }
 
 
@@ -447,6 +511,32 @@ def api_kb_clear():
     return {"ok": True, "kb_path": _KB_PATH}
 
 
+@app.post("/api/metadata/clear")
+def api_metadata_clear():
+    """Clear collected news metadata"""
+    _ensure_init()
+    _state["meta_store"] = []
+    _save_meta([])
+    return {"ok": True}
+
+
+@app.get("/api/metadata/status")
+def api_metadata_status():
+    """News metadata status"""
+    _ensure_init()
+    meta = _state.get("meta_store", [])
+    keywords = {}
+    for m in meta:
+        kw = m.get("keyword", "unknown")
+        keywords[kw] = keywords.get(kw, 0) + 1
+    return {
+        "count": len(meta),
+        "keywords": keywords,
+        "path": _META_PATH,
+        "file_exists": os.path.exists(_META_PATH),
+    }
+
+
 @app.get("/api/kb/status")
 def api_kb_status():
     """KB status: path, doc count, built state"""
@@ -457,9 +547,14 @@ def api_kb_status():
     for d in docs:
         src = d.get("meta", {}).get("source", "unknown")
         sources[src] = sources.get(src, 0) + 1
+    # Count analyzed docs
+    analyzed = sum(1 for d in docs if d.get("meta", {}).get("analyzed"))
+    meta_count = len(_state.get("meta_store", []))
     return {
         "kb_path": _KB_PATH,
         "doc_count": len(docs),
+        "analyzed_count": analyzed,
+        "meta_count": meta_count,
         "kb_built": _state.get("kb_built", False),
         "sources": sources,
         "file_exists": os.path.exists(_KB_PATH),
@@ -519,10 +614,27 @@ def api_kb_query(req: QueryRequest):
         "stages": [{"name": s.display_name, "score": s.score} for s in card.stages],
     }
 
+    # Inject relevant news metadata as context
+    news_context = []
+    meta_store = _state.get("meta_store", [])
+    if meta_store:
+        query_lower = req.query.lower()
+        for m in meta_store:
+            kw = m.get("keyword", "").lower()
+            if kw and any(p in query_lower for p in kw.split("、") if len(p) >= 2):
+                news_context.append({
+                    "title": m.get("title", ""),
+                    "keyword": m.get("keyword", ""),
+                    "publish_time": m.get("publish_time", ""),
+                    "source": m.get("source", ""),
+                })
+        news_context = news_context[:10]
+
     return {
         "query": req.query,
         "answer": answer,
         "retrieval": retrieval,
+        "news_context": news_context,
         "fill_stats": fill_stats,
         "scorecard": sc,
     }
@@ -655,25 +767,25 @@ def api_news(req: NewsRequest):
         with open(filepath, "r", encoding="utf-8") as f:
             md_content = f.read()
 
-    # Auto-ingest into KB buffer
-    ingested = 0
+    # Store as metadata only — news is context/labels, NOT KB knowledge
+    from datetime import datetime
+    fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    meta_items = []
     for item in data.get("items", []):
-        text = f"{item.get('title', '')} {item.get('content', '')}"
-        if text.strip():
-            _state.setdefault("kb_docs", []).append({
-                "text": text.strip(),
-                "meta": {
-                    "source": "news",
-                    "title": item.get("title", ""),
-                    "publish_time": item.get("publish_time", ""),
-                },
+        title = item.get("title", "")
+        if title.strip():
+            meta_items.append({
+                "keyword": data.get("main_keyword", ""),
+                "title": title,
+                "source": item.get("source", ""),
+                "publish_time": item.get("publish_time", ""),
+                "fetched_at": fetched_at,
             })
-            ingested += 1
 
-    if ingested > 0:
-        _save_kb(_state.get("kb_docs", []))
+    _state["meta_store"] = _state.get("meta_store", []) + meta_items
+    _save_meta(_state["meta_store"])
 
-    # Save raw news to archive JSONL (append mode)
+    # Append to archive JSONL (raw data source)
     archive_path = _append_news_archive(data.get("items", []), data.get("main_keyword", ""))
     archive_count = 0
     if os.path.exists(archive_path):
@@ -689,9 +801,8 @@ def api_news(req: NewsRequest):
         "headlines": data.get("headlines", [])[:20],
         "items": data.get("items", [])[:10],
         "markdown": md_content,
-        "ingested_to_kb": ingested,
-        "kb_total": len(_state.get("kb_docs", [])),
-        "kb_path": _KB_PATH,
+        "meta_stored": len(meta_items),
+        "meta_total": len(_state.get("meta_store", [])),
         "news_archive_path": archive_path,
         "news_archive_count": archive_count,
     }
