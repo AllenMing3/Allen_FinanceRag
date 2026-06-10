@@ -59,6 +59,9 @@ class IngestionAgent(BaseAgent):
         """摄取数据源"""
         raw_input = context.raw_input
 
+        # 提取新闻元数据作为先验知识（辅助解析）
+        self._news_context = context.metadata.get("news_context", [])
+
         # 判断输入类型
         source_type = self._detect_source_type(raw_input)
         documents = []
@@ -396,10 +399,16 @@ class IngestionAgent(BaseAgent):
         prompt_text = text[:8000]
         user_prompt = METADATA_EXTRACTION_PROMPT.format(text=prompt_text)
 
+        # 注入新闻元数据作为先验知识
+        system_prompt = METADATA_EXTRACTION_SYSTEM
+        news_ctx = self._build_news_context()
+        if news_ctx:
+            system_prompt += f"\n\n以下是近期相关新闻动态，可辅助判断文档的主题、公司和时间背景：\n{news_ctx}"
+
         try:
             response = llm.chat(
                 messages=user_prompt,
-                system=METADATA_EXTRACTION_SYSTEM,
+                system=system_prompt,
                 max_tokens=512,
                 temperature=0.0,
             )
@@ -412,6 +421,23 @@ class IngestionAgent(BaseAgent):
             print(f"[IngestionAgent] LLM 元数据提取失败: {e}")
 
         return None
+
+    def _build_news_context(self) -> str:
+        """将新闻元数据格式化为 LLM 可理解的上下文文本"""
+        items = getattr(self, '_news_context', [])
+        if not items:
+            return ""
+        lines = []
+        for m in items[:10]:
+            parts = []
+            if m.get("title"):
+                parts.append(m["title"])
+            if m.get("keyword"):
+                parts.append(f"关键词: {m['keyword']}")
+            if m.get("publish_time"):
+                parts.append(f"时间: {m['publish_time']}")
+            lines.append("- " + " | ".join(parts))
+        return "\n".join(lines)
 
     def _detect_doc_type(self, text: str) -> str:
         """

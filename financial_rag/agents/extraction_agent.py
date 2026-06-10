@@ -72,6 +72,9 @@ class ExtractionAgent(BaseAgent):
     def process(self, context: AgentContext) -> AgentResult:
         documents = context.parsed_data or []
 
+        # 提取新闻元数据作为先验知识
+        self._news_context = context.metadata.get("news_context", [])
+
         # 1. 抽取财务指标
         metrics = self._extract_metrics(documents)
 
@@ -173,6 +176,11 @@ class ExtractionAgent(BaseAgent):
         user_prompt = FINANCIAL_METRICS_EXTRACTION_PROMPT.format(text=prompt_text)
         system_prompt = FINANCIAL_METRICS_EXTRACTION_SYSTEM
 
+        # 注入新闻元数据作为先验知识
+        news_ctx = self._build_news_context()
+        if news_ctx:
+            system_prompt += f"\n\n以下是近期相关财经动态，可辅助识别文档中涉及的公司和行业背景：\n{news_ctx}"
+
         # 追加 few-shot 示例到 system prompt
         few_shot = FEW_SHOT_EXAMPLES.get("metrics_extraction", "")
         if few_shot:
@@ -197,6 +205,23 @@ class ExtractionAgent(BaseAgent):
             print(f"[ExtractionAgent] LLM 指标解析失败: {e}")
 
         return {}
+
+    def _build_news_context(self) -> str:
+        """将新闻元数据格式化为 LLM 可理解的上下文文本"""
+        items = getattr(self, '_news_context', [])
+        if not items:
+            return ""
+        lines = []
+        for m in items[:10]:
+            parts = []
+            if m.get("title"):
+                parts.append(m["title"])
+            if m.get("keyword"):
+                parts.append(f"关键词: {m['keyword']}")
+            if m.get("publish_time"):
+                parts.append(f"时间: {m['publish_time']}")
+            lines.append("- " + " | ".join(parts))
+        return "\n".join(lines)
 
     def _normalize_metric_keys(self, raw_metrics: Dict) -> Dict[str, Any]:
         """将 LLM 返回的中文/混合键名标准化为英文键名"""
@@ -338,6 +363,11 @@ class ExtractionAgent(BaseAgent):
         prompt_text = text[:8000]
         user_prompt = ENTITY_EXTRACTION_PROMPT.format(text=prompt_text)
         system_prompt = ENTITY_EXTRACTION_SYSTEM
+
+        # 注入新闻元数据作为先验知识
+        news_ctx = self._build_news_context()
+        if news_ctx:
+            system_prompt += f"\n\n以下是近期相关财经动态，可辅助识别相关公司和事件：\n{news_ctx}"
 
         # 追加 few-shot 示例
         few_shot = FEW_SHOT_EXAMPLES.get("entity_extraction", "")

@@ -35,10 +35,10 @@ Data flows through a persistent KB pipeline, surviving server restarts:
 ```
 📥 Data Sources                    🏗️ Build                    🔍 Query
 ┌─────────────────┐              ┌─────────────┐             ┌─────────────┐
-│ File Import ──────┤ Agent       │ BM25 Index  │             │ Hybrid Query│
-│  (analyzed)       ─┤ Analysis   ─┤ Embedding   ─┤──→ Index  ─┤ RRF Fusion  │
-│ News Search ──────┤ → metadata  │ 1024-dim    │             │ Rerank      │
-│  (context only)   ─┤ only        └─────────────┘             │ Slot Fill   │
+│ News Search ──────┤ metadata    │ BM25 Index  │             │ Hybrid Query│
+│  (prior + ctx)    ─┤ → prior  ─┤ Embedding   ─┤──→ Index  ─┤ RRF Fusion  │
+│ File Import ──────┤ knowledge   │ 1024-dim    │             │ Rerank      │
+│  (analyzed)       ─┤ for agents  └─────────────┘             │ Slot Fill   │
 └─────────────────┘              (auto-rebuild)              └─────┬───────┘
  data/knowledge_base/                                                ↓
  ├─ kb_docs.json          ← analyzed KB documents       Answer + KB Sources
@@ -49,7 +49,7 @@ Data flows through a persistent KB pipeline, surviving server restarts:
 | File | Purpose |
 |------|--------|
 | `data/knowledge_base/kb_docs.json` | Analyzed KB documents — loaded on server start, saved after file import with agent analysis |
-| `data/knowledge_base/news_metadata.json` | News context labels — titles, keywords, timestamps for query-time context injection |
+| `data/knowledge_base/news_metadata.json` | News context labels — titles, keywords, timestamps. Used as **parsing prior** (injected into Agent LLM prompts during file analysis) and **query-time context** |
 | `data/knowledge_base/news_archive.jsonl` | Cumulative raw news archive — each search appends with full metadata |
 | `output/*.md` | Markdown reports (news summaries, analysis reports) |
 

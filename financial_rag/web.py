@@ -376,7 +376,10 @@ def api_ingest_files(req: IngestFilesRequest):
 
         for doc in raw_docs:
             try:
-                ctx = AgentContext(raw_input=doc["text"][:500])
+                ctx = AgentContext(
+                    raw_input=doc["text"][:500],
+                    metadata={"news_context": _state.get("meta_store", [])},
+                )
                 ctx.parsed_data = [doc]
                 ir = ingest_agent.run(ctx)
                 if ir.success and ir.context_updates:

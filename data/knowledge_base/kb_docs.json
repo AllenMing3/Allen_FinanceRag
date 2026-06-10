@@ -70,18 +70,6 @@
           "unit": "万吨",
           "yoy_growth": "无",
           "period": "2024年度"
-        },
-        "gross_margin_moutai_wine": {
-          "value": 91.86,
-          "unit": "%",
-          "yoy_growth": "无",
-          "period": "2024年度"
-        },
-        "gross_margin_series_wine": {
-          "value": 79.46,
-          "unit": "%",
-          "yoy_growth": "无",
-          "period": "2024年度"
         }
       },
       "entities": [
@@ -225,7 +213,7 @@
           "type": "event",
           "data": {
             "type": "财报发布",
-            "description": "贵州茅台发布2024年年度报告，营收与净利润均实现约15.4%增长，毛利率维持高位，现金流小幅承压",
+            "description": "贵州茅台披露2024年年度报告，营收与净利润均实现约15.4%增长，毛利率维持高位，现金流小幅承压",
             "impact": "正面"
           }
         },
@@ -274,7 +262,7 @@
         {
           "type": "topic",
           "data": {
-            "name": "高端消费"
+            "name": "现金流"
           }
         }
       ]
@@ -292,17 +280,17 @@
       "file": "./financial_rag/data\\financial_news.jsonl",
       "analyzed": true,
       "metrics": {
-        "net_income": {
-          "value": 150,
-          "unit": "亿元/年",
-          "yoy_growth": "无",
-          "period": "2025年度（预计）"
-        },
         "total_assets": {
           "value": 1.2,
           "unit": "万亿元",
           "yoy_growth": "无",
-          "period": "2025年6月降准释放流动性规模"
+          "period": "2025年6月"
+        },
+        "annual_cost_saving": {
+          "value": 150,
+          "unit": "亿元/年",
+          "yoy_growth": "无",
+          "period": "2025年度"
         }
       },
       "entities": [
@@ -355,6 +343,30 @@
           }
         },
         {
+          "type": "related_company",
+          "data": {
+            "name": "股份制银行"
+          }
+        },
+        {
+          "type": "related_company",
+          "data": {
+            "name": "城商行"
+          }
+        },
+        {
+          "type": "related_company",
+          "data": {
+            "name": "券商研究机构"
+          }
+        },
+        {
+          "type": "related_company",
+          "data": {
+            "name": "商业银行（泛指）"
+          }
+        },
+        {
           "type": "industry",
           "data": {
             "name": "银行业"
@@ -381,7 +393,7 @@
         {
           "type": "industry",
           "data": {
-            "name": "中小微企业"
+            "name": "中小微企业（作为经济主体，非行业但具板块属性）"
           }
         },
         {
@@ -393,25 +405,25 @@
         {
           "type": "topic",
           "data": {
-            "name": "货币政策"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
             "name": "流动性管理"
           }
         },
         {
           "type": "topic",
           "data": {
-            "name": "融资成本"
+            "name": "实体经济支持"
           }
         },
         {
           "type": "topic",
           "data": {
-            "name": "实体经济支持"
+            "name": "融资成本下降"
+          }
+        },
+        {
+          "type": "topic",
+          "data": {
+            "name": "货币政策稳健性"
           }
         }
       ]
@@ -497,7 +509,7 @@
           "type": "company",
           "data": {
             "name": "寒武纪",
-            "role": "母公司（出售方）",
+            "role": "母公司/出售方",
             "industry": "AI芯片/半导体"
           }
         },
@@ -513,7 +525,7 @@
           "type": "company",
           "data": {
             "name": "景嘉微",
-            "role": "关联公司（同业竞争者）",
+            "role": "关联公司",
             "industry": "GPU芯片/半导体"
           }
         },
@@ -521,7 +533,7 @@
           "type": "company",
           "data": {
             "name": "海光信息",
-            "role": "关联公司（同业竞争者）",
+            "role": "关联公司",
             "industry": "GPU芯片/半导体"
           }
         },
@@ -561,14 +573,14 @@
           "type": "event",
           "data": {
             "type": "并购",
-            "description": "字节跳动以45亿元人民币收购寒武纪旗下行歌科技80%股权，强化AI算力基础设施布局",
+            "description": "字节跳动以45亿元人民币收购寒武纪旗下AI芯片子公司行歌科技80%股权",
             "impact": "正面"
           }
         },
         {
           "type": "related_company",
           "data": {
-            "name": "寒武纪（688256.SH）"
+            "name": "寒武纪"
           }
         },
         {
