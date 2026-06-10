@@ -236,6 +236,10 @@ class AgentOrchestrator:
                     )
 
         entry.update({"end": time.time(), "ok": result.success})
+        if self.config.verbose:
+            status = "OK" if result.success else f"FAIL: {result.message}"
+            elapsed_ms = (entry["end"] - entry["start"]) * 1000
+            print(f"[Coordinate] {'✓' if result.success else '✗'} {agent.name} — {status} ({elapsed_ms:.0f}ms)")
         return result
 
     def _apply_updates(self, result: AgentResult):

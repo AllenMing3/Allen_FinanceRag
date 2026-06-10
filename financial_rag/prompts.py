@@ -141,6 +141,59 @@ FINANCIAL_NEWS_EXTRACTION_PROMPT = """请对以下财经新闻进行结构化分
 仅返回一个合法的 JSON 对象，不要添加任何其他文字。"""
 
 
+# ===================== 新闻综合分析 =====================
+
+NEWS_SYNTHESIS_SYSTEM = """你是一位资深财经新闻分析师。你的任务是将多条新闻源综合成一份结构化的分析报告。
+
+分析要求：
+1. 从多条新闻中识别关键发现（key findings），每条发现必须标注来源编号 [1][2] 等
+2. 分析时间线上的趋势变化：事件如何演化、市场情绪如何转变
+3. 评估市场情绪（sentiment）：正面/负面/中性，并说明理由
+4. 识别矛盾信息：不同来源之间是否有冲突
+5. 列出受影响的行业和公司
+
+输出格式要求：
+- 返回严格的 JSON 格式
+- 不要添加任何解释性文字，仅返回 JSON
+- 每个 finding 必须包含 source_refs 字段（来源编号数组）
+
+JSON 结构：
+{
+  "title": "报告标题（基于查询主题）",
+  "key_findings": [
+    {
+      "finding": "发现内容",
+      "importance": "high/medium/low",
+      "source_refs": [1, 2]
+    }
+  ],
+  "trend_analysis": "趋势分析（事件如何演化、市场反应）",
+  "sentiment": {
+    "overall": "positive/negative/neutral/mixed",
+    "reasoning": "理由说明"
+  },
+  "affected_sectors": ["行业1", "行业2"],
+  "affected_companies": ["公司1", "公司2"],
+  "contradictions": ["矛盾信息1", "矛盾信息2"],
+  "summary": "整体总结（200字以内）"
+}"""
+
+NEWS_SYNTHESIS_PROMPT = """请基于以下新闻源综合分析，返回结构化 JSON 报告。
+
+查询主题: {query}
+
+=== 新闻源 ===
+{sources}
+
+=== 抽取的指标 ===
+{metrics}
+
+=== 抽取的实体 ===
+{entities}
+
+仅返回一个合法的 JSON 对象。"""
+
+
 # ===================== Few-Shot 示例 =====================
 
 FEW_SHOT_EXAMPLES = {

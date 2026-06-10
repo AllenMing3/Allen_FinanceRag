@@ -80,9 +80,15 @@ class HybridRetriever:
         if precompute_embeddings and self._has_embedding:
             texts = [d.get("text", "") for d in documents]
             logger.info(f"预计算 {len(texts)} 个文档的 embedding...")
-            resp = self.embedder.embed_documents(texts)
-            self.doc_embeddings = resp
-            logger.info(f"Embedding 预计算完成，维度: {len(resp[0]) if resp else 0}")
+            # DashScope batch limit: 10 per request
+            all_embeddings = []
+            batch_size = 10
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i:i + batch_size]
+                resp = self.embedder.embed_documents(batch)
+                all_embeddings.extend(resp)
+            self.doc_embeddings = all_embeddings
+            logger.info(f"Embedding 预计算完成，维度: {len(all_embeddings[0]) if all_embeddings else 0}")
         else:
             self.doc_embeddings = None
 

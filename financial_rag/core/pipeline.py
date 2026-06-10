@@ -260,7 +260,7 @@ class PipelineScheduler:
 
             # 检索
             if hasattr(self.retriever, "search"):
-                items, _ = self.retriever.search(query, top_k=max_retrieve)
+                items = self.retriever.search(query, top_k=max_retrieve)
                 result.retrieved_items = items
                 if self.config.verbose:
                     print(f"  [检索] 命中 {len(items)} 条")

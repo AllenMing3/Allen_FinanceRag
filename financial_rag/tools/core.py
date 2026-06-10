@@ -312,7 +312,7 @@ def _make_search_tool():
         if not retriever:
             return {"error": "检索器未初始化", "results": []}
 
-        results, _ = retriever.search(query, top_k=top_k)
+        results = retriever.search(query, top_k=top_k)
         items = []
         for r in results:
             text = r.get("text", "")

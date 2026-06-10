@@ -64,7 +64,7 @@ Data flows through a persistent KB pipeline, surviving server restarts:
 ```
 Phase 1: Fetch    Function Calling auto-selects data tools (akshare / MCP)
 Phase 2: Index    Documents → BM25 + Vector → RRF fusion → gte-rerank → Top-K
-Phase 3: Process  Multi-Agent chain: Ingestion → Extraction → Analysis → Forecast → Report
+Phase 3: Process  Multi-Agent chain: Ingestion → Extraction → Report
 Phase 4: Output   Slot Filling with template formatting (4 templates available)
 Phase 5: Evolve   PipelineScoreCard scoring + HallucinationGuard verification
 ```
@@ -74,9 +74,7 @@ Phase 5: Evolve   PipelineScoreCard scoring + HallucinationGuard verification
 ```
 IngestionAgent   → Clean text + extract metadata (source/company/date/doc_type)
 ExtractionAgent  → Pull financial metrics (revenue/profit/EPS/ROE) + entities
-AnalysisAgent    → 5-dimension analysis (profitability/growth/health/efficiency/valuation)
-ForecastAgent    → 3-scenario projection (optimistic/baseline/pessimistic)
-ReportAgent      → 3-format output (summary/detailed/PPT outline)
+ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 ```
 
 ### Retrieval Modes
@@ -137,15 +135,13 @@ ReportAgent      → 3-format output (summary/detailed/PPT outline)
 | `scorer.py` | Full-pipeline scorecard (per-stage scoring + diagnosis) | `PipelineScoreCard`, `ScoreGrade` |
 | `protocol.py` | Agent messaging: AgentMessage + MessageBus + MessageAdapter | `AgentMessage`, `MessageBus` |
 
-### `financial_rag/agents/` — 5 Specialized Agents
+### `financial_rag/agents/` — 3 Specialized Agents
 
 | File | Role |
 |------|------|
 | `ingestion_agent.py` | Data ingestion: load files/text → clean + auto-extract metadata |
 | `extraction_agent.py` | Feature extraction: financial metrics + entities + search queries |
-| `analysis_agent.py` | Multi-dimensional analysis: profitability/growth/health/efficiency/valuation |
-| `forecast_agent.py` | Trend forecasting: 3 scenarios (optimistic/baseline/pessimistic) |
-| `report_agent.py` | Report generation: summary / detailed / PPT outline |
+| `report_agent.py` | LLM-driven news synthesis: key findings + trend analysis + sentiment + source citations |
 
 ### `financial_rag/llm/` — LLM Layer
 

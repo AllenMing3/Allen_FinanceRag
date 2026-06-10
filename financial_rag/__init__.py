@@ -12,12 +12,10 @@ Financial RAG — 财报/经济新闻智能分析系统
   8. core/scorer.py      — 全链路打分卡
   9. core/protocol.py    — Agent 间消息总线 (MessageBus)
 
-五个专业化 Agent:
-  - IngestionAgent   财报/新闻数据摄取
-  - ExtractionAgent  关键财务指标抽取
-  - AnalysisAgent    多维度财务分析
-  - ForecastAgent    趋势预测与情景分析
-  - ReportAgent      多格式报告生成
+三个专业化 Agent:
+  - IngestionAgent   财报/新闻数据摄取 + 元数据提取
+  - ExtractionAgent  关键财务指标抽取 + 实体识别
+  - ReportAgent      LLM 驱动的新闻综合分析 + 引用报告
 
 MCP 集成:
   - mcp_client/  连接第三方 MCP 服务器 (如 china-stock-mcp) 获取新闻/行情数据
@@ -34,7 +32,7 @@ from financial_rag.core import (
 )
 from financial_rag.agents import (
     IngestionAgent, ExtractionAgent,
-    AnalysisAgent, ForecastAgent, ReportAgent,
+    ReportAgent,
 )
 from financial_rag.retrievers import HybridRetriever, jieba_tokenizer
 from financial_rag.templates import (
@@ -69,7 +67,7 @@ __all__ = [
     "PipelineScoreCard", "StageScore", "ScoreGrade", "create_scorecard",
     # Agents
     "IngestionAgent", "ExtractionAgent",
-    "AnalysisAgent", "ForecastAgent", "ReportAgent",
+    "ReportAgent",
     # Retrievers
     "HybridRetriever", "jieba_tokenizer",
     # Templates & Slot-Filling

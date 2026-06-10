@@ -327,7 +327,7 @@ python -m financial_rag.main score "测试查询" --local
 
 ## 10. Multi-Agent 分析 — 深度财报分析
 
-把一份财报文件交给 5 个 Agent 依次处理。
+把一份财报文件或新闻数据交给 3 个 Agent 依次处理。
 
 ```powershell
 # 串行分析（默认）
@@ -340,14 +340,12 @@ python -m financial_rag.main analyze ./report.pdf --parallel
 python -m financial_rag.main analyze ./report.pdf --output ./output/分析报告.md
 ```
 
-**5 个 Agent 依次执行：**
+**3 个 Agent 依次执行：**
 
 ```
 IngestionAgent   读取文件 → 清洗文本 → 提取元数据（公司/日期/类型）
 ExtractionAgent  抽取财务指标（营收/净利/EPS/ROE...）+ 实体
-AnalysisAgent    5 维度分析（盈利/成长/健康/效率/估值）
-ForecastAgent    3 种情景预测（乐观/基准/悲观）
-ReportAgent      生成报告（摘要/详细/PPT大纲）
+ReportAgent      LLM 新闻综合分析：关键发现 + 趋势分析 + 市场情绪 + 引用来源
 ```
 
 ---

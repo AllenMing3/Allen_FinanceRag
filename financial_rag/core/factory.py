@@ -14,11 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 def create_orchestrator() -> AgentOrchestrator:
-    """创建完整的 Multi-Agent 协调器"""
+    """创建 3-Agent 链: Ingestion → Extraction → Report"""
     from financial_rag.agents.ingestion_agent import IngestionAgent
     from financial_rag.agents.extraction_agent import ExtractionAgent
-    from financial_rag.agents.analysis_agent import AnalysisAgent
-    from financial_rag.agents.forecast_agent import ForecastAgent
     from financial_rag.agents.report_agent import ReportAgent
 
     orch = AgentOrchestrator(
@@ -31,8 +29,6 @@ def create_orchestrator() -> AgentOrchestrator:
     orch.register_all(
         IngestionAgent(),
         ExtractionAgent(),
-        AnalysisAgent(),
-        ForecastAgent(),
         ReportAgent(),
     )
     return orch

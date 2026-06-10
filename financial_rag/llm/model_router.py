@@ -93,8 +93,6 @@ TASK_COMPLEXITY_MAP: Dict[str, TaskComplexity] = {
 _AGENT_TO_TASK: Dict[str, str] = {
     "IngestionAgent": "ingestion",
     "ExtractionAgent": "extraction",
-    "AnalysisAgent": "analysis",
-    "ForecastAgent": "forecast",
     "ReportAgent": "report",
 }
 
@@ -206,13 +204,13 @@ class ModelRouter:
 
         router = ModelRouter(api_key="xxx")
         # 自动选择
-        llm = router.get_llm_for_agent("AnalysisAgent")
+        llm = router.get_llm_for_agent("ReportAgent")
         response = llm.chat("分析财报...")
 
         # 手动指定
-        router.override("AnalysisAgent", "qwen-max")
+        router.override("ReportAgent", "qwen-max")
         # 移除覆盖
-        router.remove_override("AnalysisAgent")
+        router.remove_override("ReportAgent")
 
         # 查看统计
         print(router.stats.summary())
@@ -296,7 +294,7 @@ class ModelRouter:
         """为特定 Agent 获取 LLM — 通过 agent 名推断复杂度
 
         Args:
-            agent_name: Agent 名称 (如 "AnalysisAgent")
+            agent_name: Agent 名称 (如 "ReportAgent")
 
         Returns:
             DashScopeLLM 实例
