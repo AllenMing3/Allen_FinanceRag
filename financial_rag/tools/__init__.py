@@ -6,8 +6,8 @@ LLM 通过 Function Calling 可直接调起这些能力。
 
 子模块:
 - core:          FunctionDef, FunctionRegistry, ToolExecutor, ToolCallSession 等基础设施
-- news_tools:    新闻搜索、拉取、保存为 Markdown 报告 (fetch_news_report)
-- kline_tools:   ETF K 线数据获取、统计、保存为分析报告 (fetch_etf_kline_report)
+- news_tools:    新闻搜索、拉取、保存为 Markdown 报告 (fetch_news_report) [feedparser RSS]
+- kline_tools:   股票/ETF K 线数据获取、统计、保存为分析报告 (fetch_etf_kline_report) [Tushare]
 """
 
 # 核心基础设施 — 全部从 core.py 中转导出
@@ -43,7 +43,6 @@ from financial_rag.tools.kline_tools import (
     fetch_etf_kline_report,
     KLINE_REPORT_TOOL,
 )
-
 __all__ = [
     # core
     "FunctionDef",

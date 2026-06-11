@@ -35,15 +35,17 @@ Data flows through a persistent KB pipeline, surviving server restarts:
 ```
 📥 Data Sources                    🏗️ Build                    🔍 Query
 ┌─────────────────┐              ┌─────────────┐             ┌─────────────┐
-│ News Search ──────┤ metadata    │ BM25 Index  │             │ Hybrid Query│
+│ News RSS ─────────┤ metadata    │ BM25 Index  │             │ Hybrid Query│
 │  (prior + ctx)    ─┤ → prior  ─┤ Embedding   ─┤──→ Index  ─┤ RRF Fusion  │
 │ File Import ──────┤ knowledge   │ 1024-dim    │             │ Rerank      │
 │  (analyzed)       ─┤ for agents  └─────────────┘             │ Slot Fill   │
+│ KLine (Tushare) ───┤                                         │ KLine Agent │
+│  (on-demand)        ┤                                         │ (on-demand) │
 └─────────────────┘              (auto-rebuild)              └─────┬───────┘
  data/knowledge_base/                                                ↓
  ├─ kb_docs.json          ← analyzed KB documents       Answer + KB Sources
  ├─ news_metadata.json    ← news context labels           + News Context
- └─ news_archive.jsonl    ← raw news archive (append)
+ └─ news_archive.jsonl    ← raw news archive (append)       + KLine Analysis
 ```
 
 | File | Purpose |
@@ -51,7 +53,7 @@ Data flows through a persistent KB pipeline, surviving server restarts:
 | `data/knowledge_base/kb_docs.json` | Analyzed KB documents — loaded on server start, saved after file import with agent analysis |
 | `data/knowledge_base/news_metadata.json` | News context labels — titles, keywords, timestamps. Used as **parsing prior** (injected into Agent LLM prompts during file analysis) and **query-time context** |
 | `data/knowledge_base/news_archive.jsonl` | Cumulative raw news archive — each search appends with full metadata |
-| `output/*.md` | Markdown reports (news summaries, analysis reports) |
+| `output/*.md` | Markdown reports (news summaries, K-line analysis reports) |
 
 | Engine | File | Responsibility |
 |--------|------|----------------|
@@ -64,9 +66,9 @@ Data flows through a persistent KB pipeline, surviving server restarts:
 ## 5-Phase Pipeline
 
 ```
-Phase 1: Fetch    Function Calling auto-selects data tools (akshare / MCP)
+Phase 1: Fetch    Function Calling auto-selects data tools (RSS news / Tushare K-line)
 Phase 2: Index    Documents → BM25 + Vector → RRF fusion → gte-rerank → Top-K
-Phase 3: Process  Multi-Agent chain: Ingestion → Extraction → Report
+Phase 3: Process  Multi-Agent chain: Ingestion → Extraction → Report (+ KLineAgent for K-line)
 Phase 4: Output   Slot Filling with template formatting (4 templates available)
 Phase 5: Evolve   PipelineScoreCard scoring + HallucinationGuard verification
 ```
@@ -106,7 +108,7 @@ ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 |------|------|
 | `main.py` | Thin wrapper — delegates to `financial_rag.main.main()` |
 | `config.py` → `financial_rag/config.py` | All settings: LLM, RAG, Coordinator, Pipeline, Reflection, MCP |
-| `.env.example` | Env var template (`DASHSCOPE_API_KEY`) |
+| `.env.example` | Env var template (`DASHSCOPE_API_KEY`, `TUSHARE_TOKEN`) |
 | `requirements.txt` | pip dependencies (incl. fastapi, uvicorn) |
 
 ### `financial_rag/` — Core Package
@@ -119,8 +121,8 @@ ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 | `prompts.py` | LLM prompt templates + few-shot examples | — |
 | `templates.py` | 4 slot templates: QUICK_QA, FINANCIAL_REPORT, NEWS_BRIEF, DEEP_ANALYSIS | `SlottedTemplate`, `ALL_TEMPLATES` |
 | `slot_filler.py` | Parallel slot filling engine with TTFT measurement | `SlotFiller`, `create_slot_filler` |
-| `news_fetcher.py` | Real-time news via akshare (stock/financial/announcements) | `fetch_stock_news`, `fetch_financial_news` |
-| `etf_fetcher.py` | ETF market data via akshare | `search_etf`, `fetch_etf_kline` |
+| `rss_fetcher.py` | Financial news via feedparser RSS (CLS/Sina/EastMoney) | `search_news`, `fetch_all_news` |
+| `tushare_client.py` | K-line & financial indicators via Tushare Pro | `fetch_stock_kline`, `compute_technical_indicators` |
 | `web.py` | FastAPI Web UI server — KB pipeline endpoints + static file serving | FastAPI app, `/api/*` endpoints |
 
 ### `financial_rag/core/` — Architecture Layer
@@ -137,13 +139,15 @@ ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 | `scorer.py` | Full-pipeline scorecard (per-stage scoring + diagnosis) | `PipelineScoreCard`, `ScoreGrade` |
 | `protocol.py` | Agent messaging: AgentMessage + MessageBus + MessageAdapter | `AgentMessage`, `MessageBus` |
 
-### `financial_rag/agents/` — 3 Specialized Agents
+### `financial_rag/agents/` — 4 Agents + Shared Utils
 
 | File | Role |
 |------|------|
 | `ingestion_agent.py` | Data ingestion: load files/text → clean + auto-extract metadata |
 | `extraction_agent.py` | Feature extraction: financial metrics + entities + search queries |
 | `report_agent.py` | LLM-driven news synthesis: key findings + trend analysis + sentiment + source citations |
+| `kline_agent.py` | K-line analysis: resolve stock/ETF code → fetch data → compute indicators → LLM interpretation |
+| `utils.py` | Shared utilities: `build_news_context()` for formatting news metadata into LLM prompts |
 
 ### `financial_rag/llm/` — LLM Layer
 
@@ -158,7 +162,7 @@ ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 |------|------|
 | `core.py` | Infrastructure: `FunctionDef`, `FunctionRegistry`, `ToolExecutor`, `ToolCallSession` |
 | `news_tools.py` | Registered tool: fetch news → save as Markdown report |
-| `kline_tools.py` | Registered tool: fetch ETF K-line → save as analysis report |
+| `kline_tools.py` | Registered tool: fetch stock/ETF K-line → save as analysis report |
 
 ### `financial_rag/mcp_client/` — MCP Integration
 
@@ -224,8 +228,9 @@ python -m financial_rag.main slot "茅台财报" -t financial_report
 # News fetching
 python -m financial_rag.main news "AI新闻" -s               # + LLM summary
 
-# ETF K-line
+# ETF/stock K-line
 python -m financial_rag.main kline "人工智能ETF" --days 30 -s
+python -m financial_rag.main kline "茅台" --days 60 -s
 
 # Retrieval scoring
 python -m financial_rag.main score "茅台营收" -k 5
@@ -257,6 +262,7 @@ Env vars (`.env`):
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DASHSCOPE_API_KEY` | No | Alibaba DashScope API key. Without it, falls back to local-only mode. |
+| `TUSHARE_TOKEN` | No | Tushare Pro API token. Required for K-line data. Needs 120+ points for `daily` endpoint. |
 
 ---
 
@@ -303,7 +309,8 @@ router.override("analysis_agent", "qwen-max")
 | Problem | Where to look |
 |---------|---------------|
 | Agent not working | `core/orchestrator.py` `_apply_updates()` — check context passing. Set `config.coordinator.verbose = True`. |
-| News fetch fails | Test: `from financial_rag.news_fetcher import fetch_stock_news; fetch_stock_news("600519", max_news=3)`. akshare uses East Money API. |
+| K-line fetch fails | Check `.env` has `TUSHARE_TOKEN`. Token needs 120+ points on tushare.pro. Test: `from financial_rag.tushare_client import fetch_stock_kline`. |
+| News fetch fails | Test: `from financial_rag.rss_fetcher import fetch_all_news; fetch_all_news()`. Uses feedparser + RSSHub. |
 | Retrieval inaccurate | Run `python -m financial_rag.main score "query"`. Adjust `config.pipeline` weights. |
 | LLM hallucination | Check `core/reflector.py` HallucinationGuard 6-layer scores. Lower `temperature` to 0. Raise `min_faithfulness`. |
 | Model cost too high | Check `llm/model_router.py` BudgetConfig. Override non-critical agents to `qwen-turbo`. |
@@ -319,10 +326,10 @@ python -m venv myenv
 .\myenv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.example .env
-# Edit .env, fill in DASHSCOPE_API_KEY
+# Edit .env, fill in DASHSCOPE_API_KEY and TUSHARE_TOKEN
 
 # Verify
-python -c "from financial_rag.news_fetcher import HAS_AKSHARE; print('akshare:', HAS_AKSHARE)"
+python -c "import tushare, feedparser; print('tushare:', tushare.__version__, 'feedparser:', feedparser.__version__)"
 python -c "from financial_rag.llm import get_llm; print('llm ok')"
 ```
 
@@ -330,7 +337,7 @@ python -c "from financial_rag.llm import get_llm; print('llm ok')"
 |-------|-----|
 | `UnicodeDecodeError: 'gbk'` | `set PYTHONUTF8=1` or use PowerShell |
 | `Activate.ps1` blocked | `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` |
-| `lxml` build fails | `pip install akshare --only-binary :all:` |
+| `lxml` build fails | `pip install lxml --only-binary :all:` |
 | Chinese output garbled | Use PowerShell instead of CMD |
 
 ---
@@ -373,7 +380,7 @@ The UI guides you through the KB pipeline:
 | `/api/kb/clear` | POST | Clear KB from memory and disk |
 | `/api/kb-query` | POST | RAG query against built KB |
 | `/api/news` | POST | News search (saves to archive + auto-ingests) |
-| `/api/kline` | POST | ETF K-line analysis |
+| `/api/kline` | POST | Stock/ETF K-line analysis |
 | `/api/slot` | POST | Slot filling test |
 | `/api/pipeline` | POST | Full 5-phase pipeline |
 

@@ -192,9 +192,10 @@ class NewsRequest(BaseModel):
 
 class KlineRequest(BaseModel):
     query: str
-    days: int = 30
-    etf_code: str = ""
-    summarize: bool = True
+    ts_code: str = ""
+    name: str = ""
+    days: int = 60
+    period: str = "daily"
 
 
 class ToolCallRequest(BaseModel):
@@ -813,33 +814,36 @@ def api_news(req: NewsRequest):
 
 @app.post("/api/kline")
 def api_kline(req: KlineRequest):
+    """K线技术分析 — 按需查询，不进知识库"""
     _ensure_init()
-    from financial_rag.tools.kline_tools import run_kline_pipeline
+    from financial_rag.core.base import AgentContext
+    from financial_rag.agents.kline_agent import KLineAgent
 
-    data = run_kline_pipeline(
-        llm=_state["llm"] if _state["has_key"] else None,
-        query=req.query,
-        days=req.days,
-        etf_code=req.etf_code,
-        summarize=req.summarize,
+    agent = KLineAgent()
+    ctx = AgentContext(
+        raw_input=req.query,
+        metadata={
+            "ts_code": req.ts_code,
+            "name": req.name,
+            "days": req.days,
+            "period": req.period,
+        }
     )
+    result = agent.run(ctx)
 
-    if "error" in data:
-        return {"error": data["error"], "keyword": req.query}
+    if not result.success:
+        return {"success": False, "error": result.message, "query": req.query}
 
+    data = result.data or {}
     return {
-        "etf_code": data.get("etf_code", ""),
-        "etf_name": data.get("etf_name", ""),
-        "latest_price": data.get("latest_price"),
-        "change_pct": data.get("change_pct"),
-        "lookback_days": data.get("lookback_days"),
-        "data_points": data.get("data_points"),
+        "success": True,
+        "ts_code": data.get("ts_code", ""),
+        "name": data.get("name", ""),
+        "days": data.get("days", req.days),
+        "data_points": data.get("data_points", 0),
         "stats": data.get("stats", {}),
-        "kline_tail": data.get("kline_tail", []),
-        "alternatives": data.get("alternatives", [])[:5],
-        "has_analysis": data.get("has_analysis", False),
+        "indicators": data.get("indicators", {}),
         "analysis": data.get("analysis", ""),
-        "filepath": data.get("filepath", ""),
     }
 
 

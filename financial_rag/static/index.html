@@ -286,16 +286,22 @@ th { color: var(--text2); font-weight: 500; }
 
       <!-- K-line tool -->
       <div class="source-card">
-        <h3><span class="icon">📈</span> ETF K线分析</h3>
+        <h3><span class="icon">📈</span> K线技术分析</h3>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 8px">数据源: Tushare · 支持股票/ETF</p>
         <div class="form-row">
-          <input class="input" id="tool-kline-q" placeholder="ETF主题" />
+          <input class="input" id="tool-kline-q" placeholder="股票名称或代码 (如: 茅台、600519)" />
           <select class="input" id="tool-kline-days" style="flex:none;width:80px">
             <option value="30">30天</option>
-            <option value="60">60天</option>
+            <option value="60" selected>60天</option>
+            <option value="120">120天</option>
+          </select>
+          <select class="input" id="tool-kline-period" style="flex:none;width:80px">
+            <option value="daily">日K</option>
+            <option value="weekly">周K</option>
           </select>
           <button class="btn btn-primary btn-sm" onclick="runKlineTool()">分析</button>
         </div>
-        <div id="tool-kline-result" style="max-height:400px;overflow-y:auto"></div>
+        <div id="tool-kline-result" style="max-height:500px;overflow-y:auto"></div>
       </div>
 
       <!-- Slot fill -->
@@ -714,18 +720,37 @@ async function runNewsTool() {
 async function runKlineTool() {
   const q = document.getElementById('tool-kline-q').value.trim();
   if (!q) return;
+  const resultDiv = document.getElementById('tool-kline-result');
+  resultDiv.innerHTML = '<span style="color:var(--muted)">正在分析...</span>';
   try {
-    const d = await api('/api/kline', { query: q, days: parseInt(document.getElementById('tool-kline-days').value), summarize: true });
-    if (d.error) { document.getElementById('tool-kline-result').innerHTML = `<span class="tag tag-fail">${escHtml(d.error)}</span>`; return; }
+    const d = await api('/api/kline', {
+      query: q,
+      days: parseInt(document.getElementById('tool-kline-days').value),
+      period: document.getElementById('tool-kline-period').value,
+    });
+    if (d.error) { resultDiv.innerHTML = `<span class="tag tag-fail">${escHtml(d.error)}</span>`; return; }
     const s = d.stats || {};
+    const ind = d.indicators || {};
     let h = `<div class="stats">
-      <div class="stat"><strong>${escHtml(d.etf_name)}</strong> (${d.etf_code})</div>
-      <div class="stat">涨跌 <strong style="color:${(d.change_pct||0)>=0?'var(--ok)':'var(--danger)'}">${d.change_pct||'-'}%</strong></div>
+      <div class="stat"><strong>${escHtml(d.name)}</strong> <small>(${escHtml(d.ts_code)})</small></div>
+      <div class="stat">收盘价 <strong>${s.latest_close||'-'}</strong></div>
+      <div class="stat">涨跌幅 <strong style="color:${(s.period_change_pct||0)>=0?'var(--ok)':'var(--danger)'}">${s.period_change_pct||'-'}%</strong></div>
+      <div class="stat">上涨/下跌 <strong>${s.up_days||'-'}/${s.down_days||'-'}</strong></div>
     </div>`;
-    if (d.analysis) h += `<div style="margin-top:8px;font-size:13px;line-height:1.6">${escHtml(d.analysis)}</div>`;
-    document.getElementById('tool-kline-result').innerHTML = h;
+    // 技术指标
+    if (ind.macd || ind.rsi || ind.bollinger || ind.kdj) {
+      h += '<div style="margin-top:8px;font-size:12px;color:var(--muted)">技术指标</div><div class="stats">';
+      if (ind.macd) h += `<div class="stat">MACD <strong>${ind.macd.signal}</strong></div>`;
+      if (ind.rsi) h += `<div class="stat">RSI <strong style="color:${ind.rsi.signal==='超买'?'var(--danger)':ind.rsi.signal==='超卖'?'var(--ok)':'inherit'}">${ind.rsi.value}</strong> <small>${ind.rsi.signal}</small></div>`;
+      if (ind.kdj) h += `<div class="stat">KDJ <strong>${ind.kdj.signal}</strong></div>`;
+      if (ind.bollinger) h += `<div class="stat">布林 <small>${ind.bollinger.position}</small></div>`;
+      h += '</div>';
+    }
+    // LLM 分析
+    if (d.analysis) h += `<div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:6px;font-size:13px;line-height:1.7;white-space:pre-wrap">${escHtml(d.analysis)}</div>`;
+    resultDiv.innerHTML = h;
   } catch(e) {
-    document.getElementById('tool-kline-result').innerHTML = `<span class="tag tag-fail">${escHtml(e.message)}</span>`;
+    resultDiv.innerHTML = `<span class="tag tag-fail">${escHtml(e.message)}</span>`;
   }
 }
 

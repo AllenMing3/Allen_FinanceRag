@@ -27,11 +27,13 @@ cd d:\llamaindex
 **验证环境：**
 
 ```powershell
-python -c "from financial_rag.news_fetcher import HAS_AKSHARE; print('akshare:', HAS_AKSHARE)"
+python -c "import tushare, feedparser; print('tushare:', tushare.__version__, 'feedparser:', feedparser.__version__)"
 python -c "from financial_rag.llm import get_llm; print('llm ok')"
 ```
 
-**API Key：** 编辑 `.env` 文件，填入 `DASHSCOPE_API_KEY=sk-你的密钥`。没有 Key 也能跑，降级到纯本地模式。
+**API Key：** 编辑 `.env` 文件，填入：
+- `DASHSCOPE_API_KEY=sk-你的密钥` — LLM/Embedding/Rerank。没有 Key 也能跑，降级到纯本地模式。
+- `TUSHARE_TOKEN=你的token` — K线数据接口。在 [tushare.pro](https://tushare.pro) 注册获取，需要 120+ 积分才能调用日线接口。
 
 ---
 
@@ -46,12 +48,13 @@ python -c "from financial_rag.llm import get_llm; print('llm ok')"
   → 真正的知识原料
   → 经过 Agent 分析（抽取指标、实体）→ 进入知识库
 
-📰 新闻搜索（akshare 财经快讯）
+📰 新闻搜索（RSS 聚合：财联社/新浪财经/东方财富）
   → 只是元数据（时间、关键词、来源）
-  → 没有营养，不进知识库，只提供上下文标签
+  → 不进知识库，但提供：解析先验 + 查询上下文
 
-📈 K 线数据（ETF 行情）
-  → 后期加入知识库（暂未实现）
+📈 K 线数据（Tushare Pro：股票/ETF 行情）
+  → 按需查询，不进知识库
+  → KLineAgent 分析技术指标 + LLM 生成解读
 ```
 
 **简单规则：**
@@ -68,7 +71,7 @@ python -c "from financial_rag.llm import get_llm; print('llm ok')"
 ```
 用户搜索 "AI人工智能"
        ↓
-akshare 从东方财富拉取快讯
+RSS 聚合: 财联社 + 新浪财经 + 东方财富
        ↓
 存入 news_metadata.json  ← 元数据（标题、关键词、时间、来源）
 存入 news_archive.jsonl  ← 原始数据存档（追加模式）
@@ -162,12 +165,36 @@ BM25 检索   向量检索（语义匹配）
 1. **知识库来源** — 检索到的分析文档（带分数、来源、抽取的指标）
 2. **相关新闻动态** — 匹配的新闻元数据（标题、时间、来源）
 
+**第 5 步：K线技术分析（可选）**
+
+在「工具」页面，输入股票名称或代码，实时获取 K 线数据并生成技术分析：
+
+```
+用户输入 "茅台" 或 "600519"
+       ↓
+KLineAgent 识别股票代码 (600519.SH)
+       ↓
+Tushare Pro 拉取日K/周K 数据
+       ↓
+计算技术指标: MA / MACD / RSI / 布林带 / KDJ
+       ↓
+LLM 生成自然语言技术分析
+       ↓
+返回: 统计数据 + 指标信号 + AI 分析解读
+```
+
+特点：
+- 按需查询，不存入知识库
+- 支持股票 + ETF（自动识别，如 600519.SH / 510050.SH / 159995.SZ）
+- 可选择日 K 或周 K，支持 30/60/120 天回溯
+- 输出: 统计数据 + MA/MACD/RSI/布林带/KDJ 信号 + AI 分析解读
+
 ### 2.3 什么被向量化？什么只是 metadata？
 
 | 数据类型 | 被向量化的内容 | 只作为 metadata（不向量化） |
 |---------|--------------|------------------------|
 | 导入文件 | .txt 全文 / .jsonl 的 text 字段 | source, file path, metrics, entities |
-| K 线数据（后期） | 行情分析文本 | ETF code, 日期范围, 涨跌幅 |
+| K 线查询 | **不向量化** | 按需查询，技术指标 + LLM 分析结果直接返回 |
 | Pipeline 获取 | `title\ncontent` 拼成的文本 | source, publish_time, url |
 | 新闻搜索 | **不向量化** | 仅存为元数据（keyword, title, time） |
 
@@ -223,6 +250,12 @@ python -m financial_rag.main web
 - 相关新闻动态（元数据匹配的实时新闻）
 - LLM 生成的回答（标注引用来源）
 
+**第 5 步：K线分析（可选）**
+
+切到「工具」，输入股票名称或代码（如 "茅台"、"600519"、"人工智能ETF"）。
+系统自动识别股票/ETF，实时拉取行情数据，计算技术指标，LLM 生成技术分析解读。
+数据源: Tushare Pro（需在 `.env` 中配置 `TUSHARE_TOKEN`，积分 ≥ 120）。
+
 ---
 
 ## 4. Pipeline — 一句话出分析报告
@@ -264,11 +297,14 @@ python -m financial_rag.main news "AI人工智能" -s
 - 新闻只作为元数据，不进知识库
 - 加 `-s` 生成 AI 摘要
 
-### ETF K 线
+### ETF / 股票 K 线
 
 ```powershell
 python -m financial_rag.main kline "人工智能ETF" --days 30 -s
+python -m financial_rag.main kline "茅台" --days 60 -s
 ```
+
+支持股票和 ETF，自动识别代码。数据源: Tushare Pro（需 `.env` 中配置 `TUSHARE_TOKEN`）。
 
 ### Function Calling
 
@@ -313,7 +349,7 @@ python -m financial_rag.main query -i
 | `web` | Web UI | `python -m financial_rag.main web` |
 | `pipeline` | 端到端分析 | `python -m financial_rag.main pipeline "查询" -v` |
 | `news` | 拉新闻 | `python -m financial_rag.main news "AI" -s` |
-| `kline` | ETF K线 | `python -m financial_rag.main kline "ETF" --days 30` |
+| `kline` | 股票/ETF K线 | `python -m financial_rag.main kline "茅台" --days 30` |
 | `toolcall` | Function Calling | `python -m financial_rag.main toolcall "查询" -v` |
 | `slot` | 槽位填充 | `python -m financial_rag.main slot "查询" -t financial_report` |
 | `score` | 检索打分 | `python -m financial_rag.main score "查询" -k 5` |
@@ -330,11 +366,11 @@ python -m financial_rag.main query -i
 
 `gte-rerank` 需要在[阿里云百炼控制台](https://bailian.console.aliyun.com/)手动开通。不开通不影响使用，自动降级到 RRF 融合排序。
 
-### "akshare 返回 0 条新闻"
+### "新闻获取不到数据"
 
 - 关键词太偏 → 换个热门主题试试
-- 关键词太长 → akshare 只匹配短关键词，系统会自动取第一个关键词搜索
-- 网络问题 → akshare 走东方财富接口
+- RSSHub 公共实例不稳定 → 可自建 RSSHub 实例，修改 `rss_fetcher.py` 中的 `RSSHUB_BASE`
+- 网络问题 → 确认能访问 `rsshub.app`
 
 ### "中文乱码"
 

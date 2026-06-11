@@ -2,9 +2,11 @@
 K线工具 — 可注册到 FunctionRegistry 的 ETF/股票 K 线分析能力
 
 提供:
-- fetch_etf_kline_report: 搜索 ETF、拉取 K 线、计算统计、保存为 Markdown 分析报告（纯数据操作）
+- fetch_kline_report: 搜索股票/ETF、拉取 K 线、计算统计、保存为 Markdown 分析报告（纯数据操作）
 - run_kline_pipeline: 端到端 K 线流水线（LLM 提取参数 + 拉取 + AI 技术分析 + 拼接 Markdown）
   供 CLI 命令直接调起，coordinator 只需路由。
+
+数据源: Tushare Pro (https://tushare.pro)
 """
 
 import os
@@ -26,20 +28,22 @@ def fetch_etf_kline_report(
     output_dir: str = "",
     filename: str = "",
 ) -> Dict:
-    """获取 ETF K 线数据并生成统计分析报告。
+    """获取 ETF/股票 K 线数据并生成统计分析报告。
 
-    按关键词搜索相关 ETF，拉取历史 K 线数据，
+    按关键词搜索相关 ETF/股票，拉取历史 K 线数据，
     计算基础技术统计指标，保存为 Markdown 分析文件。
 
     Args:
-        keyword: ETF 主题关键词，如 '人工智能'、'芯片'、'半导体'、'新能源'
+        keyword: 主题关键词，如 '人工智能'、'芯片'、'半导体'、'新能源'、'茅台'
         days: 回溯交易天数，默认 30
-        etf_code: 指定 ETF 代码（如 'sz159819'），空则自动搜索第一条
+        etf_code: 指定代码（如 '510300.SH'），空则自动搜索第一条
         output_dir: 输出目录，默认系统 output 目录
         filename: 自定义文件名（不含扩展名），默认自动生成
     """
     from financial_rag.config import config
-    from financial_rag.etf_fetcher import search_etf, fetch_etf_kline, compute_kline_stats
+    from financial_rag.tushare_client import (
+        search_etf, search_stock, fetch_etf_kline, fetch_stock_kline, compute_kline_stats
+    )
 
     # 主题词映射
     topic_map = {
@@ -57,25 +61,35 @@ def fetch_etf_kline_report(
     out_dir = output_dir or config.output_dir
     os.makedirs(out_dir, exist_ok=True)
 
-    # 搜索 ETF
+    # 搜索 ETF 或股票
     results = search_etf(keyword, limit=10)
+    is_etf = True
     if not results:
-        return {"error": f"未找到与 '{keyword}' 相关的 ETF", "keyword": keyword, "results": []}
+        results = search_stock(keyword, limit=10)
+        is_etf = False
+    if not results:
+        return {"error": f"未找到与 '{keyword}' 相关的 ETF/股票", "keyword": keyword, "results": []}
 
-    # 选定目标 ETF
+    # 选定目标
     target = results[0]
     if etf_code:
-        matched = [e for e in results if e["code"] == etf_code or e["code"].endswith(etf_code)]
+        matched = [e for e in results if e.get("ts_code", "") == etf_code or etf_code in e.get("ts_code", "")]
         if matched:
             target = matched[0]
 
+    ts_code = target.get("ts_code", "")
+    name = target.get("name", keyword)
+
     # 获取 K 线
-    df = fetch_etf_kline(target["code"], days=days)
+    if is_etf:
+        df = fetch_etf_kline(ts_code, days=days)
+    else:
+        df = fetch_stock_kline(ts_code, days=days)
     if df.empty:
         return {
-            "error": f"未获取到 {target['code']} 的 K 线数据",
-            "etf_code": target["code"],
-            "etf_name": target["name"],
+            "error": f"未获取到 {ts_code} 的 K 线数据",
+            "ts_code": ts_code,
+            "name": name,
         }
 
     # 计算统计
@@ -83,7 +97,7 @@ def fetch_etf_kline_report(
 
     # 生成 Markdown
     today = datetime.now().strftime("%Y-%m-%d")
-    safe_name = target["name"].replace("/", "_").replace("\\", "_")
+    safe_name = name.replace("/", "_").replace("\\", "_")
     fname = filename or f"{today}_{safe_name}_K线分析.md"
     filepath = os.path.join(out_dir, fname)
 
@@ -111,11 +125,11 @@ def fetch_etf_kline_report(
     table_md = "\n".join([header, sep] + rows)
 
     lines = [
-        f"# {target['name']} ({target['code']}) K线分析", "",
+        f"# {name} ({ts_code}) K线分析", "",
         f"> 查询: {keyword}",
         f"> 日期: {today}",
         f"> 回溯: {days} 个交易日",
-        f"> 数据源: 新浪财经 (akshare)",
+        f"> 数据源: Tushare Pro",
         "", "---", "",
         "## 基础统计", "",
         "| 指标 | 数值 |",
@@ -153,17 +167,15 @@ def fetch_etf_kline_report(
 
     return {
         "keyword": keyword,
-        "etf_code": target["code"],
-        "etf_name": target["name"],
-        "latest_price": target.get("price"),
-        "change_pct": target.get("change_pct"),
+        "ts_code": ts_code,
+        "name": name,
         "lookback_days": days,
         "data_points": len(df),
         "filepath": filepath,
         "stats": {k: v for k, v in stats.items() if v is not None},
         "kline_tail": kline_summary,
         "alternatives": [
-            {"code": e["code"], "name": e["name"]} for e in results[:5]
+            {"ts_code": e.get("ts_code", ""), "name": e.get("name", "")} for e in results[:5]
         ],
     }
 
@@ -216,7 +228,7 @@ def _generate_analysis(llm, data: Dict) -> str:
     stats = data.get("stats", {})
     try:
         stats_str = (
-            f"ETF: {data.get('etf_name')} ({data.get('etf_code')})\n"
+            f"标的: {data.get('name')} ({data.get('ts_code')})\n"
             f"周期: 近{data.get('lookback_days')}个交易日\n"
             f"最新收盘: {stats.get('latest_close')}\n"
             f"区间涨跌幅: {stats.get('period_change_pct')}%\n"
@@ -226,7 +238,7 @@ def _generate_analysis(llm, data: Dict) -> str:
         )
         resp = llm.chat(
             messages=(
-                f"以下是一只ETF近期的K线数据统计，请用200字以内做简要技术分析，"
+                f"以下是该标的近期的 K 线数据统计，请用200字以内做简要技术分析，"
                 f"包括趋势判断、支撑/压力位、短期展望：\n\n{stats_str}"
             ),
             max_tokens=300,
@@ -313,17 +325,18 @@ def run_kline_pipeline(
 # ===================== FunctionDef 定义 =====================
 
 KLINE_REPORT_TOOL = FunctionDef(
-    name="fetch_etf_kline_report",
-    description="获取 ETF K 线数据并生成统计分析报告。"
-                "当用户问'XX ETF 最近走势'、'看看半导体 ETF'、'分析新能源 ETF K线'时使用。"
-                "自动搜索最匹配的 ETF、拉取历史 K 线、计算技术指标、保存为 Markdown 文件。"
-                "返回 K 线数据和统计指标，LLM 拿到后可进一步做技术分析解读。",
+    name="fetch_kline_report",
+    description="获取股票/ETF K 线数据并生成统计分析报告。"
+                "当用户问'XX 最近走势'、'看看半导体 ETF'、'分析茅台 K线'时使用。"
+                "自动搜索最匹配的股票/ETF、拉取历史 K 线、计算技术指标、保存为 Markdown 文件。"
+                "返回 K 线数据和统计指标，LLM 拿到后可进一步做技术分析解读。"
+                "数据源: Tushare Pro。",
     parameters={
         "type": "object",
         "properties": {
             "keyword": {
                 "type": "string",
-                "description": "ETF 主题关键词，如 '人工智能'、'芯片'、'半导体'、'新能源'、'5G'",
+                "description": "主题关键词，如 '人工智能'、'芯片'、'茅台'、'新能源'、'5G'",
             },
             "days": {
                 "type": "integer",
@@ -332,7 +345,7 @@ KLINE_REPORT_TOOL = FunctionDef(
             },
             "etf_code": {
                 "type": "string",
-                "description": "指定 ETF 代码（如 'sz159819'），空则自动搜索",
+                "description": "指定代码（如 '510300.SH'、'600519.SH'），空则自动搜索",
                 "default": "",
             },
             "output_dir": {
@@ -350,5 +363,5 @@ KLINE_REPORT_TOOL = FunctionDef(
     },
     callback=fetch_etf_kline_report,
     category="data",
-    tags=["K线", "ETF", "技术分析", "行情"],
+    tags=["K线", "ETF", "股票", "技术分析", "行情", "Tushare"],
 )

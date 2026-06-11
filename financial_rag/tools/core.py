@@ -612,28 +612,28 @@ def create_financial_registry(retriever=None) -> FunctionRegistry:
         tags=["汇总", "描述", "报告"],
     ))
 
-    # ---- 新闻类 ----（MCP 优先，akshare 兜底）
+    # ---- 新闻类 ----（MCP 优先，RSS 兆底）
     from financial_rag.mcp_client.news_client import NewsMCPClient
 
     _news_client = NewsMCPClient()
 
     def _fetch_stock_news(stock_code: str = "600519", max_news: int = 10) -> Dict:
-        """获取个股新闻 (MCP 优先，akshare 兜底)"""
+        """获取个股新闻 (MCP 优先，RSS 兆底)"""
         return _news_client.get_news(stock_code=stock_code, max_news=max_news)
 
     def _fetch_financial_news(keyword: str = "", max_news: int = 20) -> Dict:
-        """搜索财经新闻 (MCP 优先，akshare 兜底)"""
+        """搜索财经新闻 (MCP 优先，RSS 兆底)"""
         return _news_client.get_financial_news(keyword=keyword, max_news=max_news)
 
     def _fetch_announcements(stock_code: str = "600519", max_news: int = 20) -> Dict:
-        """获取公司公告 (MCP 优先，akshare 兜底)"""
+        """获取公司公告 (MCP 优先，RSS 兆底)"""
         return _news_client.get_announcements(stock_code=stock_code, max_news=max_news)
 
     registry.add(FunctionDef(
         name="fetch_stock_news",
         description="获取指定股票的近期新闻，涵盖公告、研报、媒体报道等。"
                     "当用户问'XX股票最近有什么新闻'或'XX公司最新动态'时使用。"
-                    + (" [数据源: MCP (china-stock-mcp)]" if _news_client.is_mcp_enabled else " [数据源: akshare]"),
+                    + (" [数据源: MCP (china-stock-mcp)]" if _news_client.is_mcp_enabled else " [数据源: feedparser RSS]"),
         parameters={
             "type": "object",
             "properties": {

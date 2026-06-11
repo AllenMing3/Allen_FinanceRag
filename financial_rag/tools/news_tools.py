@@ -37,17 +37,17 @@ def fetch_news_report(
         filter_keywords: 过滤关键词（可选，默认同 keyword）
     """
     from financial_rag.config import config
-    from financial_rag.news_fetcher import fetch_financial_news
+    from financial_rag.rss_fetcher import search_news
 
     # 确定输出目录
     out_dir = output_dir or config.output_dir
     os.makedirs(out_dir, exist_ok=True)
 
-    # 获取新闻
-    raw = fetch_financial_news(keyword=keyword, max_news=max_news * 2)
+    # 获取新闻（通过 feedparser RSS）
+    raw = search_news(keyword=keyword, max_news=max_news * 2)
     items = raw.get("items", [])
 
-    # 按关键词过滤（二次过滤，akshare 有时返回宽泛结果）
+    # 按关键词过滤（二次过滤，RSS 有时返回宽泛结果）
     filter_kw = filter_keywords or keyword
     filtered = []
     for item in items:
@@ -75,7 +75,7 @@ def fetch_news_report(
         f"> 查询: {keyword}",
         f"> 日期: {today}",
         f"> 条数: {len(filtered)}",
-        f"> 数据源: 东方财富全球财经快讯",
+        f"> 数据源: 财联社 / 新浪财经 / 东方财富 (RSS)",
         "", "---", "",
     ]
 
@@ -227,7 +227,7 @@ def run_news_pipeline(
 
     # 1. 关键词提取
     keywords = _extract_keywords(llm, query)
-    # 只用第一个关键词搜索（多个关键词拼接会导致 akshare 匹配失败）
+    # 只用第一个关键词搜索（多个关键词拼接会导致搜索匹配率低）
     search_kw = keywords[0] if keywords else query
     main_kw = "、".join(keywords[:3])  # 用于过滤
     logger.info(f"新闻流水线: query='{query}' search='{search_kw}' filter='{main_kw}'")

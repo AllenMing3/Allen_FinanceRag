@@ -19,7 +19,7 @@ Financial RAG — 财报/经济新闻智能分析系统
 
 MCP 集成:
   - mcp_client/  连接第三方 MCP 服务器 (如 china-stock-mcp) 获取新闻/行情数据
-  - 未启用 MCP 时自动回退到 akshare 直连
+  - 未启用 MCP 时自动回退到 feedparser RSS 新闻 + Tushare 行情
 
 与业务完全脱钩 — 所有核心架构通过抽象接口定义，可替换任意领域
 """
@@ -32,7 +32,7 @@ from financial_rag.core import (
 )
 from financial_rag.agents import (
     IngestionAgent, ExtractionAgent,
-    ReportAgent,
+    ReportAgent, KLineAgent,
 )
 from financial_rag.retrievers import HybridRetriever, jieba_tokenizer
 from financial_rag.templates import (
@@ -47,9 +47,13 @@ from financial_rag.tools import (
     ToolCallStats, ToolCallResult, ToolCallRequest,
     CATEGORIES, create_financial_registry, create_tool_session,
 )
-from financial_rag.news_fetcher import (
-    fetch_stock_news, fetch_financial_news, fetch_announcements,
-    get_sample_news_for_rag, NewsItem, NewsResult, HAS_AKSHARE,
+from financial_rag.rss_fetcher import (
+    search_news, fetch_all_news, fetch_cls_telegraph_api,
+)
+from financial_rag.tushare_client import (
+    fetch_stock_kline, fetch_etf_kline, compute_kline_stats,
+    compute_technical_indicators, search_stock, search_etf,
+    fetch_financial_indicators,
 )
 from financial_rag.mcp_client import MCPClient, NewsMCPClient
 
@@ -67,7 +71,7 @@ __all__ = [
     "PipelineScoreCard", "StageScore", "ScoreGrade", "create_scorecard",
     # Agents
     "IngestionAgent", "ExtractionAgent",
-    "ReportAgent",
+    "ReportAgent", "KLineAgent",
     # Retrievers
     "HybridRetriever", "jieba_tokenizer",
     # Templates & Slot-Filling
@@ -80,9 +84,12 @@ __all__ = [
     "FunctionRegistry", "FunctionDef", "ToolExecutor", "ToolCallSession",
     "ToolCallStats", "ToolCallResult", "ToolCallRequest",
     "CATEGORIES", "create_financial_registry", "create_tool_session",
-    # News Fetcher (akshare-based fallback)
-    "fetch_stock_news", "fetch_financial_news", "fetch_announcements",
-    "get_sample_news_for_rag", "NewsItem", "NewsResult", "HAS_AKSHARE",
+    # News Fetcher (feedparser RSS)
+    "search_news", "fetch_all_news", "fetch_cls_telegraph_api",
+    # Tushare Client
+    "fetch_stock_kline", "fetch_etf_kline", "compute_kline_stats",
+    "compute_technical_indicators", "search_stock", "search_etf",
+    "fetch_financial_indicators",
     # MCP Client
     "MCPClient", "NewsMCPClient",
 ]

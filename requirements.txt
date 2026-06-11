@@ -10,7 +10,8 @@ llama-index>=0.12.0
 # ==================== Financial RAG ====================
 # pypdf>=4.0.0            
 # beautifulsoup4>=4.12.0   
-akshare>=1.0.0             
+tushare>=1.4.0
+feedparser>=6.0.0             
 
 jieba>=0.42.1
 

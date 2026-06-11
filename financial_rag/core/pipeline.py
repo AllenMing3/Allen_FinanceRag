@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 class PipelineConfig:
     """Pipeline 调度配置"""
 
-    enable_data_fetch: bool = True  # 阶段1: 是否获取实时数据(akshare)
+    enable_data_fetch: bool = True  # 阶段1: 是否获取实时数据(RSS/Tushare)
     enable_index: bool = True  # 阶段2: 是否建索引
     enable_agent_analysis: bool = True  # 阶段3: 是否跑Multi-Agent
     enable_slot_output: bool = True  # 阶段4: 是否槽位填充
@@ -245,7 +245,7 @@ class PipelineScheduler:
                     content = item.get("content", "")
                     text = f"{title}\n{content}" if title else content
                     meta = {
-                        "source": item.get("source", "akshare"),
+                        "source": item.get("source", "rss"),
                         "publish_time": item.get("publish_time", ""),
                         "url": item.get("url", ""),
                     }

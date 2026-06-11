@@ -3,11 +3,11 @@
 
 当 config.mcp.enable_mcp=True 且配置了 china_stock_mcp_dir 时，
 通过 MCP 协议调用第三方 china-stock-mcp 服务器获取新闻数据。
-当 MCP 不可用时，自动回退到本地 akshare 直连。
+当 MCP 不可用时，自动回退到 feedparser RSS 新闻获取。
 
 用法:
     client = NewsMCPClient()
-    result = client.get_news("600519")      # MCP 优先，akshare 兜底
+    result = client.get_news("600519")      # MCP 优先，RSS 兆底
     result = client.get_financial_news("降准")  # 搜索财经新闻
 """
 import json
@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 class NewsMCPClient:
     """
     新闻 MCP 客户端 — 封装 china-stock-mcp 的新闻工具
-
+    
     支持:
     - get_news_data: 获取个股新闻 (MCP: get_news_data)
-    - get_financial_news: 搜索财经新闻 (本地 akshare 兜底)
-
-    当 MCP 不可用时自动回退到 news_fetcher.py 的 akshare 直连。
+    - get_financial_news: 搜索财经新闻 (feedparser RSS 兆底)
+    
+    当 MCP 不可用时自动回退到 rss_fetcher.py 的 RSS 新闻获取。
     """
 
     def __init__(self):
@@ -38,12 +38,12 @@ class NewsMCPClient:
         if not self._mcp_config.enable_mcp:
             return False
         if not self._mcp_config.china_stock_mcp_dir:
-            logger.debug("MCP 未配置 china_stock_mcp_dir，使用 akshare 直连")
+            logger.debug("MCP 未配置 china_stock_mcp_dir，使用 RSS 新闻获取")
             return False
         import os
         if not os.path.isdir(self._mcp_config.china_stock_mcp_dir):
             logger.warning(
-                f"MCP 目录不存在: {self._mcp_config.china_stock_mcp_dir}，使用 akshare 直连"
+                f"MCP 目录不存在: {self._mcp_config.china_stock_mcp_dir}，使用 RSS 新闻获取"
             )
             return False
         return True
@@ -92,7 +92,7 @@ class NewsMCPClient:
         """
         获取个股新闻。
 
-        MCP 优先 (get_news_data)，失败回退到 akshare (fetch_stock_news)。
+        MCP 优先 (get_news_data)，失败回退到 RSS (search_news)。
 
         Args:
             stock_code: 股票代码
@@ -111,25 +111,30 @@ class NewsMCPClient:
                 # 标准化输出格式
                 return self._normalize_mcp_news_result(result, stock_code)
 
-        # 回退: akshare 直连
-        from financial_rag.news_fetcher import fetch_stock_news
-        return fetch_stock_news(stock_code=stock_code, max_news=max_news)
+        # 回退: RSS 新闻获取
+        from financial_rag.rss_fetcher import search_news
+        result = search_news(keyword=stock_code, max_news=max_news)
+        return {
+            "query": f"个股新闻 (RSS): {stock_code}",
+            "total": result.get("total", 0),
+            "items": result.get("items", []),
+            "source": "rss",
+        }
 
     def get_financial_news(self, keyword: str = "", max_news: int = 20) -> Dict:
         """
         搜索财经新闻或获取最新快讯。
 
         目前 china-stock-mcp 主要提供个股新闻，
-        通用财经新闻搜索仍使用 akshare 直连。
+        通用财经新闻搜索使用 feedparser RSS 获取。
 
         Args:
             keyword: 搜索关键词
             max_news: 最大返回条数
         """
-        # 通用财经新闻搜索暂时走 akshare 直连
-        # (china-stock-mcp 的 get_news_data 只支持按股票代码查询)
-        from financial_rag.news_fetcher import fetch_financial_news
-        return fetch_financial_news(keyword=keyword, max_news=max_news)
+        # 通用财经新闻搜索使用 feedparser RSS
+        from financial_rag.rss_fetcher import search_news
+        return search_news(keyword=keyword, max_news=max_news)
 
     def get_announcements(self, stock_code: str = "600519", max_news: int = 20) -> Dict:
         """
@@ -139,9 +144,15 @@ class NewsMCPClient:
             stock_code: 股票代码
             max_news: 最大返回条数
         """
-        # 公告数据暂时走 akshare 直连
-        from financial_rag.news_fetcher import fetch_announcements
-        return fetch_announcements(stock_code=stock_code, max_news=max_news)
+        # 公告数据使用 RSS 搜索（按股票代码过滤）
+        from financial_rag.rss_fetcher import search_news
+        result = search_news(keyword=stock_code, max_news=max_news)
+        return {
+            "query": f"公告 (RSS): {stock_code}",
+            "total": result.get("total", 0),
+            "items": result.get("items", []),
+            "source": "rss",
+        }
 
     def list_mcp_tools(self) -> List[Dict]:
         """列出 MCP 服务器提供的所有工具 (调试用)"""
@@ -168,7 +179,7 @@ class NewsMCPClient:
     # ===================== 内部方法 =====================
 
     def _normalize_mcp_news_result(self, result: Dict, stock_code: str) -> Dict:
-        """将 MCP 返回的新闻数据标准化为与 akshare 一致的格式"""
+        """将 MCP 返回的新闻数据标准化为统一格式"""
         # MCP 返回格式可能是 markdown 文本或 JSON
         # 尝试解析 items
         items = result.get("items", [])

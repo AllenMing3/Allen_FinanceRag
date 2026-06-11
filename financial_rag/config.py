@@ -72,6 +72,20 @@ class ReflectionConfig:
 
 
 @dataclass
+class TushareConfig:
+    """Tushare API 配置"""
+    token: str = field(default_factory=lambda: os.getenv("TUSHARE_TOKEN", ""))
+    # 默认关注股票列表
+    default_stocks: List[str] = field(default_factory=lambda: [
+        "600519.SH",  # 贵州茅台
+        "000858.SZ",  # 五粮液
+        "300750.SZ",  # 宁德时代
+        "002594.SZ",  # 比亚迪
+        "600036.SH",  # 招商银行
+    ])
+
+
+@dataclass
 class MCPConfig:
     """MCP 服务器连接配置"""
     # china-stock-mcp 服务器路径 (stdio 模式)
@@ -79,7 +93,7 @@ class MCPConfig:
     china_stock_mcp_dir: str = field(
         default_factory=lambda: os.getenv("CHINA_STOCK_MCP_DIR", "")
     )
-    # 是否启用 MCP (False 时回退到 akshare 直连)
+    # 是否启用 MCP (False 时回退到 Tushare 直连)
     enable_mcp: bool = field(
         default_factory=lambda: os.getenv("ENABLE_MCP", "false").lower() == "true"
     )
@@ -102,6 +116,7 @@ class AppConfig:
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     reflection: ReflectionConfig = field(default_factory=ReflectionConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
+    tushare: TushareConfig = field(default_factory=TushareConfig)
 
     def __post_init__(self):
         for d in [self.data_dir, self.kb_dir, self.output_dir]:
