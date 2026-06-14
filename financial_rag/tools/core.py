@@ -622,28 +622,38 @@ def create_financial_registry(retriever=None, llm=None) -> FunctionRegistry:
         tags=["汇总", "描述", "报告"],
     ))
 
-    # ---- 新闻类 ----（MCP 优先，RSS 兆底）
-    from financial_rag.mcp_client.news_client import NewsMCPClient
-
-    _news_client = NewsMCPClient()
+    # ---- 新闻类 ---- (国内免费 API: 同花顺/新浪/东方财富)
+    from financial_rag.rss_fetcher import search_news as _rss_search, fetch_all_news as _rss_all
 
     def _fetch_stock_news(stock_code: str = "600519", max_news: int = 10) -> Dict:
-        """获取个股新闻 (MCP 优先，RSS 兆底)"""
-        return _news_client.get_news(stock_code=stock_code, max_news=max_news)
+        """获取个股新闻 (国内免费 API)"""
+        result = _rss_search(keyword=stock_code, max_news=max_news)
+        return {
+            "query": f"个股新闻: {stock_code}",
+            "total": result.get("total", 0),
+            "items": result.get("items", []),
+            "source": "domestic_api",
+        }
 
     def _fetch_financial_news(keyword: str = "", max_news: int = 20) -> Dict:
-        """搜索财经新闻 (MCP 优先，RSS 兆底)"""
-        return _news_client.get_financial_news(keyword=keyword, max_news=max_news)
+        """搜索财经新闻 (国内免费 API)"""
+        return _rss_search(keyword=keyword, max_news=max_news)
 
     def _fetch_announcements(stock_code: str = "600519", max_news: int = 20) -> Dict:
-        """获取公司公告 (MCP 优先，RSS 兆底)"""
-        return _news_client.get_announcements(stock_code=stock_code, max_news=max_news)
+        """获取公司公告 (国内免费 API)"""
+        result = _rss_search(keyword=stock_code, max_news=max_news)
+        return {
+            "query": f"公告: {stock_code}",
+            "total": result.get("total", 0),
+            "items": result.get("items", []),
+            "source": "domestic_api",
+        }
 
     registry.add(FunctionDef(
         name="fetch_stock_news",
         description="获取指定股票的近期新闻，涵盖公告、研报、媒体报道等。"
                     "当用户问'XX股票最近有什么新闻'或'XX公司最新动态'时使用。"
-                    + (" [数据源: MCP (china-stock-mcp)]" if _news_client.is_mcp_enabled else " [数据源: feedparser RSS]"),
+                    " [数据源: 同花顺/新浪/东方财富]",
         parameters={
             "type": "object",
             "properties": {
@@ -656,7 +666,7 @@ def create_financial_registry(retriever=None, llm=None) -> FunctionRegistry:
         },
         callback=_fetch_stock_news,
         category="data",
-        tags=["新闻", "个股", "公告", "MCP"],
+        tags=["新闻", "个股", "公告"],
     ))
 
     registry.add(FunctionDef(

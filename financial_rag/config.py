@@ -95,22 +95,6 @@ class TushareConfig:
 
 
 @dataclass
-class MCPConfig:
-    """MCP 服务器连接配置"""
-    # china-stock-mcp 服务器路径 (stdio 模式)
-    # 克隆 https://github.com/xinkuang/china-stock-mcp 后填写路径
-    china_stock_mcp_dir: str = field(
-        default_factory=lambda: os.getenv("CHINA_STOCK_MCP_DIR", "")
-    )
-    # 是否启用 MCP (False 时回退到 Tushare 直连)
-    enable_mcp: bool = field(
-        default_factory=lambda: os.getenv("ENABLE_MCP", "false").lower() == "true"
-    )
-    # 连接超时 (秒)
-    timeout: float = 30.0
-
-
-@dataclass
 class AppConfig:
     """应用总配置"""
     # 路径
@@ -124,7 +108,6 @@ class AppConfig:
     coordinator: CoordinatorConfig = field(default_factory=CoordinatorConfig)
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     reflection: ReflectionConfig = field(default_factory=ReflectionConfig)
-    mcp: MCPConfig = field(default_factory=MCPConfig)
     tushare: TushareConfig = field(default_factory=TushareConfig)
     mock: MockConfig = field(default_factory=MockConfig)
 

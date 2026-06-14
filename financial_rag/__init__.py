@@ -24,7 +24,7 @@ Function Calling 工具系统:
 
 与业务完全脱钩 — 所有核心架构通过抽象接口定义，可替换任意领域
 """
-from financial_rag.config import config, AppConfig, MCPConfig
+from financial_rag.config import config, AppConfig
 from financial_rag.core import (
     AgentOrchestrator, ExecutionMode,
     PipelineOrchestrator, PipelineConfig, PipelineStatus,
@@ -57,12 +57,11 @@ from financial_rag.tushare_client import (
     compute_technical_indicators, search_stock, search_etf,
     fetch_financial_indicators,
 )
-from financial_rag.mcp_client import MCPClient, NewsMCPClient
 
 __version__ = "2.0.0"
 __all__ = [
     # 配置
-    "config", "AppConfig", "MCPConfig",
+    "config", "AppConfig",
     # Core - Orchestration
     "AgentOrchestrator", "ExecutionMode",
     # Core - Indexer
@@ -93,6 +92,4 @@ __all__ = [
     "fetch_stock_kline", "fetch_etf_kline", "compute_kline_stats",
     "compute_technical_indicators", "search_stock", "search_etf",
     "fetch_financial_indicators",
-    # MCP Client
-    "MCPClient", "NewsMCPClient",
 ]

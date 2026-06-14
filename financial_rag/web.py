@@ -28,6 +28,7 @@ app = FastAPI(title="Financial RAG", version="2.0.0")
 
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(_static_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 # Persistence layer — imported from services
 from financial_rag.services.persistence import (
@@ -156,13 +157,6 @@ class KlineRequest(BaseModel):
     name: str = ""
     days: int = 60
     period: str = "daily"
-
-
-class ToolCallRequest(BaseModel):
-    query: str
-    multi_turn: bool = False
-    tool_choice: str = "auto"
-    verbose: bool = True
 
 
 class SlotRequest(BaseModel):
@@ -753,64 +747,6 @@ def api_pipeline(req: QueryRequest):
     }
 
 
-@app.post("/api/query")
-def api_query(req: QueryRequest):
-    _ensure_init()
-    from financial_rag.core.scorer import PipelineScoreCard
-    from financial_rag.core.reflector import HallucinationGuard
-
-    r = _state["retriever"]
-    r.clear()
-    r.index(_state["sample_docs"])
-    results, ret_card = r.search_with_scores(req.query, top_k=3)
-
-    # Build retrieval result list
-    retrieval = []
-    for item in results[:3]:
-        retrieval.append({
-            "retriever": item.get("retriever", "?"),
-            "score": round(item.get("score", 0), 4),
-            "text": item.get("text", ""),
-        })
-
-    # Slot fill answer
-    answer = ""
-    fill_stats = None
-    if _state["has_key"] and _state["filler"]:
-        from financial_rag.templates import QUICK_QA_TEMPLATE
-        filler = _state["filler"]
-        context_docs = [it.get("text", "") for it in results[:3]]
-        t0 = time.time()
-        fill_stats_obj = filler.fill(QUICK_QA_TEMPLATE, query=req.query, context_docs=context_docs)
-        answer = filler.render(QUICK_QA_TEMPLATE, fill_stats_obj)
-        fill_elapsed = (time.time() - t0) * 1000
-        fill_stats = {
-            "filled_slots": fill_stats_obj.filled_slots,
-            "total_slots": fill_stats_obj.total_slots,
-            "total_tokens": fill_stats_obj.total_tokens,
-            "avg_ttft_ms": round(fill_stats_obj.avg_ttft_ms),
-            "parallel_gain": round(fill_stats_obj.parallel_gain * 100),
-            "elapsed_ms": round(fill_elapsed),
-        }
-
-    # Scorecard
-    card = PipelineScoreCard(query=req.query)
-    card.stages.extend(ret_card.stages)
-    sc = {
-        "overall_score": card.overall_score(),
-        "grade": ScoreGrade.from_score(card.overall_score()).value,
-        "stages": [{"name": s.display_name, "score": s.score} for s in card.stages],
-    }
-
-    return {
-        "query": req.query,
-        "answer": answer,
-        "retrieval": retrieval,
-        "fill_stats": fill_stats,
-        "scorecard": sc,
-    }
-
-
 @app.post("/api/news")
 def api_news(req: NewsRequest):
     _ensure_init()
@@ -907,57 +843,6 @@ def api_kline(req: KlineRequest):
     }
 
 
-@app.post("/api/toolcall")
-def api_toolcall(req: ToolCallRequest):
-    _ensure_init()
-    if not _state["has_key"]:
-        raise HTTPException(400, "Function Calling 需要 DASHSCOPE_API_KEY")
-
-    from financial_rag.tools import create_tool_session
-    from financial_rag.core.scorer import PipelineScoreCard
-
-    r = _state["retriever"]
-    try:
-        r.index(_state["sample_docs"])
-    except Exception:
-        pass
-
-    system = ("你是专业金融分析师。当需要具体数据时，必须调用提供的函数获取。"
-              "不要捏造任何具体数字。如果函数返回了数据，基于数据给出准确分析。")
-
-    session = create_tool_session(
-        llm=_state["llm"], retriever=r, registry=_state["registry"],
-        system_prompt=system,
-        max_rounds=5, verbose=req.verbose,
-    )
-
-    card = PipelineScoreCard(query=req.query)
-    stats = session.run(req.query, scorecard=card)
-
-    calls = []
-    for c in stats.calls:
-        result_preview = str(c.result)[:300]
-        calls.append({
-            "name": c.name,
-            "success": c.success,
-            "elapsed_ms": round(c.elapsed_ms),
-            "result": result_preview,
-        })
-
-    return {
-        "query": req.query,
-        "rounds": stats.rounds,
-        "total_calls": len(stats.calls),
-        "succeeded": stats.succeeded,
-        "failed": stats.failed,
-        "tools_used": stats.tools_used,
-        "total_elapsed_ms": round(stats.total_elapsed_ms),
-        "total_tokens": stats.total_tokens,
-        "calls": calls,
-        "final_answer": stats.final_answer,
-    }
-
-
 @app.post("/api/slot")
 def api_slot(req: SlotRequest):
     _ensure_init()
@@ -972,8 +857,13 @@ def api_slot(req: SlotRequest):
         raise HTTPException(400, f"未知模板: {req.template}, 可选: {', '.join(ALL_TEMPLATES.keys())}")
 
     r = _state["retriever"]
-    r.clear()
-    r.index(_state["sample_docs"])
+    if not _state.get("kb_built"):
+        docs = _state.get("kb_docs", [])
+        if not docs:
+            raise HTTPException(400, "知识库为空，请先导入数据")
+        r.clear()
+        r.index(docs, precompute_embeddings=True)
+        _state["kb_built"] = True
     results, ret_card = r.search_with_scores(req.query, top_k=req.top_k)
     context_docs = [it.get("text", "") for it in results[:req.top_k]]
 
@@ -1031,7 +921,13 @@ def api_slot(req: SlotRequest):
 def api_score(req: ScoreRequest):
     _ensure_init()
     r = _state["retriever"]
-    r.index(_state["sample_docs"])
+    if not _state.get("kb_built"):
+        docs = _state.get("kb_docs", [])
+        if not docs:
+            raise HTTPException(400, "知识库为空，请先导入数据")
+        r.clear()
+        r.index(docs, precompute_embeddings=True)
+        _state["kb_built"] = True
     results, card = r.search_with_scores(req.query, top_k=req.top_k)
 
     items = []
