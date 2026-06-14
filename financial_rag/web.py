@@ -8,9 +8,8 @@ import os
 import sys
 import time
 import logging
-import signal
 import threading
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
@@ -30,90 +29,17 @@ app = FastAPI(title="Financial RAG", version="2.0.0")
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(_static_dir, exist_ok=True)
 
-# KB persistence — stored as JSON on disk so it survives restarts
-_KB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "knowledge_base", "kb_docs.json")
-_KB_PATH = os.path.normpath(_KB_PATH)
-os.makedirs(os.path.dirname(_KB_PATH), exist_ok=True)
-
-# News archive — raw news items appended as JSONL for reuse as data source
-_NEWS_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "knowledge_base", "news_archive.jsonl")
-_NEWS_DB_PATH = os.path.normpath(_NEWS_DB_PATH)
-
-
-def _load_kb() -> list:
-    """Load KB documents from disk (or empty list)"""
-    if os.path.exists(_KB_PATH):
-        try:
-            import json
-            with open(_KB_PATH, "r", encoding="utf-8") as f:
-                docs = json.load(f)
-            logger.info(f"KB loaded: {len(docs)} docs from {_KB_PATH}")
-            return docs
-        except Exception as e:
-            logger.warning(f"Failed to load KB: {e}")
-    return []
-
-
-def _save_kb(docs: list):
-    """Persist KB documents to disk"""
-    import json
-    with open(_KB_PATH, "w", encoding="utf-8") as f:
-        json.dump(docs, f, ensure_ascii=False, indent=2)
-    logger.info(f"KB saved: {len(docs)} docs → {_KB_PATH}")
-
-
-def _append_news_archive(items: list, keyword: str) -> str:
-    """Append raw news items to the JSONL archive file, return path"""
-    import json
-    from datetime import datetime
-    fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    count = 0
-    with open(_NEWS_DB_PATH, "a", encoding="utf-8") as f:
-        for item in items:
-            text = f"{item.get('title', '')} {item.get('content', '')}"
-            if not text.strip():
-                continue
-            record = {
-                "text": text.strip(),
-                "metadata": {
-                    "source": "news",
-                    "keyword": keyword,
-                    "title": item.get("title", ""),
-                    "publish_time": item.get("publish_time", ""),
-                    "content_url": item.get("content_url", ""),
-                    "fetched_at": fetched_at,
-                    "doc_type": "\u65b0\u95fb\u62a5\u9053",
-                },
-            }
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-            count += 1
-    if count > 0:
-        logger.info(f"News archive: appended {count} items → {_NEWS_DB_PATH}")
-    return _NEWS_DB_PATH
-
-# Metadata store — news context data (NOT indexed into KB)
-_META_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "knowledge_base", "news_metadata.json")
-_META_PATH = os.path.normpath(_META_PATH)
-
-
-def _load_meta() -> list:
-    """Load news metadata from disk (or empty list)"""
-    if os.path.exists(_META_PATH):
-        try:
-            import json
-            with open(_META_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return []
-
-
-def _save_meta(meta: list):
-    """Persist news metadata to disk"""
-    import json
-    with open(_META_PATH, "w", encoding="utf-8") as f:
-        json.dump(meta, f, ensure_ascii=False, indent=2)
-    logger.info(f"Metadata saved: {len(meta)} items → {_META_PATH}")
+# Persistence layer — imported from services
+from financial_rag.services.persistence import (
+    KB_PATH as _KB_PATH,
+    META_PATH as _META_PATH,
+    NEWS_ARCHIVE_PATH as _NEWS_DB_PATH,
+    load_kb as _load_kb,
+    save_kb as _save_kb,
+    load_meta as _load_meta,
+    save_meta as _save_meta,
+    append_news_archive as _append_news_archive,
+)
 
 # Lazy-init holder so import doesn't block
 _state: dict = {}
@@ -189,9 +115,11 @@ def _ensure_init():
         _state["ready"] = True
 
 
-def _shutdown_handler(signum, frame):
-    """Graceful shutdown: persist state before exit"""
-    logger.info("Shutdown signal received, saving state...")
+
+@app.on_event("shutdown")
+def _on_shutdown():
+    """Persist state on graceful shutdown (uvicorn handles SIGINT)"""
+    logger.info("Shutdown: saving state...")
     try:
         with _state_lock:
             if _state.get("kb_docs") is not None:
@@ -200,12 +128,8 @@ def _shutdown_handler(signum, frame):
                 _save_meta(_state["meta_store"])
     except Exception as e:
         logger.warning(f"Shutdown save failed: {e}")
-    logger.info("State saved. Exiting.")
-    sys.exit(0)
-
-
-signal.signal(signal.SIGINT, _shutdown_handler)
-signal.signal(signal.SIGTERM, _shutdown_handler)
+    else:
+        logger.info("State saved.")
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +189,16 @@ class IngestNewsRequest(BaseModel):
 
 class BuildRequest(BaseModel):
     documents: list = []
+
+
+class AnalyzeNewsRequest(BaseModel):
+    text: str
+    query: str = ""
+
+
+class AnalyzeTopicRequest(BaseModel):
+    topic: str
+    max_news: int = 20
 
 
 # ---------------------------------------------------------------------------
@@ -568,6 +502,61 @@ def api_kb_clear():
         _state["retriever"].clear()
         _save_kb([])
     return {"ok": True, "kb_path": _KB_PATH}
+
+
+# ===================== Intelligent Analysis (User-Facing) =====================
+
+@app.post("/api/analyze/news")
+def api_analyze_news(req: AnalyzeNewsRequest):
+    """Analyze pasted news text: structured extraction + KB context + bullish/bearish verdict"""
+    _ensure_init()
+    from financial_rag.services.analysis import analyze_news_text
+
+    text = req.text.strip()
+    if not text:
+        raise HTTPException(400, "请输入新闻内容")
+
+    return analyze_news_text(
+        text,
+        query=req.query,
+        llm=_state["llm"] if _state.get("has_key") else None,
+        retriever=_state.get("retriever"),
+        kb_built=_state.get("kb_built", False),
+    )
+
+
+@app.post("/api/analyze/topic")
+def api_analyze_topic(req: AnalyzeTopicRequest):
+    """Topic research: fetch news + query KB + LLM comprehensive assessment"""
+    _ensure_init()
+    from financial_rag.services.analysis import analyze_topic_research
+
+    topic = req.topic.strip()
+    if not topic:
+        raise HTTPException(400, "请输入研究话题")
+
+    result = analyze_topic_research(
+        topic,
+        max_news=req.max_news,
+        llm=_state["llm"] if _state.get("has_key") else None,
+        retriever=_state.get("retriever"),
+        kb_built=_state.get("kb_built", False),
+    )
+
+    # Store fetched news as metadata
+    from datetime import datetime
+    fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    meta_items = [
+        {"keyword": topic, "title": n["title"], "source": n["source"],
+         "publish_time": n["publish_time"], "fetched_at": fetched_at}
+        for n in result.get("news", []) if n.get("title")
+    ]
+    if meta_items:
+        with _state_lock:
+            _state["meta_store"] = _state.get("meta_store", []) + meta_items
+            _save_meta(_state["meta_store"])
+
+    return result
 
 
 @app.post("/api/metadata/clear")

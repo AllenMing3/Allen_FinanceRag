@@ -198,6 +198,8 @@ th { color: var(--text2); font-weight: 500; }
   <span class="flow-arrow">→</span>
   <div class="flow-step active" data-panel="query"><span class="step-icon">🔍</span> RAG 查询 <span class="step-count" id="queryCount">0</span></div>
   <span class="flow-arrow">→</span>
+  <div class="flow-step" data-panel="analyze"><span class="step-icon">🧠</span> 智能分析</div>
+  <span class="flow-arrow">→</span>
   <div class="flow-step" data-panel="tools"><span class="step-icon">🔧</span> 分析工具</div>
 </div>
 
@@ -417,7 +419,37 @@ th { color: var(--text2); font-weight: 500; }
     <div id="query-result"></div>
   </div>
 
-  <!-- ========== STEP 4: TOOLS ========== -->
+  <!-- ========== STEP 5: SMART ANALYSIS ========== -->
+  <div class="panel" id="panel-analyze">
+    <div class="card" style="margin-bottom:20px">
+      <h3>📰 新闻解读 <span class="tag tag-info" style="font-size:11px;margin-left:4px">粘贴新闻 → 结构化解析 → 利好利空研判</span></h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">粘贴一段你看不懂的新闻，系统会：<strong style="color:var(--accent)">① 抽取财务指标和实体</strong> → <strong style="color:var(--accent)">② 结合知识库上下文</strong> → <strong style="color:var(--accent)">③ 给出利好/利空/中性判断</strong></p>
+      <textarea class="input" id="analyze-news-text" rows="5" placeholder="粘贴新闻全文..." style="width:100%;min-height:100px;resize:vertical;font-size:13px;line-height:1.6"></textarea>
+      <div class="form-row" style="margin-top:10px">
+        <input class="input" id="analyze-news-q" placeholder="补充说明（可选，如：帮我分析对半导体的影响）" />
+        <button class="btn btn-primary" onclick="analyzeNews()">🧠 分析</button>
+      </div>
+      <div class="loading" id="analyze-news-loading"><div class="spinner"></div><p>正在解析新闻并查询知识库...</p></div>
+      <div id="analyze-news-result"></div>
+    </div>
+    <div class="card">
+      <h3>🔍 话题调研 <span class="tag tag-info" style="font-size:11px;margin-left:4px">输入话题 → 抓新闻 → RAG综合研判</span></h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">输入一个话题，系统会：<strong style="color:var(--accent)">① 自动抓取相关新闻</strong> → <strong style="color:var(--accent)">② 查询知识库关联信息</strong> → <strong style="color:var(--accent)">③ 综合给出利好/利空/中性</strong></p>
+      <div class="form-row">
+        <input class="input" id="analyze-topic-input" placeholder="话题：如 DeepSeek、半导体、降准..." />
+        <select class="input" id="analyze-topic-count" style="flex:none;width:80px">
+          <option value="10">10条</option>
+          <option value="20" selected>20条</option>
+          <option value="30">30条</option>
+        </select>
+        <button class="btn btn-primary" onclick="analyzeTopic()">🔍 调研</button>
+      </div>
+      <div class="loading" id="analyze-topic-loading"><div class="spinner"></div><p>正在抓取新闻并综合研判...</p></div>
+      <div id="analyze-topic-result"></div>
+    </div>
+  </div>
+
+  <!-- ========== STEP 6: TOOLS ========== -->
   <div class="panel" id="panel-tools">
     <div class="source-grid">
       <!-- News search tool -->
@@ -941,6 +973,99 @@ async function runScoreTool() {
   } catch(e) {
     document.getElementById('tool-score-result').innerHTML = `<span class="tag tag-fail">${escHtml(e.message)}</span>`;
   }
+}
+
+// ===== STEP 5: Smart Analysis =====
+function verdictBadge(v) {
+  const map = { bullish: ['利好','var(--ok)'], bearish: ['利空','var(--danger)'], neutral: ['中性','var(--text2)'] };
+  const [label, color] = map[v] || map.neutral;
+  return `<span style="display:inline-block;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;background:${color}22;color:${color};border:1px solid ${color}44">${label}</span>`;
+}
+
+async function analyzeNews() {
+  const text = document.getElementById('analyze-news-text').value.trim();
+  if (!text) return;
+  const query = document.getElementById('analyze-news-q').value.trim();
+  showLoading('analyze-news-loading');
+  document.getElementById('analyze-news-result').innerHTML = '';
+  try {
+    const d = await api('/api/analyze/news', { text, query });
+    let h = '<div style="margin-top:12px">';
+    // Verdict
+    h += `<div style="margin-bottom:14px;text-align:center">${verdictBadge(d.assessment)}</div>`;
+    // Analysis
+    if (d.analysis) h += `<div class="answer-section" style="margin-bottom:12px"><h3>💡 分析结论</h3><div class="answer-text">${escHtml(d.analysis)}</div></div>`;
+    // Extracted data
+    if (d.doc_type || d.entities || d.metrics) {
+      h += '<div class="stats">';
+      if (d.doc_type) h += `<div class="stat">文档类型 <strong>${escHtml(d.doc_type)}</strong></div>`;
+      const ent = d.entities || {};
+      const met = d.metrics || {};
+      if (ent.companies && ent.companies.length) h += `<div class="stat">涉及公司 <strong>${ent.companies.map(c=>escHtml(c)).join(', ')}</strong></div>`;
+      if (ent.stock_codes && ent.stock_codes.length) h += `<div class="stat">股票代码 <strong>${ent.stock_codes.map(c=>escHtml(c)).join(', ')}</strong></div>`;
+      if (met.revenue) h += `<div class="stat">营收 <strong>${escHtml(String(met.revenue))}</strong></div>`;
+      if (met.net_profit) h += `<div class="stat">净利润 <strong>${escHtml(String(met.net_profit))}</strong></div>`;
+      if (met.growth_rate) h += `<div class="stat">增长率 <strong>${escHtml(String(met.growth_rate))}</strong></div>`;
+      h += '</div>';
+    }
+    // KB sources
+    if (d.kb_sources && d.kb_sources.length) {
+      h += `<div style="margin-top:10px;font-size:13px;color:var(--text2)">📚 知识库关联来源 (${d.kb_sources.length} 条)</div>`;
+      d.kb_sources.slice(0, 3).forEach((s, i) => {
+        h += `<div class="source-result" style="margin-top:6px">
+          <div class="source-rank rank-high">${i+1}</div>
+          <div class="source-body"><div class="text">${escHtml((s.text||'').slice(0,150))}</div>
+          <div class="meta"><span>相关度: <strong style="color:${scoreColor(s.score)}">${(s.score||0).toFixed(3)}</strong></span></div></div>
+        </div>`;
+      });
+    }
+    h += '</div>';
+    document.getElementById('analyze-news-result').innerHTML = h;
+  } catch(e) {
+    document.getElementById('analyze-news-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`;
+  }
+  hideLoading('analyze-news-loading');
+}
+
+async function analyzeTopic() {
+  const topic = document.getElementById('analyze-topic-input').value.trim();
+  if (!topic) return;
+  const maxNews = parseInt(document.getElementById('analyze-topic-count').value);
+  showLoading('analyze-topic-loading');
+  document.getElementById('analyze-topic-result').innerHTML = '';
+  try {
+    const d = await api('/api/analyze/topic', { topic, max_news: maxNews });
+    let h = '<div style="margin-top:12px">';
+    h += `<div style="margin-bottom:14px;text-align:center">${verdictBadge(d.assessment)}</div>`;
+    if (d.analysis) h += `<div class="answer-section" style="margin-bottom:12px"><h3>💡 综合研判</h3><div class="answer-text">${escHtml(d.analysis)}</div></div>`;
+    h += '<div class="stats">';
+    h += `<div class="stat">话题 <strong>${escHtml(d.topic)}</strong></div>`;
+    h += `<div class="stat">新闻数 <strong>${d.news_count}</strong></div>`;
+    h += '</div>';
+    // News
+    if (d.news && d.news.length) {
+      h += `<div style="margin-top:10px;font-size:13px;color:var(--text2)">📰 相关新闻</div>`;
+      d.news.forEach(n => {
+        h += `<div class="news-item"><h4>${escHtml(n.title)}</h4><div class="meta">${escHtml(n.source)} · ${escHtml(n.publish_time)}</div></div>`;
+      });
+    }
+    // KB sources
+    if (d.kb_sources && d.kb_sources.length) {
+      h += `<div style="margin-top:10px;font-size:13px;color:var(--text2)">📚 知识库关联 (${d.kb_sources.length} 条)</div>`;
+      d.kb_sources.slice(0, 3).forEach((s, i) => {
+        h += `<div class="source-result" style="margin-top:6px">
+          <div class="source-rank rank-high">${i+1}</div>
+          <div class="source-body"><div class="text">${escHtml((s.text||'').slice(0,150))}</div>
+          <div class="meta"><span>相关度: <strong style="color:${scoreColor(s.score)}">${(s.score||0).toFixed(3)}</strong></span></div></div>
+        </div>`;
+      });
+    }
+    h += '</div>';
+    document.getElementById('analyze-topic-result').innerHTML = h;
+  } catch(e) {
+    document.getElementById('analyze-topic-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`;
+  }
+  hideLoading('analyze-topic-loading');
 }
 
 // ===== Init =====
