@@ -11,7 +11,9 @@
 3. [Web UI 操作指南](#3-web-ui-操作指南)
 4. [Pipeline — 一句话出分析报告](#4-pipeline--一句话出分析报告)
 5. [CLI 工具集](#5-cli-工具集)
-6. [常见问题排查](#6-常见问题排查)
+6. [测试](#6-测试)
+7. [Mock 模式](#7-mock-模式)
+8. [常见问题排查](#8-常见问题排查)
 
 ---
 
@@ -262,13 +264,13 @@ python -m financial_rag.main web
 
 ```powershell
 # 基本用法
-python -m financial_rag.main pipeline "茅台2024年利润增长情况"
+python -m financial_rag.main pipeline "商汤科技2024年营收增长情况"
 
 # 新闻简报模板 + 详细日志
-python -m financial_rag.main pipeline "新能源板块最近有什么利好" -t news -v
+python -m financial_rag.main pipeline "AI大模型行业最新动态" -t news -v
 
 # 深度分析 + 输出到文件
-python -m financial_rag.main pipeline "降准对银行股的影响" -t deep -o ./output
+python -m financial_rag.main pipeline "英伟达Blackwell架构对算力市场的影响" -t deep -o ./output
 ```
 
 **4 种模板：**
@@ -301,7 +303,8 @@ python -m financial_rag.main news "AI人工智能" -s
 
 ```powershell
 python -m financial_rag.main kline "人工智能ETF" --days 30 -s
-python -m financial_rag.main kline "茅台" --days 60 -s
+python -m financial_rag.main kline "商汤" --days 60 -s
+python -m financial_rag.main kline "寒武纪" --days 30 -s
 ```
 
 支持股票和 ETF，自动识别代码。数据源: Tushare Pro（需 `.env` 中配置 `TUSHARE_TOKEN`）。
@@ -309,23 +312,31 @@ python -m financial_rag.main kline "茅台" --days 60 -s
 ### Function Calling
 
 ```powershell
-python -m financial_rag.main toolcall "茅台营收增长多少" -v
+python -m financial_rag.main toolcall "商汤科技营收增长多少" -v
 ```
 
-LLM 自动选择工具获取数据。
+LLM 自动选择工具获取数据。15 个内置工具，覆盖抽取、计算、检索：
+
+```powershell
+# 查看所有工具
+python -m financial_rag.main toolcall -l
+
+# 多轮对话
+python -m financial_rag.main toolcall --multi-turn -v
+```
 
 ### 槽位填充
 
 ```powershell
-python -m financial_rag.main slot "茅台2024年利润" -t financial_report
+python -m financial_rag.main slot "商汤科技2024年营收" -t fin
 ```
 
-用模板约束 LLM 输出格式。
+用模板约束 LLM 输出格式（4 种模板：quick / fin / news / deep）。
 
 ### 检索打分
 
 ```powershell
-python -m financial_rag.main score "茅台营收增长" -k 5
+python -m financial_rag.main score "商汤科技算力规模" -k 5
 ```
 
 不调 LLM，纯测检索链路质量。
@@ -349,9 +360,9 @@ python -m financial_rag.main query -i
 | `web` | Web UI | `python -m financial_rag.main web` |
 | `pipeline` | 端到端分析 | `python -m financial_rag.main pipeline "查询" -v` |
 | `news` | 拉新闻 | `python -m financial_rag.main news "AI" -s` |
-| `kline` | 股票/ETF K线 | `python -m financial_rag.main kline "茅台" --days 30` |
+| `kline` | 股票/ETF K线 | `python -m financial_rag.main kline "商汤" --days 30` |
 | `toolcall` | Function Calling | `python -m financial_rag.main toolcall "查询" -v` |
-| `slot` | 槽位填充 | `python -m financial_rag.main slot "查询" -t financial_report` |
+| `slot` | 槽位填充 | `python -m financial_rag.main slot "查询" -t fin` |
 | `score` | 检索打分 | `python -m financial_rag.main score "查询" -k 5` |
 | `build` | 构建知识库 | `python -m financial_rag.main build --dir ./data` |
 | `query` | 交互查询 | `python -m financial_rag.main query -i` |
@@ -360,7 +371,36 @@ python -m financial_rag.main query -i
 
 ---
 
-## 6. 常见问题排查
+## 6. 测试
+
+```powershell
+# 全量测试（103 tests，无需 API Key）
+python -m pytest tests/ -v
+
+# 只看 mock 数据测试
+python -m pytest tests/test_mock_data.py -v
+
+# 只看 Agent 链测试
+python -m pytest tests/test_agents.py -v
+```
+
+测试设计：**只 mock 数据源（Tushare/新闻 API），LLM / Embedding / Rerank 保持真实**。抽取工具走 regex fallback，不需要 API Key 就能跑。
+
+3 篇长文测试文章（900-1800 字）：
+- 商汤科技 2024 年报深度解读
+- 英伟达 Blackwell 架构全面解析
+- 2024 年中国 AI 大模型行业融资盘点
+
+## 7. Mock 模式
+
+`.env` 中设 `MOCK_MODE=true`，数据源切到 mock（Tushare → 模拟 K 线，新闻 API → 25 条内置 AI 新闻），LLM / Embedding / Rerank 仍然走真实 API。
+
+适合：
+- 没 API Key 时调试 Agent 链路
+- 快速验证 function calling 工具是否工作
+- CI/CD 环境跑测试
+
+## 8. 常见问题排查
 
 ### "Rerank 403 Access Denied"
 

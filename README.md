@@ -490,6 +490,31 @@ The UI guides you through the KB pipeline:
 
 ---
 
+## Testing
+
+103 tests covering agents, extraction tools, analysis tools, and mock data. No API key needed — all extraction tests run via regex fallback.
+
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
+
+| Test file | Coverage | Tests |
+|-----------|----------|-------|
+| `test_extraction_tools.py` | 5 extraction tools (regex fallback) + long-article extraction | 34 |
+| `test_agents.py` | IngestionAgent + ExtractionAgent + full chain (short + long text) | 22 |
+| `test_analysis_tools.py` | Growth rate, ratio, compare, summarize + registry/executor infra | 16 |
+| `test_mock_data.py` | K-line, search, indicators, news + long-form AI articles | 31 |
+
+**Mock data** (`mock_data.py`): Tushare + news API mocks for offline dev. `MOCK_MODE=true` in `.env` enables mock data sources while keeping LLM/embedding/rerank real.
+
+**Long-form test articles** (3 articles, 900-1800 chars each):
+- 商汤科技 2024 年报深度解读
+- 英伟达 Blackwell 架构全面解析
+- 2024 年中国 AI 大模型行业融资盘点
+
+---
+
 ## License
 
 MIT
