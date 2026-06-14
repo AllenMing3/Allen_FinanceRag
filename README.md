@@ -121,7 +121,7 @@ ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 | `prompts.py` | LLM prompt templates + few-shot examples | — |
 | `templates.py` | 4 slot templates: QUICK_QA, FINANCIAL_REPORT, NEWS_BRIEF, DEEP_ANALYSIS | `SlottedTemplate`, `ALL_TEMPLATES` |
 | `slot_filler.py` | Parallel slot filling engine with TTFT measurement | `SlotFiller`, `create_slot_filler` |
-| `rss_fetcher.py` | Financial news via feedparser RSS (CLS/Sina/EastMoney) | `search_news`, `fetch_all_news` |
+| `rss_fetcher.py` | Financial news via domestic APIs (10jqka/Sina/EastMoney) + feedparser fallback | `search_news`, `fetch_all_news` |
 | `tushare_client.py` | K-line & financial indicators via Tushare Pro | `fetch_stock_kline`, `compute_technical_indicators` |
 | `web.py` | FastAPI Web UI server — KB pipeline endpoints + static file serving | FastAPI app, `/api/*` endpoints |
 
@@ -310,7 +310,7 @@ router.override("analysis_agent", "qwen-max")
 |---------|---------------|
 | Agent not working | `core/orchestrator.py` `_apply_updates()` — check context passing. Set `config.coordinator.verbose = True`. |
 | K-line fetch fails | Check `.env` has `TUSHARE_TOKEN`. Token needs 120+ points on tushare.pro. Test: `from financial_rag.tushare_client import fetch_stock_kline`. |
-| News fetch fails | Test: `from financial_rag.rss_fetcher import fetch_all_news; fetch_all_news()`. Uses feedparser + RSSHub. |
+| News fetch fails | Test: `from financial_rag.rss_fetcher import fetch_all_news; fetch_all_news()`. Uses domestic APIs (10jqka/Sina/EastMoney). |
 | Retrieval inaccurate | Run `python -m financial_rag.main score "query"`. Adjust `config.pipeline` weights. |
 | LLM hallucination | Check `core/reflector.py` HallucinationGuard 6-layer scores. Lower `temperature` to 0. Raise `min_faithfulness`. |
 | Model cost too high | Check `llm/model_router.py` BudgetConfig. Override non-critical agents to `qwen-turbo`. |
@@ -329,7 +329,7 @@ Copy-Item .env.example .env
 # Edit .env, fill in DASHSCOPE_API_KEY and TUSHARE_TOKEN
 
 # Verify
-python -c "import tushare, feedparser; print('tushare:', tushare.__version__, 'feedparser:', feedparser.__version__)"
+python -c "import tushare, httpx; print('tushare:', tushare.__version__, 'httpx:', httpx.__version__)"
 python -c "from financial_rag.llm import get_llm; print('llm ok')"
 ```
 

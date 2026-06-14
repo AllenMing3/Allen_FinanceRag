@@ -256,7 +256,6 @@ def api_config():
 _KNOWN_DIRS = [
     ("./data/financial", "财务数据"),
     ("./data/knowledge_base", "知识库 & 新闻存档"),
-    ("./financial_rag/data", "内置示例数据"),
 ]
 
 

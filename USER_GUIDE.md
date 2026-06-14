@@ -27,7 +27,7 @@ cd d:\llamaindex
 **验证环境：**
 
 ```powershell
-python -c "import tushare, feedparser; print('tushare:', tushare.__version__, 'feedparser:', feedparser.__version__)"
+python -c "import tushare, httpx; print('tushare:', tushare.__version__, 'httpx:', httpx.__version__)"
 python -c "from financial_rag.llm import get_llm; print('llm ok')"
 ```
 
@@ -48,7 +48,7 @@ python -c "from financial_rag.llm import get_llm; print('llm ok')"
   → 真正的知识原料
   → 经过 Agent 分析（抽取指标、实体）→ 进入知识库
 
-📰 新闻搜索（RSS 聚合：财联社/新浪财经/东方财富）
+📰 新闻搜索（国内直连 API：同花顺/新浪财经/东方财富）
   → 只是元数据（时间、关键词、来源）
   → 不进知识库，但提供：解析先验 + 查询上下文
 
@@ -71,7 +71,7 @@ python -c "from financial_rag.llm import get_llm; print('llm ok')"
 ```
 用户搜索 "AI人工智能"
        ↓
-RSS 聚合: 财联社 + 新浪财经 + 东方财富
+国内直连 API: 同花顺 + 新浪财经 + 东方财富
        ↓
 存入 news_metadata.json  ← 元数据（标题、关键词、时间、来源）
 存入 news_archive.jsonl  ← 原始数据存档（追加模式）
@@ -84,7 +84,7 @@ RSS 聚合: 财联社 + 新浪财经 + 东方财富
 {
   "keyword": "AI、人工智能",
   "title": "字节跳动收购行歌科技",
-  "source": "财联社",
+  "source": "同花顺",
   "publish_time": "2025-06-07 14:30:00",
   "fetched_at": "2025-06-07 15:00:00"
 }
@@ -369,8 +369,8 @@ python -m financial_rag.main query -i
 ### "新闻获取不到数据"
 
 - 关键词太偏 → 换个热门主题试试
-- RSSHub 公共实例不稳定 → 可自建 RSSHub 实例，修改 `rss_fetcher.py` 中的 `RSSHUB_BASE`
-- 网络问题 → 确认能访问 `rsshub.app`
+- API 访问受限 → 同花顺 / 新浪财经 / 东方财富均有访问频率限制，可稍后重试
+- 网络问题 → 确认能访问 `news.10jqka.com.cn`、`feed.mix.sina.com.cn`、`search-api-web.eastmoney.com`
 
 ### "中文乱码"
 

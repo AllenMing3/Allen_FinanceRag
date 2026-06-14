@@ -43,7 +43,7 @@ def fetch_news_report(
     out_dir = output_dir or config.output_dir
     os.makedirs(out_dir, exist_ok=True)
 
-    # 获取新闻（通过 feedparser RSS）
+    # 获取新闻（国内直连 API）
     raw = search_news(keyword=keyword, max_news=max_news * 2)
     items = raw.get("items", [])
 
@@ -75,7 +75,7 @@ def fetch_news_report(
         f"> 查询: {keyword}",
         f"> 日期: {today}",
         f"> 条数: {len(filtered)}",
-        f"> 数据源: 财联社 / 新浪财经 / 东方财富 (RSS)",
+        f"> 数据源: 同花顺 / 新浪财经 / 东方财富（国内直连 API）",
         "", "---", "",
     ]
 

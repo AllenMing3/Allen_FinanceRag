@@ -154,6 +154,27 @@ th { color: var(--text2); font-weight: 500; }
 .news-item:last-child { border: none; }
 .news-item h4 { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
 .news-item .meta { font-size: 12px; color: var(--text2); }
+
+/* Agent architecture panel */
+.agent-flow { display: flex; flex-direction: column; gap: 20px; }
+.agent-row { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
+.agent-card { flex: 1; min-width: 220px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; position: relative; transition: border-color .2s; }
+.agent-card:hover { border-color: var(--accent); }
+.agent-card .agent-icon { font-size: 28px; margin-bottom: 8px; }
+.agent-card .agent-name { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.agent-card .agent-role { font-size: 12px; color: var(--text2); margin-bottom: 10px; line-height: 1.5; }
+.agent-card .agent-io { font-size: 11px; color: var(--text2); padding: 8px 10px; background: var(--surface2); border-radius: 6px; line-height: 1.6; }
+.agent-card .agent-io strong { color: var(--text); }
+.agent-card .agent-phase { position: absolute; top: 12px; right: 14px; }
+.agent-arrow { display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--text2); opacity: .5; flex-shrink: 0; width: 28px; }
+.dataflow-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+.dataflow-card h3 { font-size: 15px; margin-bottom: 14px; color: var(--accent2); }
+.dataflow-line { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; color: var(--text2); }
+.dataflow-line .df-node { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; }
+.df-agent { background: rgba(108,140,255,.15); color: var(--accent); }
+.df-data { background: rgba(78,205,196,.15); color: var(--accent2); }
+.df-store { background: rgba(255,217,61,.15); color: var(--warn); }
+.df-arrow { color: var(--text2); opacity: .5; }
 </style>
 </head>
 <body>
@@ -169,6 +190,8 @@ th { color: var(--text2); font-weight: 500; }
 
 <!-- Pipeline flow navigation -->
 <div class="pipeline-flow">
+  <div class="flow-step" data-panel="agents"><span class="step-icon">🤖</span> Agent 架构</div>
+  <span class="flow-arrow">|</span>
   <div class="flow-step active" data-panel="ingest"><span class="step-icon">📥</span> 数据源 <span class="step-count" id="ingestCount">0</span></div>
   <span class="flow-arrow">→</span>
   <div class="flow-step" data-panel="build"><span class="step-icon">🏗️</span> 构建知识库 <span class="step-count" id="buildCount">0</span></div>
@@ -181,51 +204,174 @@ th { color: var(--text2); font-weight: 500; }
 <div class="main">
 <div class="content">
 
-  <!-- ========== STEP 1: INGEST ========== -->
-  <div class="panel active" id="panel-ingest">
-    <div class="source-grid">
-      <!-- Directory browser -->
-      <div class="source-card" style="grid-column: 1 / -1">
-        <h3><span class="icon">📁</span> 数据源目录</h3>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">导入文件经 <strong style="color:var(--accent)">Agent 分析</strong>后成为知识库内容；新闻搜索仅收集元数据（上下文标签）</p>
-        <div id="dirBrowser">
-          <div style="text-align:center;color:var(--text2);padding:16px"><div class="spinner" style="margin:0 auto"></div></div>
-        </div>
-        <details style="margin-top:12px">
-          <summary style="font-size:12px;color:var(--text2);cursor:pointer">⚙️ 自定义目录</summary>
-          <div class="form-row" style="margin-top:8px">
-            <input class="input" id="ingest-dir" placeholder="输入自定义目录路径..." />
-            <button class="btn btn-secondary" onclick="ingestFiles()">导入</button>
+  <!-- ========== AGENT ARCHITECTURE ========== -->
+  <div class="panel" id="panel-agents">
+    <div class="agent-flow">
+      <!-- Ingest-phase agents -->
+      <div>
+        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">INGEST PHASE — 数据摄取时运行</h3>
+        <div class="agent-row">
+          <div class="agent-card">
+            <span class="agent-phase tag tag-ok">摄取时</span>
+            <div class="agent-icon">📥</div>
+            <div class="agent-name">IngestionAgent</div>
+            <div class="agent-role">数据清洗与标准化。将原始文件（财报、新闻、宏观数据）解析为统一文档格式，提取来源/时间等元数据。</div>
+            <div class="agent-io"><strong>输入:</strong> 原始文件 (JSONL/TXT/JSON)<br><strong>输出:</strong> 标准化文档 + 元数据</div>
           </div>
-          <div id="ingest-file-result"></div>
-        </details>
+          <div class="agent-arrow">→</div>
+          <div class="agent-card">
+            <span class="agent-phase tag tag-ok">摄取时</span>
+            <div class="agent-icon">🔬</div>
+            <div class="agent-name">ExtractionAgent</div>
+            <div class="agent-role">关键财务指标抽取与实体识别。从文档中提取财务指标（营收、净利润、ROE）和实体（公司名、股票代码）。</div>
+            <div class="agent-io"><strong>输入:</strong> IngestionAgent 的输出<br><strong>输出:</strong> metrics + entities → 附加到文档 meta</div>
+          </div>
+          <div class="agent-arrow">→</div>
+          <div class="agent-card" style="border-color:var(--warn)">
+            <span class="agent-phase tag tag-warn">构建时</span>
+            <div class="agent-icon">🏗️</div>
+            <div class="agent-name">HybridRetriever (Index)</div>
+            <div class="agent-role">混合检索索引构建。对文档执行 BM25 分词索引 + Embedding 向量计算，准备 RRF 融合排序。</div>
+            <div class="agent-io"><strong>输入:</strong> 已分析的文档集合<br><strong>输出:</strong> BM25 索引 + 向量矩阵</div>
+          </div>
+        </div>
       </div>
 
-      <!-- News fetch -->
-      <div class="source-card">
-        <h3><span class="icon">📰</span> 新闻抓取（元数据收集）</h3>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">从东方财富拉取实时新闻，存储为元数据上下文（不进入知识库）</p>
-        <div class="form-row">
-          <input class="input" id="ingest-news-q" placeholder="主题: AI、茅台、降准..." />
-          <button class="btn btn-primary" onclick="ingestNews()">抓取</button>
+      <!-- Query-phase agents -->
+      <div>
+        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">QUERY PHASE — 查询时运行</h3>
+        <div class="agent-row">
+          <div class="agent-card">
+            <span class="agent-phase tag tag-info">查询时</span>
+            <div class="agent-icon">🔍</div>
+            <div class="agent-name">HybridRetriever (Search)</div>
+            <div class="agent-role">混合检索 + RRF 融合 + Rerank。同时执行 BM25 关键词匹配和向量语义检索，通过 RRF 融合排序返回 Top-K 结果。</div>
+            <div class="agent-io"><strong>输入:</strong> 用户查询<br><strong>输出:</strong> Top-K 相关文档 + 分数</div>
+          </div>
+          <div class="agent-arrow">→</div>
+          <div class="agent-card">
+            <span class="agent-phase tag tag-info">查询时</span>
+            <div class="agent-icon">📊</div>
+            <div class="agent-name">SlotFiller + HallucinationGuard</div>
+            <div class="agent-role">结构化槽位填充生成回答。基于检索到的上下文文档，通过 LLM 填充模板槽位生成最终回答，并由 6 层幻觉防护校验。</div>
+            <div class="agent-io"><strong>输入:</strong> 查询 + Top-K 文档<br><strong>输出:</strong> 结构化回答 + 引用来源</div>
+          </div>
         </div>
-        <div id="ingest-news-result"></div>
+      </div>
+
+      <!-- Standalone agents -->
+      <div>
+        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">STANDALONE — 独立按需调用</h3>
+        <div class="agent-row">
+          <div class="agent-card" style="border-color:var(--accent2)">
+            <span class="agent-phase" style="background:rgba(78,205,196,.15);color:var(--accent2);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">按需</span>
+            <div class="agent-icon">📈</div>
+            <div class="agent-name">KLineAgent</div>
+            <div class="agent-role">K线技术分析代理。从 Tushare 拉取行情数据，计算 MA/MACD/RSI/KDJ/布林带等技术指标，LLM 生成自然语言分析。结果不进入知识库。</div>
+            <div class="agent-io"><strong>输入:</strong> 股票名称/代码 + 时间范围<br><strong>输出:</strong> 技术指标 + LLM 分析报告</div>
+          </div>
+          <div class="agent-card" style="border-color:var(--accent2)">
+            <span class="agent-phase" style="background:rgba(78,205,196,.15);color:var(--accent2);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">按需</span>
+            <div class="agent-icon">📰</div>
+            <div class="agent-name">News Collector</div>
+            <div class="agent-role">新闻元数据采集器（非 Agent）。从同花顺/新浪/东方财富拉取实时新闻，仅存储为元数据上下文，不进入知识库。</div>
+            <div class="agent-io"><strong>输入:</strong> 搜索关键词<br><strong>输出:</strong> 新闻元数据 (标题/来源/时间)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data flow summary -->
+      <div class="dataflow-card">
+        <h3>🔄 数据流全景</h3>
+        <div class="dataflow-line">
+          <span class="df-node df-data">文件</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-agent">IngestionAgent</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-agent">ExtractionAgent</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-store">Knowledge Base</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-agent">HybridRetriever</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-agent">SlotFiller</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-data">回答</span>
+        </div>
+        <div class="dataflow-line">
+          <span class="df-node df-data">新闻</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-agent">News Collector</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-store">Metadata Store (上下文)</span>
+          <span class="df-arrow" style="opacity:.3">···</span>
+          <span style="font-size:12px;color:var(--text2)">查询时作为补充上下文注入</span>
+        </div>
+        <div class="dataflow-line">
+          <span class="df-node df-data">股票代码</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-agent">KLineAgent</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-data">技术分析 (不存储)</span>
+        </div>
       </div>
     </div>
+  </div>
 
-    <!-- Sample data -->
+  <!-- ========== STEP 1: INGEST ========== -->
+  <div class="panel active" id="panel-ingest">
+
+    <!-- Section A: File Import → Knowledge Base -->
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <h3 style="margin:0">📁 文件导入</h3>
+        <span class="tag tag-ok" style="font-size:11px">→ 知识库</span>
+      </div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">导入的文件经 <strong style="color:var(--accent)">IngestionAgent + ExtractionAgent</strong> 分析后进入知识库，用于后续 RAG 检索</p>
+      <div id="dirBrowser">
+        <div style="text-align:center;color:var(--text2);padding:16px"><div class="spinner" style="margin:0 auto"></div></div>
+      </div>
+      <details style="margin-top:12px">
+        <summary style="font-size:12px;color:var(--text2);cursor:pointer">⚙️ 自定义目录路径</summary>
+        <div class="form-row" style="margin-top:8px">
+          <input class="input" id="ingest-dir" placeholder="输入自定义目录路径..." />
+          <button class="btn btn-secondary" onclick="ingestFiles()">导入</button>
+        </div>
+        <div id="ingest-file-result"></div>
+      </details>
+    </div>
+
+    <!-- Section B: News → Metadata Only -->
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <h3 style="margin:0">📰 新闻抓取</h3>
+        <span class="tag tag-warn" style="font-size:11px">→ 元数据 · 不进入知识库</span>
+      </div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">从同花顺 / 新浪 / 东方财富拉取实时新闻，仅作为查询时的上下文补充</p>
+      <div class="form-row">
+        <input class="input" id="ingest-news-q" placeholder="主题: AI、茅台、降准..." />
+        <button class="btn btn-primary" onclick="ingestNews()">抓取</button>
+      </div>
+      <div id="ingest-news-result"></div>
+    </div>
+
+    <!-- Section C: Quick Start -->
     <div class="card">
-      <h3>📋 内置样本数据 (Demo)</h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">快速加载内置的茅台财报 + 宏观经济样本数据，用于演示</p>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <h3 style="margin:0">📋 快速开始</h3>
+        <span class="tag tag-info" style="font-size:11px">Demo</span>
+      </div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">一键加载内置的茅台财报 + 宏观经济样本数据，无需准备文件即可体验完整流程</p>
       <button class="btn btn-success btn-sm" onclick="loadSampleData()">加载样本数据</button>
       <div id="sample-load-result" style="margin-top:8px"></div>
     </div>
+
   </div>
 
   <!-- ========== STEP 2: BUILD KB ========== -->
   <div class="panel" id="panel-build">
     <div class="card">
-      <h3>🏗️ 知识库构建</h3>
+      <h3>🏗️ 知识库构建 <span class="tag tag-info" style="font-size:11px;margin-left:4px">HybridRetriever Indexing</span></h3>
       <p style="font-size:13px;color:var(--text2);margin-bottom:16px">
         将已摄取的文档进行 <strong style="color:var(--accent)">分块 → BM25索引 → Embedding向量计算 → RRF融合准备</strong>
       </p>
@@ -267,7 +413,7 @@ th { color: var(--text2); font-weight: 500; }
       </select>
       <button class="btn btn-primary" onclick="runKBQuery()">查询</button>
     </div>
-    <div class="loading" id="query-loading"><div class="spinner"></div><p>RAG 检索中 (BM25 + Vector → RRF → Rerank)...</p></div>
+    <div class="loading" id="query-loading"><div class="spinner"></div><p>RAG 检索中 (BM25 + Vector → RRF → Rerank)...</p><p style="font-size:11px;color:var(--text2);margin-top:4px">HybridRetriever + SlotFiller + HallucinationGuard</p></div>
     <div id="query-result"></div>
   </div>
 
@@ -276,7 +422,7 @@ th { color: var(--text2); font-weight: 500; }
     <div class="source-grid">
       <!-- News search tool -->
       <div class="source-card">
-        <h3><span class="icon">📰</span> 新闻搜索（元数据收集）</h3>
+        <h3><span class="icon">📰</span> 新闻搜索 <span class="tag tag-warn" style="font-size:11px;margin-left:4px">元数据收集</span></h3>
         <div class="form-row">
           <input class="input" id="tool-news-q" placeholder="搜索主题" />
           <button class="btn btn-primary btn-sm" onclick="runNewsTool()">搜索</button>
@@ -286,7 +432,7 @@ th { color: var(--text2); font-weight: 500; }
 
       <!-- K-line tool -->
       <div class="source-card">
-        <h3><span class="icon">📈</span> K线技术分析</h3>
+        <h3><span class="icon">📈</span> K线技术分析 <span class="tag tag-info" style="font-size:11px;margin-left:4px">KLineAgent</span></h3>
         <p style="font-size:12px;color:var(--muted);margin:0 0 8px">数据源: Tushare · 支持股票/ETF</p>
         <div class="form-row">
           <input class="input" id="tool-kline-q" placeholder="股票名称或代码 (如: 茅台、600519)" />
@@ -306,7 +452,7 @@ th { color: var(--text2); font-weight: 500; }
 
       <!-- Slot fill -->
       <div class="source-card">
-        <h3><span class="icon">🧩</span> 槽位填充 (结构化输出)</h3>
+        <h3><span class="icon">🧩</span> 槽位填充 <span class="tag tag-info" style="font-size:11px;margin-left:4px">SlotFiller</span></h3>
         <div class="form-row">
           <input class="input" id="tool-slot-q" placeholder="查询" />
           <select class="input" id="tool-slot-tpl" style="flex:none;width:120px">
@@ -321,7 +467,7 @@ th { color: var(--text2); font-weight: 500; }
 
       <!-- Score diagnostic -->
       <div class="source-card">
-        <h3><span class="icon">📊</span> 检索链路诊断</h3>
+        <h3><span class="icon">📊</span> 检索链路诊断 <span class="tag tag-info" style="font-size:11px;margin-left:4px">PipelineScoreCard</span></h3>
         <div class="form-row">
           <input class="input" id="tool-score-q" placeholder="查询 (纯检索打分)" />
           <button class="btn btn-primary btn-sm" onclick="runScoreTool()">打分</button>
