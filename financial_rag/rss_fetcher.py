@@ -207,6 +207,12 @@ def search_news(
             "elapsed_ms": 1200,
         }
     """
+    # Mock 模式
+    from financial_rag.config import is_mock_enabled
+    if is_mock_enabled():
+        from financial_rag.mock_data import mock_search_news
+        return mock_search_news(keyword, max_news=max_news)
+
     t0 = time.time()
     all_items = []
 
@@ -280,6 +286,12 @@ def fetch_all_news(max_per_source: int = 20) -> List[Dict]:
     Returns:
         List of news item dicts
     """
+    # Mock 模式
+    from financial_rag.config import is_mock_enabled
+    if is_mock_enabled():
+        from financial_rag.mock_data import mock_fetch_all_news
+        return mock_fetch_all_news(max_per_source=max_per_source)
+
     all_items = []
 
     # 财联社

@@ -72,6 +72,15 @@ class ReflectionConfig:
 
 
 @dataclass
+class MockConfig:
+    """Mock 模式配置 — 仅模拟数据源 API（Tushare/RSS），LLM 始终使用真实 API"""
+    # 总开关: MOCK_MODE=true 时数据源 API 返回模拟数据
+    enable: bool = field(
+        default_factory=lambda: os.getenv("MOCK_MODE", "false").lower() == "true"
+    )
+
+
+@dataclass
 class TushareConfig:
     """Tushare API 配置"""
     token: str = field(default_factory=lambda: os.getenv("TUSHARE_TOKEN", ""))
@@ -117,6 +126,7 @@ class AppConfig:
     reflection: ReflectionConfig = field(default_factory=ReflectionConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
     tushare: TushareConfig = field(default_factory=TushareConfig)
+    mock: MockConfig = field(default_factory=MockConfig)
 
     def __post_init__(self):
         for d in [self.data_dir, self.kb_dir, self.output_dir]:
@@ -125,3 +135,8 @@ class AppConfig:
 
 # 全局配置
 config = AppConfig()
+
+
+def is_mock_enabled() -> bool:
+    """快捷判断是否启用 mock 模式"""
+    return config.mock.enable

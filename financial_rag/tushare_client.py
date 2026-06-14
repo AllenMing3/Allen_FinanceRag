@@ -70,6 +70,12 @@ def fetch_stock_kline(
     Returns:
         DataFrame with columns: date, open, high, low, close, volume, amount
     """
+    # Mock 模式
+    from financial_rag.config import is_mock_enabled
+    if is_mock_enabled():
+        from financial_rag.mock_data import mock_stock_kline
+        return mock_stock_kline(ts_code, days=days, period=period)
+
     api = _get_api()
     if api is None:
         return pd.DataFrame()
@@ -122,6 +128,12 @@ def fetch_etf_kline(
     Returns:
         DataFrame with columns: date, open, high, low, close, volume, amount
     """
+    # Mock 模式
+    from financial_rag.config import is_mock_enabled
+    if is_mock_enabled():
+        from financial_rag.mock_data import mock_etf_kline
+        return mock_etf_kline(ts_code, days=days)
+
     api = _get_api()
     if api is None:
         return pd.DataFrame()
@@ -169,6 +181,12 @@ def fetch_financial_indicators(
     Returns:
         List of dicts with key financial indicators
     """
+    # Mock 模式
+    from financial_rag.config import is_mock_enabled
+    if is_mock_enabled():
+        from financial_rag.mock_data import mock_financial_indicators
+        return mock_financial_indicators(ts_code, periods=periods)
+
     api = _get_api()
     if api is None:
         return []
@@ -216,6 +234,12 @@ def search_stock(keyword: str, limit: int = 10) -> List[Dict]:
     Returns:
         [{"ts_code": "600519.SH", "name": "贵州茅台", "market": "主板", ...}, ...]
     """
+    # Mock 模式
+    from financial_rag.config import is_mock_enabled
+    if is_mock_enabled():
+        from financial_rag.mock_data import mock_search_stock
+        return mock_search_stock(keyword, limit=limit)
+
     api = _get_api()
     if api is None:
         return []
@@ -257,6 +281,12 @@ def search_etf(keyword: str, limit: int = 10) -> List[Dict]:
     Returns:
         [{"ts_code": "510300.SH", "name": "沪深300ETF", ...}, ...]
     """
+    # Mock 模式
+    from financial_rag.config import is_mock_enabled
+    if is_mock_enabled():
+        from financial_rag.mock_data import mock_search_etf
+        return mock_search_etf(keyword, limit=limit)
+
     api = _get_api()
     if api is None:
         return []

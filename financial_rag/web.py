@@ -131,6 +131,7 @@ def _ensure_init():
     _state["cfg"] = _cfg
     _state["has_key"] = bool(_cfg.llm.api_key)
     _state["llm"] = get_llm(api_key=_cfg.llm.api_key, model=_cfg.llm.model) if _state["has_key"] else None
+
     _state["retriever"] = create_hybrid_retriever()
     _state["registry"] = create_financial_registry(retriever=_state["retriever"])
     _state["executor"] = ToolExecutor(_state["registry"])
@@ -238,12 +239,14 @@ class BuildRequest(BaseModel):
 def api_config():
     _ensure_init()
     cfg = _state["cfg"]
+    from financial_rag.config import is_mock_enabled
     return {
         "llm_model": cfg.llm.model,
         "embedding_model": cfg.llm.embedding_model,
         "rerank_model": cfg.llm.rerank_model,
         "provider": cfg.llm.provider,
         "has_api_key": _state["has_key"],
+        "mock_mode": is_mock_enabled(),
     }
 
 
