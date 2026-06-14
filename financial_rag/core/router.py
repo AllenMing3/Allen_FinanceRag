@@ -37,7 +37,7 @@ class CommandRouter:
         self._has_key = bool(_cfg.llm.api_key)
         self._llm = get_llm(api_key=_cfg.llm.api_key, model=_cfg.llm.model) if self._has_key else None
         self._retriever = create_hybrid_retriever()
-        self._registry = create_financial_registry(retriever=self._retriever)
+        self._registry = create_financial_registry(retriever=self._retriever, llm=self._llm)
         self._executor = ToolExecutor(self._registry)
         self._filler = create_slot_filler(llm=self._llm, verbose=False) if self._llm else None
         self._orchestrator = create_orchestrator()
@@ -52,15 +52,15 @@ class CommandRouter:
             config=PipelineConfig(verbose=False),
         )
 
-        # 内置样本数据（各命令共享）
+        # 内置样本数据（AI 行业）
         self._sample_docs = [
-            {"text": "贵州茅台2024年营收1738.52亿元，同比增长15.66%", "meta": {"source": "maotai_2024"}},
-            {"text": "茅台2024年净利润862.28亿元，同比增长15.38%", "meta": {"source": "maotai_2024"}},
-            {"text": "2024年茅台酒毛利率91.86%，ROE为34.19%", "meta": {"source": "maotai_2024"}},
-            {"text": "茅台酒营收1465.33亿元，系列酒营收246.84亿元", "meta": {"source": "maotai_2024"}},
-            {"text": "2024年茅台经营活动现金流753.29亿元", "meta": {"source": "maotai_2024"}},
-            {"text": "2025年人民币汇率预计在7.0-7.3区间波动", "meta": {"source": "economic_outlook"}},
-            {"text": "央行2025年一季度降准0.5个百分点，释放流动性约1万亿", "meta": {"source": "pboc_policy"}},
+            {"text": "商汤科技2024年营收50.3亿元，同比增长36%，生成式AI业务收入占比达60%", "meta": {"source": "sensetime_2024"}},
+            {"text": "日日新大模型API日均调用量突破2000万次，同比增长400%，企业客户数达5800家", "meta": {"source": "sensetime_2024"}},
+            {"text": "训练集群规模达4万卡A100，算力利用率提升至85%，推理成本降至0.5元/百万token", "meta": {"source": "sensetime_2024"}},
+            {"text": "英伟达发布Blackwell B200 GPU，单卡AI训练性能较H100提升4倍", "meta": {"source": "nvidia_2025"}},
+            {"text": "智谱AI完成B+轮融资，估值超200亿元，GLM-5系列模型Q2发布", "meta": {"source": "zhipu_2025"}},
+            {"text": "微软Azure部署10万张B200用于训练GPT-5，OpenAI表示推理成本将显著降低", "meta": {"source": "microsoft_2025"}},
+            {"text": "谷歌宣布TPU v6将于Q4量产，直接对标Blackwell架构", "meta": {"source": "google_2025"}},
         ]
 
     # ---- 主入口 ----

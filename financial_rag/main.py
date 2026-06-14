@@ -48,6 +48,32 @@ def main():
     kp.add_argument("--days", type=int, default=30)
     kp.add_argument("-s", "--summarize", action="store_true")
 
+    # analyze
+    ap = sub.add_parser("analyze", help="Multi-Agent 分析")
+    ap.add_argument("file")
+    ap.add_argument("--parallel", action="store_true")
+
+    # score
+    sp = sub.add_parser("score", help="检索打分")
+    sp.add_argument("query")
+    sp.add_argument("-k", "--top_k", type=int, default=5)
+    sp.add_argument("--json", dest="json")
+    sp.add_argument("--local", action="store_true")
+
+    # slot
+    slp = sub.add_parser("slot", help="槽位填充")
+    slp.add_argument("query")
+    slp.add_argument("-t", "--template", default="quick", choices=["quick", "fin", "news", "deep"])
+    slp.add_argument("-k", "--top_k", type=int, default=5)
+    slp.add_argument("--no-freeform", dest="no_freeform", action="store_true")
+
+    # toolcall
+    tp = sub.add_parser("toolcall", help="Function Calling")
+    tp.add_argument("query", nargs="?", default="")
+    tp.add_argument("-l", "--list-tools", dest="list_tools", action="store_true")
+    tp.add_argument("--multi-turn", dest="multi_turn", action="store_true")
+    tp.add_argument("-v", "--verbose", action="store_true")
+
     args = parser.parse_args()
 
     # 初始化环境

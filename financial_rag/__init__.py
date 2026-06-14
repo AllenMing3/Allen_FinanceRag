@@ -1,5 +1,5 @@
 """
-Financial RAG — 财报/经济新闻智能分析系统
+Financial RAG — AI/科技行业智能分析 RAG 系统
 
 架构分层:
   1. core/base.py        — 基础抽象 (BaseAgent, AgentContext, AgentResult)
@@ -13,13 +13,14 @@ Financial RAG — 财报/经济新闻智能分析系统
   9. core/protocol.py    — Agent 间消息总线 (MessageBus)
 
 三个专业化 Agent:
-  - IngestionAgent   财报/新闻数据摄取 + 元数据提取
-  - ExtractionAgent  关键财务指标抽取 + 实体识别
+  - IngestionAgent   AI 行业文档摄取 + 元数据提取 (via tool calling)
+  - ExtractionAgent  AI 行业指标抽取 + 实体识别 (via tool calling)
   - ReportAgent      LLM 驱动的新闻综合分析 + 引用报告
 
-MCP 集成:
-  - mcp_client/  连接第三方 MCP 服务器 (如 china-stock-mcp) 获取新闻/行情数据
-  - 未启用 MCP 时自动回退到 feedparser RSS 新闻 + Tushare 行情
+Function Calling 工具系统:
+  - tools/extraction_tools.py — 5 个抽取工具 (LLM-first + regex fallback)
+  - tools/news_tools.py — 新闻搜索工具
+  - tools/kline_tools.py — K线分析工具
 
 与业务完全脱钩 — 所有核心架构通过抽象接口定义，可替换任意领域
 """

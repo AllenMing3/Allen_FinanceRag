@@ -12,76 +12,154 @@ User Query → Data Fetch → RAG Index → Multi-Agent (via Tool Calling) → S
 
 Three core engines power the system. All are domain-agnostic and defined by abstract interfaces.
 
+```mermaid
+graph TB
+    subgraph User Layer
+        CLI[CLI / argparse]
+        Web[FastAPI Web UI]
+    end
+
+    subgraph Scheduling Layer
+        Router[CommandRouter]
+        Pipeline[PipelineScheduler<br/>5-phase: Fetch→Index→Process→Output→Evolve]
+    end
+
+    subgraph Agent Layer
+        Coord[AgentOrchestrator]
+        IA[IngestionAgent]
+        EA[ExtractionAgent]
+        RA[ReportAgent]
+        KA[KLineAgent]
+    end
+
+    subgraph Engine Layer
+        Indexer[PipelineOrchestrator<br/>BM25 + Vector + RRF + Rerank]
+        Reflect[ReflectionLoop<br/>Think→Act→Observe→Judge]
+        Guard[HallucinationGuard<br/>6-layer check]
+    end
+
+    subgraph Tool Layer
+        FC[Function Calling Registry<br/>15 tools]
+        Extract[Extraction Tools<br/>LLM-first + regex fallback]
+        News[News Tools]
+        KLine[KLine Tools]
+        Search[HybridRetriever]
+    end
+
+    subgraph Data Layer
+        KB[Knowledge Base<br/>kb_docs.json + news_metadata.json]
+        LLM[DashScope<br/>Qwen + Embedding + Rerank]
+        Ext[External APIs<br/>10jqka / Sina / Tushare]
+    end
+
+    CLI --> Router
+    Web --> Router
+    Router --> Pipeline
+    Pipeline --> Coord
+    Pipeline --> Indexer
+    Pipeline --> Reflect
+    Coord --> IA
+    Coord --> EA
+    Coord --> RA
+    Coord --> KA
+    IA --> FC
+    EA --> FC
+    RA --> LLM
+    KA --> FC
+    FC --> Extract
+    FC --> News
+    FC --> KLine
+    FC --> Search
+    Indexer --> Search
+    Reflect --> Guard
+    Search --> KB
+    Search --> LLM
+    News --> Ext
+    KLine --> Ext
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                   PipelineScheduler (5-phase)                │
-│     Fetch → Index → Process → Output → Evolve               │
-├─────────────┬───────────────────┬────────────────────────────┤
-│  Coordinate │     Indexer       │        Reflection          │
-│             │                   │                            │
-│ AgentOrch-  │ PipelineOrch-     │ ReflectionLoop             │
-│ estrator    │ estrator          │  Think→Act→Observe→Judge   │
-│             │                   │                            │
-│ SEQUENTIAL  │ BM25 + Vector     │ HallucinationGuard         │
-│ PARALLEL    │ + RRF Fusion      │  L1-L6 six-layer check     │
-│ CONDITIONAL │ + gte-rerank      │                            │
-└─────────────┴───────────────────┴────────────────────────────┘
-```
+
+### Component Responsibilities
+
+| Engine | File | Responsibility |
+|--------|------|----------------|
+| **Coordinate** | `core/orchestrator.py` | Register agents, decide execution order, pass context. 3 modes: SEQUENTIAL / PARALLEL / CONDITIONAL |
+| **Indexer** | `core/indexer.py` | 4-stage retrieval: Clean → Extract → Retrieve → Verify. BM25+Vector + RRF fusion |
+| **Reflection** | `core/reflector.py` | ReAct loop (Think→Act→Observe→Judge) + 6-layer anti-hallucination guard |
 
 ### Knowledge Base Lifecycle
 
-Data flows through a persistent KB pipeline, surviving server restarts:
+```mermaid
+graph TB
+    subgraph Data Sources
+        News[News APIs<br/>10jqka / Sina / EastMoney]
+        File[File Import<br/>PDF / MD / TXT]
+        KLine[KLine<br/>Tushare]
+    end
 
-```
-📥 Data Sources                    🏗️ Build                    🔍 Query
-┌─────────────────┐              ┌─────────────┐             ┌─────────────┐
-│ News RSS ─────────┤ metadata    │ BM25 Index  │             │ Hybrid Query│
-│  (prior + ctx)    ─┤ → prior  ─┤ Embedding   ─┤──→ Index  ─┤ RRF Fusion  │
-│ File Import ──────┤ knowledge   │ 1024-dim    │             │ Rerank      │
-│  (analyzed)       ─┤ for agents  └─────────────┘             │ Slot Fill   │
-│ KLine (Tushare) ───┤                                         │ KLine Agent │
-│  (on-demand)        ┤                                         │ (on-demand) │
-└─────────────────┘              (auto-rebuild)              └─────┬───────┘
- data/knowledge_base/                                                ↓
- ├─ kb_docs.json          ← analyzed KB documents       Answer + KB Sources
- ├─ news_metadata.json    ← news context labels           + News Context
- └─ news_archive.jsonl    ← raw news archive (append)       + KLine Analysis
+    subgraph Ingestion
+        News -->|metadata prior + context| MetaDB[news_metadata.json]
+        News -->|archive append| ArchiveDB[news_archive.jsonl]
+        File -->|IngestionAgent + ExtractionAgent| KBDB[kb_docs.json]
+        KLine -->|on-demand| KOut[KLine Report]
+    end
+
+    subgraph Index Build
+        KBDB --> BM25[BM25 Index]
+        KBDB --> Vec[Embedding Index<br/>1024-dim]
+    end
+
+    subgraph Query
+        UserQ[User Query] --> Hybrid[HybridRetriever<br/>RRF Fusion + Rerank]
+        Hybrid --> SlotFill[Slot Filling]
+        SlotFill --> Answer[Answer + Sources]
+    end
+
+    BM25 --> Hybrid
+    Vec --> Hybrid
+    MetaDB -->|context injection| Hybrid
 ```
 
 | File | Purpose |
 |------|--------|
 | `data/knowledge_base/kb_docs.json` | Analyzed KB documents — loaded on server start, saved after file import with agent analysis |
-| `data/knowledge_base/news_metadata.json` | News context labels — titles, keywords, timestamps. Used as **parsing prior** (injected into Agent LLM prompts during file analysis) and **query-time context** |
+| `data/knowledge_base/news_metadata.json` | News context labels — used as **parsing prior** and **query-time context** |
 | `data/knowledge_base/news_archive.jsonl` | Cumulative raw news archive — each search appends with full metadata |
 | `output/*.md` | Markdown reports (news summaries, K-line analysis reports) |
-
-| Engine | File | Responsibility |
-|--------|------|----------------|
-| **Coordinate** | `core/orchestrator.py` | Register agents, decide execution order, pass context between them. Supports 3 modes: sequential, parallel, conditional. |
-| **Indexer** | `core/indexer.py` | 4-stage retrieval pipeline: Clean → Extract → Retrieve → Verify. Hybrid BM25+Vector with RRF fusion. |
-| **Reflection** | `core/reflector.py` | ReAct reasoning loop (Think→Act→Observe→Judge) + 6-layer anti-hallucination guard. |
 
 ---
 
 ## 5-Phase Pipeline
 
-```
-Phase 1: Fetch    Function Calling auto-selects data tools (RSS news / Tushare K-line)
-Phase 2: Index    Documents → BM25 + Vector → RRF fusion → gte-rerank → Top-K
-Phase 3: Process  Multi-Agent chain: Ingestion → Extraction → Report (+ KLineAgent for K-line)
-Phase 4: Output   Slot Filling with template formatting (4 templates available)
-Phase 5: Evolve   PipelineScoreCard scoring + HallucinationGuard verification
+```mermaid
+graph LR
+    P1[Phase 1: Fetch<br/>Function Calling<br/>auto-select tools] --> P2[Phase 2: Index<br/>BM25 + Vector<br/>RRF + Rerank]
+    P2 --> P3[Phase 3: Process<br/>Multi-Agent chain<br/>via Tool Calling]
+    P3 --> P4[Phase 4: Output<br/>Slot Filling<br/>4 templates]
+    P4 --> P5[Phase 5: Evolve<br/>ScoreCard +<br/>HallucinationGuard]
 ```
 
 ### Agent Chain (Phase 3 detail)
 
-Agents are **lightweight orchestrators** that delegate all heavy work to registered tools via Function Calling.
+```mermaid
+graph LR
+    Doc[Document / Query] --> IA
+    
+    IA[IngestionAgent]
+    IA -->|call_tool| T1[extract_document_metadata]
+    IA -->|call_tool| T2[detect_document_type]
+    IA -->|context| EA
+    
+    EA[ExtractionAgent]
+    EA -->|call_tool| T3[extract_financial_metrics]
+    EA -->|call_tool| T4[extract_entities]
+    EA -->|call_tool| T5[generate_search_queries]
+    EA -->|context| RA
+    
+    RA[ReportAgent]
+    RA -->|LLM synthesis| Out[Report + Citations]
+```
 
-```
-IngestionAgent   → Clean text + call_tool("extract_document_metadata") + call_tool("detect_document_type")
-ExtractionAgent  → call_tool("extract_financial_metrics") + call_tool("extract_entities") + call_tool("generate_search_queries")
-ReportAgent      → LLM-driven news synthesis with citations + trend analysis
-```
+Agents are **lightweight orchestrators** — all heavy work delegated to registered tools via Function Calling.
 
 **AI 行业指标体系（ExtractionAgent）：**
 
@@ -95,6 +173,18 @@ ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 **实体抽取维度：** companies, persons, ai_models, chips_hardware, tech_terms, financial_figures, event, industries
 
 ### Retrieval Modes
+
+```mermaid
+graph TB
+    Q[User Query]
+    Q --> Check{API Key?}
+    Check -->|No| Local[BM25 + Jaccard → RRF]
+    Check -->|Yes| Emb[BM25 + Vector → RRF]
+    Check -->|Full| Full[BM25 + Vector → RRF → gte-rerank]
+    Local --> Result[Top-K Results]
+    Emb --> Result
+    Full --> Result
+```
 
 | Mode | Condition | Chain |
 |------|-----------|-------|
@@ -217,13 +307,13 @@ python -m financial_rag.main web                          # http://127.0.0.1:800
 python -m financial_rag.main web --host 0.0.0.0 --port 9000
 
 # Unified Pipeline (CLI)
-python -m financial_rag.main pipeline "茅台2024年利润增长情况"
-python -m financial_rag.main pipeline "新能源板块利好" -t news -v
-python -m financial_rag.main pipeline "降准对银行股的影响" -t deep -o ./output
+python -m financial_rag.main pipeline "商汤科技2024年营收增长"
+python -m financial_rag.main pipeline "英伟达GPU算力布局" -t news -v
+python -m financial_rag.main pipeline "大模型推理成本趋势" -t deep -o ./output
 
 # Interactive query
 python -m financial_rag.main query -i
-python -m financial_rag.main query -q "茅台毛利率"
+python -m financial_rag.main query -q "智谱AI融资估值"
 
 # Build knowledge base
 python -m financial_rag.main build --dir ./data/financial
@@ -232,23 +322,23 @@ python -m financial_rag.main build --dir ./data/financial
 python -m financial_rag.main analyze ./report.pdf --parallel
 
 # Function Calling
-python -m financial_rag.main toolcall -l                    # list all tools
-python -m financial_rag.main toolcall "茅台营收增长" -v      # single call
-python -m financial_rag.main toolcall "对比分析" --multi-turn # multi-turn
+python -m financial_rag.main toolcall -l                          # list all tools
+python -m financial_rag.main toolcall "商汤科技营收增长" -v        # single call
+python -m financial_rag.main toolcall "对比分析" --multi-turn       # multi-turn
 
 # Slot filling
-python -m financial_rag.main slot "茅台财报" -t financial_report
+python -m financial_rag.main slot "智谱AI融资分析" -t fin
 
 # News fetching
-python -m financial_rag.main news "AI新闻" -s               # + LLM summary
+python -m financial_rag.main news "AI大模型" -s                   # + LLM summary
 
 # ETF/stock K-line
 python -m financial_rag.main kline "人工智能ETF" --days 30 -s
-python -m financial_rag.main kline "茅台" --days 60 -s
+python -m financial_rag.main kline "半导体ETF" --days 60 -s
 
 # Retrieval scoring
-python -m financial_rag.main score "茅台营收" -k 5
-python -m financial_rag.main score "汇率走势" --json scores.json
+python -m financial_rag.main score "商汤科技营收" -k 5
+python -m financial_rag.main score "GPU算力" --json scores.json
 
 # Demo
 python -m financial_rag.main demo
@@ -287,7 +377,7 @@ Env vars (`.env`):
 from financial_rag.llm import get_llm
 from financial_rag.config import config
 llm = get_llm(api_key=config.llm.api_key, model="qwen-plus")
-resp = llm.chat("分析茅台2024年毛利率")
+resp = llm.chat("分析商汤科技2024年营收增长")
 
 # Hybrid retrieval
 from financial_rag.retrievers import HybridRetriever
@@ -297,7 +387,7 @@ retriever = HybridRetriever(
     reranker=get_reranker(api_key=config.llm.api_key),
 )
 retriever.index(docs)
-results = retriever.search("茅台盈利", top_k=5)
+results = retriever.search("商汤科技营收", top_k=5)
 
 # Multi-Agent orchestration
 from financial_rag.core import create_orchestrator
@@ -308,7 +398,7 @@ result = orch.execute("./data/financial/report.pdf")
 from financial_rag.tools import create_financial_registry, create_tool_session
 registry = create_financial_registry()
 session = create_tool_session(llm=get_llm(), registry=registry)
-stats = session.run("茅台营收增长多少")
+stats = session.run("商汤科技营收增长多少")
 
 # Model routing
 from financial_rag.llm import ModelRouter
