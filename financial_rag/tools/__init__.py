@@ -5,9 +5,10 @@ Tools 包 — 能力注册中心 + 业务工具模块
 LLM 通过 Function Calling 可直接调起这些能力。
 
 子模块:
-- core:          FunctionDef, FunctionRegistry, ToolExecutor, ToolCallSession 等基础设施
-- news_tools:    新闻搜索、拉取、保存为 Markdown 报告 (fetch_news_report) [feedparser RSS]
-- kline_tools:   股票/ETF K 线数据获取、统计、保存为分析报告 (fetch_etf_kline_report) [Tushare]
+- core:              FunctionDef, FunctionRegistry, ToolExecutor, ToolCallSession 等基础设施
+- extraction_tools:  信息抽取能力 (extract_financial_metrics, extract_entities, ...)
+- news_tools:        新闻搜索、拉取、保存为 Markdown 报告 (fetch_news_report) [feedparser RSS]
+- kline_tools:       股票/ETF K 线数据获取、统计、保存为分析报告 (fetch_etf_kline_report) [Tushare]
 """
 
 # 核心基础设施 — 全部从 core.py 中转导出
@@ -32,6 +33,17 @@ from financial_rag.tools.core import (
     summarize_financials,
     # 常量
     CATEGORIES,
+)
+
+# 抽取工具模块
+from financial_rag.tools.extraction_tools import (
+    extract_financial_metrics,
+    extract_entities,
+    extract_document_metadata,
+    detect_document_type,
+    generate_search_queries,
+    EXTRACTION_TOOLS,
+    inject_extraction_llm,
 )
 
 # 业务工具模块
@@ -59,6 +71,14 @@ __all__ = [
     "compare_metrics",
     "summarize_financials",
     "CATEGORIES",
+    # extraction_tools
+    "extract_financial_metrics",
+    "extract_entities",
+    "extract_document_metadata",
+    "detect_document_type",
+    "generate_search_queries",
+    "EXTRACTION_TOOLS",
+    "inject_extraction_llm",
     # news_tools
     "fetch_news_report",
     "NEWS_REPORT_TOOL",

@@ -5,7 +5,7 @@
 """
 import os
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from financial_rag.core.base import ExecutionMode
 from financial_rag.core.orchestrator import AgentOrchestrator, CoordinatorConfig
@@ -13,11 +13,26 @@ from financial_rag.core.orchestrator import AgentOrchestrator, CoordinatorConfig
 logger = logging.getLogger(__name__)
 
 
-def create_orchestrator() -> AgentOrchestrator:
-    """创建 3-Agent 链: Ingestion → Extraction → Report"""
+def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
+    """创建 3-Agent 链: Ingestion → Extraction → Report
+
+    Args:
+        retriever: 可选的 HybridRetriever (注入搜索工具)
+        llm: 可选的 DashScopeLLM (注入抽取工具)
+    """
     from financial_rag.agents.ingestion_agent import IngestionAgent
     from financial_rag.agents.extraction_agent import ExtractionAgent
     from financial_rag.agents.report_agent import ReportAgent
+    from financial_rag.tools import create_financial_registry, ToolExecutor
+
+    # 创建能力注册中心 (含检索/计算/抽取/新闻/分析 全部工具)
+    registry = create_financial_registry(retriever=retriever, llm=llm)
+    executor = ToolExecutor(registry)
+
+    # 创建 Agent 并绑定工具能力
+    agents = [IngestionAgent(), ExtractionAgent(), ReportAgent()]
+    for agent in agents:
+        agent.bind_tools(registry, executor)
 
     orch = AgentOrchestrator(
         CoordinatorConfig(
@@ -26,11 +41,7 @@ def create_orchestrator() -> AgentOrchestrator:
             max_retries=2,
         )
     )
-    orch.register_all(
-        IngestionAgent(),
-        ExtractionAgent(),
-        ReportAgent(),
-    )
+    orch.register_all(*agents)
     return orch
 
 

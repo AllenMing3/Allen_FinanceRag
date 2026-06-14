@@ -1,9 +1,9 @@
-# Financial RAG — LLM-Powered RAG Analysis Pipeline
+# Financial RAG — AI 板块智能分析 RAG Pipeline
 
-End-to-end retrieval-augmented generation pipeline with Multi-Agent orchestration, hybrid search, and self-scoring feedback loop. Built on Alibaba DashScope (Qwen).
+面向 AI/科技行业的检索增强生成 (RAG) 系统。Multi-Agent 编排 + Function Calling 工具调用 + 混合检索 + 自评分反馈。基于阿里云 DashScope (Qwen)。
 
 ```
-User Query → Data Fetch → RAG Index → Multi-Agent Process → Slot-Filled Output → Score & Evolve
+User Query → Data Fetch → RAG Index → Multi-Agent (via Tool Calling) → Slot-Filled Output → Score & Evolve
 ```
 
 ---
@@ -75,11 +75,24 @@ Phase 5: Evolve   PipelineScoreCard scoring + HallucinationGuard verification
 
 ### Agent Chain (Phase 3 detail)
 
+Agents are **lightweight orchestrators** that delegate all heavy work to registered tools via Function Calling.
+
 ```
-IngestionAgent   → Clean text + extract metadata (source/company/date/doc_type)
-ExtractionAgent  → Pull financial metrics (revenue/profit/EPS/ROE) + entities
+IngestionAgent   → Clean text + call_tool("extract_document_metadata") + call_tool("detect_document_type")
+ExtractionAgent  → call_tool("extract_financial_metrics") + call_tool("extract_entities") + call_tool("generate_search_queries")
 ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 ```
+
+**AI 行业指标体系（ExtractionAgent）：**
+
+| 类别 | 指标 |
+|------|------|
+| 财务 | revenue, net_income, gross_margin, rd_expense, arr |
+| 算力 | gpu_count, training_cluster_size, inference_cost_per_token, compute_utilization |
+| 模型 | model_params, context_window, inference_latency, benchmark_score |
+| 商业 | api_calls, customer_count, dau, mau |
+
+**实体抽取维度：** companies, persons, ai_models, chips_hardware, tech_terms, financial_figures, event, industries
 
 ### Retrieval Modes
 
@@ -118,7 +131,7 @@ ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 | `__init__.py` | Package entry, version `2.0.0` | Re-exports all public APIs |
 | `main.py` | CLI entry (argparse) | `main()` |
 | `config.py` | Global config dataclasses | `config`, `AppConfig`, `LLMConfig`, `RAGConfig`, `MCPConfig` |
-| `prompts.py` | LLM prompt templates + few-shot examples | — |
+| `prompts.py` | AI 行业 LLM prompt 模板 + few-shot 示例（商汤/英伟达/智谱AI） | — |
 | `templates.py` | 4 slot templates: QUICK_QA, FINANCIAL_REPORT, NEWS_BRIEF, DEEP_ANALYSIS | `SlottedTemplate`, `ALL_TEMPLATES` |
 | `slot_filler.py` | Parallel slot filling engine with TTFT measurement | `SlotFiller`, `create_slot_filler` |
 | `rss_fetcher.py` | Financial news via domestic APIs (10jqka/Sina/EastMoney) + feedparser fallback | `search_news`, `fetch_all_news` |
@@ -143,8 +156,8 @@ ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 
 | File | Role |
 |------|------|
-| `ingestion_agent.py` | Data ingestion: load files/text → clean + auto-extract metadata |
-| `extraction_agent.py` | Feature extraction: financial metrics + entities + search queries |
+| `ingestion_agent.py` | Data ingestion: load files/text → clean + call_tool(extract_document_metadata, detect_document_type) |
+| `extraction_agent.py` | Feature extraction: call_tool(metrics, entities, queries) — AI 行业 12 项指标 + 9 类实体 |
 | `report_agent.py` | LLM-driven news synthesis: key findings + trend analysis + sentiment + source citations |
 | `kline_agent.py` | K-line analysis: resolve stock/ETF code → fetch data → compute indicators → LLM interpretation |
 | `utils.py` | Shared utilities: `build_news_context()` for formatting news metadata into LLM prompts |
@@ -161,6 +174,7 @@ ReportAgent      → LLM-driven news synthesis with citations + trend analysis
 | File | Role |
 |------|------|
 | `core.py` | Infrastructure: `FunctionDef`, `FunctionRegistry`, `ToolExecutor`, `ToolCallSession` |
+| `extraction_tools.py` | **5 extraction tools** (LLM-first + regex fallback): metrics, entities, metadata, doc_type, queries |
 | `news_tools.py` | Registered tool: fetch news → save as Markdown report |
 | `kline_tools.py` | Registered tool: fetch stock/ETF K-line → save as analysis report |
 
@@ -389,3 +403,14 @@ The UI guides you through the KB pipeline:
 ## License
 
 MIT
+
+---
+
+## 领域说明
+
+本系统聚焦 **AI/科技行业**，Prompt 模板、指标体系、实体类型、Few-shot 示例、文档分类均针对 AI 行业优化：
+
+- **文档类型**：年报、季报、公告、政策文件、新闻报道、研究报告、技术报告、产品发布、融资公告、行业分析、其他（共 11 种）
+- **指标体系**：财务 + 算力 + 模型 + 商业 四大类 12 项核心指标
+- **实体维度**：公司、人物、AI模型、芯片硬件、技术术语、金额、事件、行业、主题
+- **抽取策略**：LLM-first（高置信度结构化输出）+ regex-fallback（确定性高的字段兜底）

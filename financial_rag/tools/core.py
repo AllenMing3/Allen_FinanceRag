@@ -511,9 +511,19 @@ def _estimate_tokens(text: str) -> int:
 
 # ===================== 注册中心工厂 =====================
 
-def create_financial_registry(retriever=None) -> FunctionRegistry:
-    """创建预置金融能力的注册中心"""
+def create_financial_registry(retriever=None, llm=None) -> FunctionRegistry:
+    """创建预置金融能力的注册中心
+
+    Args:
+        retriever: 可选的 HybridRetriever 实例 (注入搜索工具)
+        llm: 可选的 DashScopeLLM 实例 (注入抽取工具)
+    """
     registry = FunctionRegistry(name="financial")
+
+    # 注入抽取工具的 LLM
+    from financial_rag.tools.extraction_tools import inject_extraction_llm, EXTRACTION_TOOLS
+    if llm:
+        inject_extraction_llm(llm)
 
     # 注入检索器
     search_fn, set_retriever = _make_search_tool()
@@ -686,6 +696,10 @@ def create_financial_registry(retriever=None) -> FunctionRegistry:
         category="data",
         tags=["公告", "财报", "年报", "季报"],
     ))
+
+    # ---- 抽取类 (ExtractionAgent / IngestionAgent 调用) ----
+    for tool_def in EXTRACTION_TOOLS:
+        registry.add(tool_def)
 
     # ---- 新闻报告类（高级封装，含保存 Markdown）----
     from financial_rag.tools.news_tools import NEWS_REPORT_TOOL
@@ -873,7 +887,7 @@ def create_tool_session(
 ) -> ToolCallSession:
     """快速创建 ToolCallSession"""
     if registry is None:
-        registry = create_financial_registry(retriever=retriever)
+        registry = create_financial_registry(retriever=retriever, llm=llm)
     if executor is None:
         executor = ToolExecutor(registry)
     return ToolCallSession(llm=llm, registry=registry, executor=executor, **kwargs)

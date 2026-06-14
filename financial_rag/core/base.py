@@ -6,9 +6,12 @@ Agent 基础抽象 — BaseAgent, AgentContext, AgentResult, AgentStatus, Execut
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from enum import Enum
 import time
+
+if TYPE_CHECKING:
+    from financial_rag.tools.core import FunctionRegistry, ToolExecutor, ToolCallRequest
 
 
 class AgentStatus(Enum):
@@ -66,6 +69,35 @@ class BaseAgent(ABC):
         self.name = name
         self.description = description
         self.status = AgentStatus.IDLE
+        self._registry: Optional["FunctionRegistry"] = None
+        self._executor: Optional["ToolExecutor"] = None
+
+    def bind_tools(self, registry: "FunctionRegistry", executor: "ToolExecutor" = None):
+        """注入 Function Calling 能力 — 让 Agent 可以调用已注册的工具"""
+        self._registry = registry
+        if executor is None:
+            from financial_rag.tools.core import ToolExecutor
+            self._executor = ToolExecutor(registry)
+        else:
+            self._executor = executor
+
+    def call_tool(self, name: str, **kwargs) -> Any:
+        """调用已注册的工具，返回结果或抛出异常"""
+        if not self._registry:
+            raise RuntimeError(
+                f"{self.name}: 未绑定 FunctionRegistry，无法调用工具 '{name}'。"
+                f"请先调用 bind_tools() 注入能力。"
+            )
+        from financial_rag.tools.core import ToolCallRequest
+        request = ToolCallRequest(
+            id=f"agent_{self.name}_{time.time():.0f}",
+            name=name,
+            arguments=kwargs,
+        )
+        result = self._executor.execute(request)
+        if not result.success:
+            raise RuntimeError(f"工具 '{name}' 执行失败: {result.error}")
+        return result.result
 
     @abstractmethod
     def process(self, context: AgentContext) -> AgentResult:

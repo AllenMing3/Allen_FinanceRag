@@ -1,6 +1,6 @@
 # Financial RAG 使用手册
 
-> 面向使用者的操作指南。架构细节请看 `README.md`。
+> 面向 AI/科技行业的智能分析 RAG 系统操作指南。架构细节请看 `README.md`。
 
 ---
 
@@ -104,9 +104,9 @@ python -c "from financial_rag.llm import get_llm; print('llm ok')"
        ↓ 注入 LLM prompt
 原始文件 (.jsonl / .txt / .json)
        ↓
-IngestionAgent  →  清洗文本 + 提取元数据（来源、公司、日期、文档类型）
+IngestionAgent  →  清洗文本 + 调用工具提取元数据（来源、公司、日期、文档类型）
        ↓
-ExtractionAgent →  抽取财务指标（营收/利润/毛利率/EPS...）+ 实体（公司/事件）
+ExtractionAgent →  调用工具抽取 AI 行业指标（营收/研发投入/算力/模型/API调用量...）+ 实体（公司/AI模型/芯片/技术术语）
        ↓
 KB 文档（原文 + 富化元数据）→ kb_docs.json
 ```
@@ -115,12 +115,12 @@ KB 文档（原文 + 富化元数据）→ kb_docs.json
 
 ```json
 {
-  "text": "贵州茅台2024年营收1738亿元，净利润862亿元...",
+  "text": "商汤科技2024年营收50.3亿元，训练集群4万卡A100，API日调用2000万次...",
   "meta": {
-    "source": "上交所公告",
+    "source": "公司公告",
     "analyzed": true,
-    "metrics": {"revenue": "...", "net_income": "...", "eps": "..."},
-    "entities": [{"company": "贵州茅台", "event_type": "..."}]
+    "metrics": {"revenue": "50.3亿元", "gpu_count": "40000卡", "api_calls": "2000万次/日", ...},
+    "entities": {"companies": [{"name": "商汤科技"}], "ai_models": [...], "chips_hardware": [...]}
   }
 }
 ```
@@ -234,7 +234,7 @@ python -m financial_rag.main web
 点目录旁的"分析并导入"按钮。系统会：
 1. 读取目录下的文件（.jsonl / .txt / .json）
 2. 对每篇文档运行 IngestionAgent + ExtractionAgent（**带元数据上下文**）
-3. 抽取财务指标（营收、利润、EPS...）和实体（公司、事件）
+3. 抽取 AI 行业指标（营收、研发投入、算力规模、模型参数、API调用量...）和实体（公司、AI模型、芯片、技术术语）
 4. 存入 `kb_docs.json`
 
 可以把自定义文件放到 `./data/financial` 目录。

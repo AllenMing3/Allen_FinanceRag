@@ -133,10 +133,10 @@ def _ensure_init():
     _state["llm"] = get_llm(api_key=_cfg.llm.api_key, model=_cfg.llm.model) if _state["has_key"] else None
 
     _state["retriever"] = create_hybrid_retriever()
-    _state["registry"] = create_financial_registry(retriever=_state["retriever"])
+    _state["registry"] = create_financial_registry(retriever=_state["retriever"], llm=_state["llm"])
     _state["executor"] = ToolExecutor(_state["registry"])
     _state["filler"] = create_slot_filler(llm=_state["llm"], verbose=False) if _state["llm"] else None
-    _state["orchestrator"] = create_orchestrator()
+    _state["orchestrator"] = create_orchestrator(retriever=_state["retriever"], llm=_state["llm"])
     _state["scheduler"] = create_pipeline_scheduler(
         orchestrator=_state["orchestrator"],
         retriever=_state["retriever"],
@@ -376,6 +376,13 @@ def api_ingest_files(req: IngestFilesRequest):
 
         ingest_agent = IngestionAgent()
         extract_agent = ExtractionAgent()
+
+        # 绑定工具能力 (从全局注册中心)
+        registry = _state.get("registry")
+        executor = _state.get("executor")
+        if registry and executor:
+            ingest_agent.bind_tools(registry, executor)
+            extract_agent.bind_tools(registry, executor)
 
         for doc in raw_docs:
             try:

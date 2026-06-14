@@ -2,13 +2,7 @@
   {
     "text": "贵州茅台发布2024年年报：营收1738.52亿元，同比增长15.66%\n\n贵州茅台酒股份有限公司（600519.SH）于2025年3月28日正式披露2024年年度报告。报告显示，公司2024年全年实现营业总收入1738.52亿元，同比增长15.66%；归属于上市公司股东的净利润862.28亿元，同比增长15.38%；基本每股收益68.64元，同比增长15.38%。\n\n盈利能力方面，2024年茅台酒毛利率达91.86%，系列酒毛利率79.46%，综合毛利率为91.94%。净资产收益率（ROE）为34.19%，较上年略有提升。经营活动产生的现金流量净额为753.29亿元，同比下降7.45%，主要系税金及附加增加所致。\n\n分产品来看，茅台酒实现营收1465.33亿元，同比增长16.01%；系列酒实现营收246.84亿元，同比增长19.51%。其中，茅台1935系列表现突出，销售收入突破100亿元。\n\n产能方面，2024年茅台酒基酒产量5.63万吨，系列酒基酒产量4.81万吨。公司计划2025年实现营业总收入同比增长约15%，持续推进\"十四五\"战略目标。\n\n截至2024年末，公司总资产达到2864.56亿元，总负债为425.78亿元，资产负债率14.86%，财务状况保持稳健。",
     "meta": {
-      "source": "上交所公告",
-      "company": "贵州茅台",
-      "date": "2025-03-28",
-      "fiscal_period": "2024年度",
-      "currency": "CNY",
-      "doc_type": "年报",
-      "file": "./financial_rag/data\\financial_news.jsonl",
+      "source": "kb_docs.json",
       "analyzed": true,
       "metrics": {
         "revenue": {
@@ -70,214 +64,128 @@
           "unit": "万吨",
           "yoy_growth": "无",
           "period": "2024年度"
-        }
+        },
+        "_confidence": "high",
+        "_source": "llm"
       },
-      "entities": [
-        {
-          "type": "company",
-          "data": {
+      "entities": {
+        "companies": [
+          {
             "name": "贵州茅台酒股份有限公司",
-            "role": "披露主体/上市公司",
+            "role": "报告主体/上市公司",
             "industry": "白酒/食品饮料"
           }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
             "label": "营业总收入",
             "value": 1738.52,
             "unit": "亿元"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "营业总收入同比增长率",
             "value": 15.66,
             "unit": "%"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "归属于上市公司股东的净利润",
             "value": 862.28,
             "unit": "亿元"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "净利润同比增长率",
             "value": 15.38,
             "unit": "%"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "基本每股收益",
             "value": 68.64,
             "unit": "元"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "茅台酒毛利率",
             "value": 91.86,
             "unit": "%"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "系列酒毛利率",
             "value": 79.46,
             "unit": "%"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "综合毛利率",
             "value": 91.94,
             "unit": "%"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "净资产收益率（ROE）",
             "value": 34.19,
             "unit": "%"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "经营活动产生的现金流量净额",
             "value": 753.29,
             "unit": "亿元"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "经营活动现金流同比变动",
             "value": -7.45,
             "unit": "%"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "茅台酒营收",
             "value": 1465.33,
             "unit": "亿元"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "系列酒营收",
             "value": 246.84,
             "unit": "亿元"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "茅台1935系列表现（销售收入）",
             "value": 100,
             "unit": "亿元"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "茅台酒基酒产量",
             "value": 5.63,
             "unit": "万吨"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "系列酒基酒产量",
             "value": 4.81,
             "unit": "万吨"
           }
+        ],
+        "event": {
+          "type": "财报发布",
+          "description": "贵州茅台发布2024年年报，营收与净利润均实现约15.4%增长，毛利率维持高位，ROE提升",
+          "impact": "正面"
         },
-        {
-          "type": "event",
-          "data": {
-            "type": "财报发布",
-            "description": "贵州茅台披露2024年年度报告，营收与净利润均实现约15.4%增长，毛利率维持高位，现金流小幅承压",
-            "impact": "正面"
-          }
-        },
-        {
-          "type": "industry",
-          "data": {
-            "name": "白酒"
-          }
-        },
-        {
-          "type": "industry",
-          "data": {
-            "name": "食品饮料"
-          }
-        },
-        {
-          "type": "industry",
-          "data": {
-            "name": "高端消费"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
-            "name": "年报"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
-            "name": "白酒龙头"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
-            "name": "高毛利"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
-            "name": "十四五战略"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
-            "name": "现金流"
-          }
-        }
-      ]
+        "related_companies": [],
+        "industries": [
+          "白酒",
+          "食品饮料",
+          "高端消费"
+        ],
+        "key_topics": [
+          "年报",
+          "白酒龙头",
+          "高毛利",
+          "十四五战略",
+          "高端消费"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
     }
   },
   {
     "text": "央行宣布下调金融机构存款准备金率0.5个百分点\n\n中国人民银行于2025年6月1日宣布，决定自2025年6月15日起，下调金融机构存款准备金率0.5个百分点（不含已执行5%存款准备金率的金融机构）。\n\n本次降准后，金融机构加权平均存款准备金率约为7.0%，预计将释放长期流动性约1.2万亿元。央行表示，此举旨在保持银行体系流动性合理充裕，引导金融机构加大对实体经济的支持力度，降低社会综合融资成本。\n\n分析人士认为，此次降准将有效缓解银行体系的资金压力，有利于降低企业融资成本，特别是对中小微企业和制造业的信贷支持将进一步加强。预计可降低银行负债成本约150亿元/年，有助于稳定净息差。\n\n从行业影响来看，银行业将直接受益于降准释放的流动性，股份制银行和城商行的弹性更大。房地产行业也将间接受益，按揭贷款利率有望进一步下行。券商研究机构预计，此次降准对A股市场形成正面催化，金融、地产板块短期有望走强。\n\n央行还表示，将继续实施稳健的货币政策，灵活适度、精准有效，保持流动性合理充裕，推动经济持续回升向好。",
     "meta": {
-      "source": "央行公告",
-      "company": "",
-      "date": "2025-06-01",
-      "fiscal_period": "",
-      "currency": "CNY",
-      "doc_type": "政策文件",
-      "file": "./financial_rag/data\\financial_news.jsonl",
+      "source": "kb_docs.json",
       "analyzed": true,
       "metrics": {
         "total_assets": {
@@ -286,159 +194,194 @@
           "yoy_growth": "无",
           "period": "2025年6月"
         },
-        "annual_cost_saving": {
+        "annual_liability_cost_reduction": {
           "value": 150,
-          "unit": "亿元/年",
+          "unit": "亿元",
           "yoy_growth": "无",
           "period": "2025年度"
-        }
+        },
+        "reserve_requirement_ratio": {
+          "value": 7.0,
+          "unit": "%",
+          "yoy_growth": "无",
+          "period": "2025年6月15日起"
+        },
+        "_confidence": "high",
+        "_source": "llm"
       },
-      "entities": [
-        {
-          "type": "company",
-          "data": {
+      "entities": {
+        "companies": [
+          {
             "name": "中国人民银行",
-            "role": "政策制定与发布机构",
+            "role": "政策发布与执行机构",
             "industry": "中央银行/金融监管"
           }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
             "label": "存款准备金率下调幅度",
             "value": 0.5,
             "unit": "个百分点"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "降准后加权平均存款准备金率",
             "value": 7.0,
             "unit": "%"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "释放长期流动性规模",
             "value": 1.2,
             "unit": "万亿元"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
+          },
+          {
             "label": "年化银行负债成本降低额",
             "value": 150,
             "unit": "亿元"
           }
+        ],
+        "event": {
+          "type": "货币政策调整",
+          "description": "中国人民银行宣布自2025年6月15日起下调金融机构存款准备金率0.5个百分点",
+          "impact": "正面"
         },
-        {
-          "type": "event",
-          "data": {
-            "type": "货币政策调整",
-            "description": "中国人民银行宣布自2025年6月15日起下调金融机构存款准备金率0.5个百分点",
-            "impact": "正面"
-          }
-        },
-        {
-          "type": "related_company",
-          "data": {
-            "name": "股份制银行"
-          }
-        },
-        {
-          "type": "related_company",
-          "data": {
-            "name": "城商行"
-          }
-        },
-        {
-          "type": "related_company",
-          "data": {
-            "name": "券商研究机构"
-          }
-        },
-        {
-          "type": "related_company",
-          "data": {
-            "name": "商业银行（泛指）"
-          }
-        },
-        {
-          "type": "industry",
-          "data": {
-            "name": "银行业"
-          }
-        },
-        {
-          "type": "industry",
-          "data": {
-            "name": "房地产"
-          }
-        },
-        {
-          "type": "industry",
-          "data": {
-            "name": "证券业"
-          }
-        },
-        {
-          "type": "industry",
-          "data": {
-            "name": "制造业"
-          }
-        },
-        {
-          "type": "industry",
-          "data": {
-            "name": "中小微企业（作为经济主体，非行业但具板块属性）"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
-            "name": "降准"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
-            "name": "流动性管理"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
-            "name": "实体经济支持"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
-            "name": "融资成本下降"
-          }
-        },
-        {
-          "type": "topic",
-          "data": {
-            "name": "货币政策稳健性"
-          }
-        }
-      ]
+        "related_companies": [
+          "股份制银行",
+          "城商行",
+          "券商",
+          "房地产企业"
+        ],
+        "industries": [
+          "银行业",
+          "房地产",
+          "证券",
+          "制造业",
+          "中小微企业"
+        ],
+        "key_topics": [
+          "降准",
+          "流动性管理",
+          "实体经济支持",
+          "融资成本下降",
+          "稳健货币政策"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
     }
   },
   {
     "text": "字节跳动收购AI芯片公司寒武纪子公司，布局算力基础设施\n\n据多家财经媒体2025年5月20日报道，字节跳动以约45亿元人民币收购了寒武纪旗下AI芯片子公司行歌科技80%的股权，加速其在人工智能算力基础设施领域的布局。\n\n行歌科技成立于2021年，专注于云端智能芯片的设计与研发，其产品主要面向数据中心和AI训练场景。该公司此前已发布多款7nm工艺的AI训练芯片，在算力密度和能效比方面具备一定竞争力。\n\n此次收购是字节跳动在AI算力领域的重大战略动作。分析人士指出，随着字节跳动旗下豆包大模型等AI产品的快速发展，公司对算力的需求持续攀升。通过收购芯片设计公司，字节跳动有望构建从芯片到模型再到应用的全栈AI能力，降低对外部GPU供应商的依赖。\n\n受此消息影响，AI芯片相关概念股出现波动。寒武纪（688256.SH）股价当日上涨3.2%，市场认为出售子公司有助于其聚焦主营业务。国内GPU芯片公司景嘉微、海光信息等股价也有不同程度上涨。\n\n行业分析师认为，互联网巨头自研或并购AI芯片将成为趋势。除字节跳动外，阿里巴巴（平头哥）、百度（昆仑芯）等也已布局AI芯片领域，国内AI芯片市场竞争格局正在重塑。预计2025-2027年，中国AI芯片市场规模将从800亿元增长至2000亿元以上。",
     "meta": {
-      "source": "财经媒体",
-      "company": "字节跳动",
-      "date": "2025-05-20",
-      "fiscal_period": "",
-      "currency": "CNY",
+      "source": "kb_docs.json",
+      "analyzed": true,
+      "metrics": {
+        "acquisition_price": {
+          "value": 45,
+          "unit": "亿元",
+          "yoy_growth": "无",
+          "period": "2025年5月"
+        },
+        "acquired_equity_ratio": {
+          "value": 80,
+          "unit": "%",
+          "yoy_growth": "无",
+          "period": "2025年5月"
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "字节跳动",
+            "role": "收购方",
+            "industry": "互联网/人工智能"
+          },
+          {
+            "name": "寒武纪",
+            "role": "母公司/出售方",
+            "industry": "AI芯片/半导体"
+          },
+          {
+            "name": "行歌科技",
+            "role": "被收购子公司",
+            "industry": "AI芯片/云计算"
+          },
+          {
+            "name": "阿里巴巴（平头哥）",
+            "role": "同业布局方",
+            "industry": "AI芯片/半导体"
+          },
+          {
+            "name": "百度（昆仑芯）",
+            "role": "同业布局方",
+            "industry": "AI芯片/半导体"
+          },
+          {
+            "name": "景嘉微",
+            "role": "关联上市公司",
+            "industry": "GPU芯片/半导体"
+          },
+          {
+            "name": "海光信息",
+            "role": "关联上市公司",
+            "industry": "GPU芯片/半导体"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "收购金额",
+            "value": 45,
+            "unit": "亿元人民币"
+          },
+          {
+            "label": "股权收购比例",
+            "value": 80,
+            "unit": "%"
+          }
+        ],
+        "event": {
+          "type": "并购",
+          "description": "字节跳动以45亿元人民币收购寒武纪旗下行歌科技80%股权，强化AI算力基础设施布局",
+          "impact": "正面"
+        },
+        "related_companies": [
+          "寒武纪（688256.SH）",
+          "景嘉微",
+          "海光信息"
+        ],
+        "industries": [
+          "AI芯片",
+          "半导体",
+          "云计算",
+          "人工智能",
+          "数据中心"
+        ],
+        "key_topics": [
+          "AI算力",
+          "芯片并购",
+          "全栈AI能力",
+          "国产替代",
+          "互联网巨头芯片布局"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "中信证券：接下来霍尔木兹海峡通航是A股非AI板块转机的临界点 【中信证券：接下来霍尔木兹海峡通航是A股非AI板块转机的临界点】中信证券最新A股策略报告指出，市场情绪降温后，科技、周期、金融和消费板块各自有各自的驱动逻辑和节奏。对市场而言，目前最大的挑战是霍尔木兹海峡短期通航的假设开始动摇，通胀和紧缩预期升温。中信证券认为接下来海峡通航是“换副牌”的时刻，亦是非AI板块转机的临界点。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "中信证券：接下来霍尔木兹海峡通航是A股非AI板块转机的临界点",
+      "publish_time": "2026-06-07 18:15:05",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
       "doc_type": "新闻报道",
-      "file": "./financial_rag/data\\financial_news.jsonl",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
       "analyzed": true,
       "metrics": {
         "revenue": {
@@ -494,168 +437,4379 @@
           "unit": "",
           "yoy_growth": "无",
           "period": ""
-        }
+        },
+        "_confidence": "high",
+        "_source": "llm"
       },
-      "entities": [
-        {
-          "type": "company",
-          "data": {
-            "name": "字节跳动",
-            "role": "收购方",
-            "industry": "互联网/人工智能"
+      "entities": {
+        "companies": [
+          {
+            "name": "中信证券",
+            "role": "发布机构",
+            "industry": "证券/金融"
           }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "政策与地缘风险事件",
+          "description": "霍尔木兹海峡通航不确定性加剧，引发市场对通胀和货币政策紧缩预期升温",
+          "impact": "负面"
         },
-        {
-          "type": "company",
-          "data": {
-            "name": "寒武纪",
-            "role": "母公司/出售方",
-            "industry": "AI芯片/半导体"
+        "related_companies": [],
+        "industries": [
+          "科技",
+          "周期",
+          "金融",
+          "消费",
+          "AI"
+        ],
+        "key_topics": [
+          "霍尔木兹海峡",
+          "A股策略",
+          "非AI板块",
+          "通胀预期",
+          "地缘风险"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "陈茂波：香港AI+与产业发展策略委员会顺利组成 【陈茂波：香港AI+与产业发展策略委员会顺利组成】香港特区政府财政司司长陈茂波今日（7日）表示，财政预算案宣布成立的“AI+与产业发展策略委员会”已经顺利组成，成员包括专家、学者、以及商会、企业及园区公司的代表等，本月内将召开首次会议。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "陈茂波：香港AI+与产业发展策略委员会顺利组成",
+      "publish_time": "2026-06-07 15:02:52",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "香港特区政府",
+            "role": "主管部门",
+            "industry": "政府机构"
+          },
+          {
+            "name": "AI+与产业发展策略委员会",
+            "role": "新设咨询机构",
+            "industry": "政策研究/产业规划"
           }
-        },
-        {
-          "type": "company",
-          "data": {
-            "name": "行歌科技",
-            "role": "被收购子公司",
-            "industry": "AI芯片/云计算"
+        ],
+        "persons": [
+          {
+            "name": "陈茂波",
+            "title": "香港特区政府财政司司长"
           }
+        ],
+        "financial_figures": [],
+        "event": {
+          "type": "政策发布",
+          "description": "香港特区政府成立AI+与产业发展策略委员会",
+          "impact": "正面"
         },
-        {
-          "type": "company",
-          "data": {
-            "name": "景嘉微",
-            "role": "关联公司",
-            "industry": "GPU芯片/半导体"
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "产业发展",
+          "政策规划"
+        ],
+        "key_topics": [
+          "AI+",
+          "产业发展",
+          "政策委员会",
+          "香港经济",
+          "财政预算案"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "黄仁勋会见韩国两大游戏商代表共商游戏AI合作方案 【黄仁勋会见韩国两大游戏商代表共商游戏AI合作方案】据报道，英伟达首席执行官（CEO）黄仁勋7日在首尔江南区的网吧先后会见韩国游戏公司KRAFTON创始人兼董事长蔣柄圭和游戏开发商NCSOFT代表金泽辰。据悉，当天黄仁勋和蔣柄圭可能就物理AI等人形机器人，以及基于英伟达近期发布的首款AI笔记本电脑系列“RTX Spark”的游戏领域合作等进行讨论。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "黄仁勋会见韩国两大游戏商代表共商游戏AI合作方案",
+      "publish_time": "2026-06-07 14:53:02",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "英伟达",
+            "role": "AI技术提供方",
+            "industry": "半导体/AI芯片"
+          },
+          {
+            "name": "KRAFTON",
+            "role": "游戏开发商",
+            "industry": "游戏/娱乐"
+          },
+          {
+            "name": "NCSOFT",
+            "role": "游戏开发商",
+            "industry": "游戏/娱乐"
           }
-        },
-        {
-          "type": "company",
-          "data": {
-            "name": "海光信息",
-            "role": "关联公司",
-            "industry": "GPU芯片/半导体"
+        ],
+        "persons": [
+          {
+            "name": "黄仁勋",
+            "title": "英伟达首席执行官（CEO）"
+          },
+          {
+            "name": "蔣柄圭",
+            "title": "KRAFTON创始人兼董事长"
+          },
+          {
+            "name": "金泽辰",
+            "title": "NCSOFT代表"
           }
+        ],
+        "financial_figures": [],
+        "event": {
+          "type": "战略合作会谈",
+          "description": "黄仁勋与韩国两大游戏商代表就游戏AI、物理AI及RTX Spark笔记本在游戏领域的应用展开合作讨论",
+          "impact": "正面"
         },
-        {
-          "type": "company",
-          "data": {
-            "name": "阿里巴巴（平头哥）",
-            "role": "同业布局方",
-            "industry": "AI芯片/互联网"
+        "related_companies": [
+          "KRAFTON",
+          "NCSOFT",
+          "英伟达"
+        ],
+        "industries": [
+          "游戏",
+          "人工智能",
+          "半导体",
+          "人形机器人",
+          "消费电子"
+        ],
+        "key_topics": [
+          "游戏AI",
+          "物理AI",
+          "RTX Spark",
+          "AI芯片合作",
+          "人形机器人"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "AI等机器网络请求量首超人类 【AI等机器网络请求量首超人类】据央视新闻，全球最大的互联网托管服务商之一——云网络安全服务公司发布的最新数据显示，在其托管网站收到的网络访问请求中，约57.4%来自人工智能和自动化程序，42.6%来自人类用户。该公司称，这是互联网历史上来自人类的网络访问请求数量首次被机器超越。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI等机器网络请求量首超人类",
+      "publish_time": "2026-06-07 13:32:46",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "云网络安全服务公司",
+            "role": "数据发布方",
+            "industry": "云计算/网络安全"
           }
-        },
-        {
-          "type": "company",
-          "data": {
-            "name": "百度（昆仑芯）",
-            "role": "同业布局方",
-            "industry": "AI芯片/互联网"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
-            "label": "收购金额",
-            "value": 45,
-            "unit": "亿元人民币"
-          }
-        },
-        {
-          "type": "financial_figure",
-          "data": {
-            "label": "收购股权比例",
-            "value": 80,
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "AI及自动化程序请求占比",
+            "value": 57.4,
+            "unit": "%"
+          },
+          {
+            "label": "人类用户请求占比",
+            "value": 42.6,
             "unit": "%"
           }
+        ],
+        "event": {
+          "type": "技术趋势事件",
+          "description": "全球互联网托管流量中AI与自动化程序请求量首次超过人类用户请求量",
+          "impact": "中性"
         },
-        {
-          "type": "event",
-          "data": {
-            "type": "并购",
-            "description": "字节跳动以45亿元人民币收购寒武纪旗下AI芯片子公司行歌科技80%股权",
-            "impact": "正面"
-          }
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "网络安全",
+          "云计算",
+          "互联网基础设施"
+        ],
+        "key_topics": [
+          "AI流量",
+          "机器请求",
+          "网络流量结构变化",
+          "自动化趋势",
+          "人机交互范式转变"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "OpenAI正在准备对ChatGPT进行其推出以来规模最大的一次改版 OpenAI正在准备对ChatGPT进行其推出以来规模最大的一次改版。该公司计划将ChatGPT转型为结合编码工具和人工智能体的“超级应用”，并添加高管们认为能够创造更多收入的产品。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "OpenAI正在准备对ChatGPT进行其推出以来规模最大的一次改版",
+      "publish_time": "2026-06-07 12:08:40",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "related_company",
-          "data": {
-            "name": "寒武纪"
-          }
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "related_company",
-          "data": {
-            "name": "景嘉微"
-          }
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "related_company",
-          "data": {
-            "name": "海光信息"
-          }
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "industry",
-          "data": {
-            "name": "AI芯片"
-          }
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "industry",
-          "data": {
-            "name": "半导体"
-          }
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "industry",
-          "data": {
-            "name": "云计算"
-          }
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "industry",
-          "data": {
-            "name": "人工智能"
-          }
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "industry",
-          "data": {
-            "name": "数据中心"
-          }
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "topic",
-          "data": {
-            "name": "AI算力"
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "OpenAI",
+            "role": "主体公司",
+            "industry": "人工智能/科技"
           }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "产品升级",
+          "description": "OpenAI计划对ChatGPT进行推出以来规模最大的一次改版，转型为集成编码工具和AI代理的超级应用",
+          "impact": "正面"
         },
-        {
-          "type": "topic",
-          "data": {
-            "name": "芯片并购"
-          }
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "软件开发",
+          "人机交互"
+        ],
+        "key_topics": [
+          "ChatGPT",
+          "超级应用",
+          "AI代理",
+          "产品升级",
+          "编码工具"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "北京高考作文考教老人用AI 【北京高考作文考教老人用AI】北京高考作文题目出炉，在微写作部分，考题提到教老人用AI。从下面三个题目中任选一题，按要求作答。不超过150字。不透露所在区、学校及个人信息。（1）为增强同学们的劳动意识，班级打算利用半天时间走进社区开展劳动实践活动，现征集同学们的建议。你想设计一项怎样的活动？请说说理由。要求：写出活动的主要内容，理由充分，条理清晰。（2）重阳节到来之际，学校拟组织志愿者到敬老院开展“人工智能（AI）与幸福晚年”主题活动。请你写一段活动的宣传语，吸引老人们积极参加。要求：语言得体，有吸引力。（3）请以“因为向往”为题目，写一首小诗或一段抒情文字。要求：感情真挚，语言生动，有感染力。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "北京高考作文考教老人用AI",
+      "publish_time": "2026-06-07 11:41:45",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "topic",
-          "data": {
-            "name": "全栈AI能力"
-          }
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "topic",
-          "data": {
-            "name": "国产替代"
-          }
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
         },
-        {
-          "type": "topic",
-          "data": {
-            "name": "互联网巨头芯片布局"
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "教育政策/考试命题",
+          "description": "北京高考微写作题目设置‘教老人用AI’主题，融入人工智能与老龄化社会议题",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "教育",
+          "人工智能",
+          "养老/老龄服务"
+        ],
+        "key_topics": [
+          "高考作文",
+          "人工智能普及",
+          "数字适老化",
+          "教育创新",
+          "银发经济"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "AI巨无霸冲击IPO！警惕资本市场“最贵的陷阱” 【AI巨无霸冲击IPO！警惕资本市场“最贵的陷阱”】人工智能初创公司Anthropic本周官方宣布，已向美国证券交易委员会（SEC）秘密递交S-1招股书，就在交表前夕，该公司刚刚宣布完成了H轮融资，投后估值为6.5万亿元人民币（9650亿美元）。这家成立时间仅5年、今年二季度才开始盈利的公司，正创造着资本市场历史上的奇迹。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI巨无霸冲击IPO！警惕资本市场“最贵的陷阱”",
+      "publish_time": "2026-06-07 07:24:00",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "total_valuation": {
+          "value": 6.5,
+          "unit": "万亿元人民币",
+          "yoy_growth": "无",
+          "period": "H轮融资后"
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "Anthropic",
+            "role": "AI初创公司",
+            "industry": "人工智能"
+          },
+          {
+            "name": "美国证券交易委员会",
+            "role": "监管机构",
+            "industry": "金融监管"
           }
-        }
-      ]
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "投后估值",
+            "value": 6.5,
+            "unit": "万亿元人民币"
+          },
+          {
+            "label": "投后估值",
+            "value": 9650,
+            "unit": "亿美元"
+          }
+        ],
+        "event": {
+          "type": "IPO",
+          "description": "Anthropic向SEC秘密递交S-1招股书，启动IPO进程",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "资本市场",
+          "金融科技"
+        ],
+        "key_topics": [
+          "IPO",
+          "人工智能",
+          "估值",
+          "资本市场",
+          "初创公司"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "AI触角伸到赛事经济 海口要做产城融合之城 【AI触角伸到赛事经济 海口要做产城融合之城】科技、赛事、旅游，海口正借赛事经济风口，重构产城融合创新之城的想象。当AI从产业端延伸至赛事端，并在一个城市形成闭环，海口的思路本质上是“以赛为媒，以赛兴业”。当越来越多的国际科创赛事开始将亚洲目光投向南海之滨，这个曾经被视为“冬季度假地”的城市，正在进入一条新的叙事轨道。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI触角伸到赛事经济 海口要做产城融合之城",
+      "publish_time": "2026-06-07 06:01:00",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "海口",
+            "role": "主办城市/发展主体",
+            "industry": "城市运营/地方政府"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "城市战略升级",
+          "description": "海口依托AI与赛事经济推动产城融合，打造创新之城",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "体育赛事",
+          "文化旅游",
+          "城市经济",
+          "科技创新"
+        ],
+        "key_topics": [
+          "AI应用",
+          "赛事经济",
+          "产城融合",
+          "城市转型",
+          "科创生态"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "估值37亿！端侧AI芯片新秀曦华科技再递表港交所 奇瑞投了 【估值37亿！端侧AI芯片新秀曦华科技再递表港交所 奇瑞投了】继2025年12月首次递表后，深圳曦华科技股份有限公司近日再次向港交所提交上市申请书，独家保荐人为农银国际。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "估值37亿！端侧AI芯片新秀曦华科技再递表港交所 奇瑞投了",
+      "publish_time": "2026-06-07 01:15:00",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "曦华科技",
+            "role": "申请上市主体",
+            "industry": "半导体/AI芯片"
+          },
+          {
+            "name": "港交所",
+            "role": "上市审核机构",
+            "industry": "金融监管/交易所"
+          },
+          {
+            "name": "农银国际",
+            "role": "独家保荐人",
+            "industry": "投资银行/金融服务"
+          },
+          {
+            "name": "奇瑞",
+            "role": "战略投资者",
+            "industry": "汽车制造/智能网联"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "估值",
+            "value": 37,
+            "unit": "亿元"
+          }
+        ],
+        "event": {
+          "type": "上市申请",
+          "description": "曦华科技再次向港交所提交上市申请",
+          "impact": "正面"
+        },
+        "related_companies": [
+          "奇瑞"
+        ],
+        "industries": [
+          "半导体",
+          "人工智能",
+          "AI芯片",
+          "智能汽车"
+        ],
+        "key_topics": [
+          "端侧AI芯片",
+          "港股IPO",
+          "战略融资",
+          "半导体国产化",
+          "智能汽车产业链"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "Altman预计OpenAI将于未来一年内IPO 【Altman预计OpenAI将于未来一年内IPO】据知情人士透露，OpenAI的CEOAltman周一发送员工内部信息，预计OpenAI将在未来一年内上市。该公司正在筹备全新的人工智能（AI）模型。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "Altman预计OpenAI将于未来一年内IPO",
+      "publish_time": "2026-06-10 23:42:49",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "OpenAI",
+            "role": "主体公司",
+            "industry": "人工智能"
+          }
+        ],
+        "persons": [
+          {
+            "name": "Altman",
+            "title": "CEO"
+          }
+        ],
+        "financial_figures": [],
+        "event": {
+          "type": "IPO",
+          "description": "OpenAI预计在未来一年内上市",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "科技",
+          "软件"
+        ],
+        "key_topics": [
+          "IPO",
+          "人工智能",
+          "OpenAI",
+          "上市筹备",
+          "AI模型"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "赛意信息：自研PCB行业工艺AI大模型已实现规模化商用 【赛意信息：自研PCB行业工艺AI大模型已实现规模化商用】赛意信息(300687.SZ)发布投资者关系活动记录表公告，依托二十年工业领域深耕经验与自有算力底座，公司重点打造工业垂类模型与AI数字员工产品，多款行业模型已在工艺设计优化、物流路径优化、工业质检、智能排产等场景落地，其中自研PCB行业工艺AI大模型已实现规模化商用，获得市场认可。针对现有智能体领域普遍灵活性不足的问题，公司研发新一代AI数字员工产品体系，计划于今年8月正式发布。尽管行业有观点认为目前工业垂类模型、数字员工仍然处于产品打磨与市场推广阶段，但结合行业发展规律来看，该类业务长期成长空间可观。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "赛意信息：自研PCB行业工艺AI大模型已实现规模化商用",
+      "publish_time": "2026-06-10 22:53:00",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "赛意信息",
+            "role": "主体公司",
+            "industry": "工业软件/AI解决方案"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "产品发布",
+          "description": "赛意信息自研PCB行业工艺AI大模型实现规模化商用，新一代AI数字员工产品体系计划于2024年8月发布",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "PCB制造",
+          "工业人工智能",
+          "智能制造",
+          "工业软件"
+        ],
+        "key_topics": [
+          "AI大模型",
+          "工业垂类模型",
+          "AI数字员工",
+          "PCB工艺",
+          "规模化商用"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "摩根士丹利：2026年全球AI相关债券发行规模将接近5700亿美元 【摩根士丹利：2026年全球AI相关债券发行规模将接近5700亿美元】根据摩根士丹利的最新预测，2026年全球与人工智能（AI）相关的债券发行规模有望接近5700亿美元，较去年增长逾一倍。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "摩根士丹利：2026年全球AI相关债券发行规模将接近5700亿美元",
+      "publish_time": "2026-06-10 22:37:44",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "摩根士丹利",
+            "role": "预测发布机构",
+            "industry": "投资银行/金融服务"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "AI相关债券发行规模（2026年）",
+            "value": 5700,
+            "unit": "亿美元"
+          },
+          {
+            "label": "同比增长幅度",
+            "value": "逾一倍",
+            "unit": ""
+          }
+        ],
+        "event": {
+          "type": "预测发布",
+          "description": "摩根士丹利预测2026年全球AI相关债券发行规模将达约5700亿美元",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "债券市场",
+          "金融科技",
+          "资本市场"
+        ],
+        "key_topics": [
+          "AI融资",
+          "债券发行",
+          "资本市场预测",
+          "人工智能投资",
+          "全球债市"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "普华永道：中国内地企业AI应用能力领跑全球 【普华永道：中国内地企业AI应用能力领跑全球】普华永道宏观经济研报指出，一系列数据展现出中国经济强劲的新动能——今年一季度，中国高技术产业实际使用外资同比增长30.7%，其中，研发与设计服务、计算机及办公设备制造业实际使用外资增幅分别达127.8%和88.1%。中国AI领域也表现亮眼，内地企业AI应用能力领跑全球，17%的企业实现AI降本增收。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "普华永道：中国内地企业AI应用能力领跑全球",
+      "publish_time": "2026-06-10 22:15:42",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "普华永道",
+            "role": "发布机构/研报主体",
+            "industry": "专业服务/审计咨询"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "高技术产业实际使用外资同比增长率",
+            "value": 30.7,
+            "unit": "%"
+          },
+          {
+            "label": "研发与设计服务实际使用外资同比增长率",
+            "value": 127.8,
+            "unit": "%"
+          },
+          {
+            "label": "计算机及办公设备制造业实际使用外资同比增长率",
+            "value": 88.1,
+            "unit": "%"
+          },
+          {
+            "label": "实现AI降本增收的内地企业占比",
+            "value": 17,
+            "unit": "%"
+          }
+        ],
+        "event": {
+          "type": "研究报告发布",
+          "description": "普华永道发布宏观经济研报，指出中国内地企业AI应用能力全球领先，并呈现高技术产业外资快速增长态势",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "高技术产业",
+          "研发与设计服务",
+          "计算机及办公设备制造",
+          "人工智能"
+        ],
+        "key_topics": [
+          "AI应用",
+          "外商投资",
+          "高技术产业",
+          "宏观经济",
+          "数字化转型"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "另类资产管理公司KKR称市场可能低估了AI的电力需求 【另类资产管理公司KKR称市场可能低估了AI的电力需求】另类资产管理公司KKR称市场可能低估了AI的电力需求，但数字基础设施领域有泡沫。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "另类资产管理公司KKR称市场可能低估了AI的电力需求",
+      "publish_time": "2026-06-10 21:52:57",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "KKR",
+            "role": "发布观点的另类资产管理公司",
+            "industry": "另类资产管理"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "观点发布",
+          "description": "KKR指出市场可能低估AI的电力需求，同时警示数字基础设施领域存在泡沫",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "另类资产管理",
+          "人工智能",
+          "电力",
+          "数字基础设施"
+        ],
+        "key_topics": [
+          "AI电力需求",
+          "数字基础设施泡沫",
+          "另类资产管理",
+          "能源需求",
+          "科技投资"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "科大讯飞与万新光学集团签署AI眼镜战略合作协议 【科大讯飞与万新光学集团签署AI眼镜战略合作协议】6月10日，科大讯飞股份有限公司与万新光学集团正式签署AI眼镜战略合作协议。双方将在渠道运维、产品共创、产业生态三大领域开展深度合作。在产品共创方面，双方将联合推出专属联名系列智能光学眼镜，并共建智能光学眼镜生态产业基地。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "科大讯飞与万新光学集团签署AI眼镜战略合作协议",
+      "publish_time": "2026-06-10 21:31:19",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "科大讯飞股份有限公司",
+            "role": "战略合作方",
+            "industry": "人工智能/智能硬件"
+          },
+          {
+            "name": "万新光学集团",
+            "role": "战略合作方",
+            "industry": "光学制造/眼镜产业"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "战略合作",
+          "description": "科大讯飞与万新光学集团签署AI眼镜战略合作协议，聚焦渠道运维、产品共创和产业生态建设",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "智能穿戴",
+          "光学制造",
+          "消费电子"
+        ],
+        "key_topics": [
+          "AI眼镜",
+          "战略合作",
+          "产品共创",
+          "智能光学眼镜生态",
+          "产业生态"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "AI基础设施初创公司TensorWave完成3.5亿美元B轮融资 【AI基础设施初创公司TensorWave完成3.5亿美元B轮融资】AI基础设施初创公司TensorWave完成3.5亿美元B轮融资，投后估值达15.5亿美元，用于扩建由AMD驱动的全球AI基础设施。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI基础设施初创公司TensorWave完成3.5亿美元B轮融资",
+      "publish_time": "2026-06-10 21:02:11",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "TensorWave",
+            "role": "融资方",
+            "industry": "AI基础设施"
+          },
+          {
+            "name": "AMD",
+            "role": "技术合作伙伴/芯片供应商",
+            "industry": "半导体/AI硬件"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "B轮融资金额",
+            "value": 3.5,
+            "unit": "亿美元"
+          },
+          {
+            "label": "投后估值",
+            "value": 15.5,
+            "unit": "亿美元"
+          }
+        ],
+        "event": {
+          "type": "融资",
+          "description": "TensorWave完成3.5亿美元B轮融资，投后估值达15.5亿美元，用于扩建AMD驱动的全球AI基础设施",
+          "impact": "正面"
+        },
+        "related_companies": [
+          "AMD"
+        ],
+        "industries": [
+          "AI基础设施",
+          "半导体",
+          "云计算",
+          "人工智能"
+        ],
+        "key_topics": [
+          "B轮融资",
+          "AI基础设施",
+          "AMD合作",
+          "全球算力布局",
+          "初创企业"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "天娱数科：没有物理AI业务 与2026年世界杯不存在业务合作关系 【天娱数科：没有物理AI业务 与2026年世界杯不存在业务合作关系】天娱数科(002354)发布股票交易异常波动的公告，公司关注到近期有部分媒体对公司业务相关讨论涉及“物理AI”“世界杯”概念。截至目前，公司没有物理AI业务，未形成相关业务收入；公司与2026年世界杯不存在业务合作关系，未在任何网络平台为2026年世界杯赛事提供营销服务，亦未形成相关业务收入。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "天娱数科：没有物理AI业务 与2026年世界杯不存在业务合作关系",
+      "publish_time": "2026-06-10 19:50:45",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "天娱数科",
+            "role": "公告发布主体",
+            "industry": "数字营销与AI应用"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "澄清公告",
+          "description": "天娱数科就市场误传的‘物理AI’及‘2026年世界杯合作’概念发布澄清公告，明确否认相关业务存在",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "数字营销",
+          "人工智能应用",
+          "体育营销"
+        ],
+        "key_topics": [
+          "物理AI",
+          "2026年世界杯",
+          "股票交易异常波动",
+          "概念澄清",
+          "业务真实性"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "机构：书本式折叠屏（大折叠）手机将成AI落地的最佳终端载体 【机构：书本式折叠屏（大折叠）手机将成AI落地的最佳终端载体】Counterpoint报告称，复杂任务需要同时查看原始内容、比对AI生成结果并确认下一步操作，频繁切换应用会严重拖累效率。书本式折叠屏手机凭借更大的内屏和更强的多任务承载能力，恰好满足这一需求，能够让复杂工作流持续可视化，信息并行、一步到位，从而充分释放AI生产力。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "机构：书本式折叠屏（大折叠）手机将成AI落地的最佳终端载体",
+      "publish_time": "2026-06-10 19:37:32",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "Counterpoint",
+            "role": "研究机构",
+            "industry": "市场研究/科技咨询"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "行业趋势研判",
+          "description": "Counterpoint报告指出书本式折叠屏手机将成为AI落地的最佳终端载体",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "消费电子",
+          "人工智能",
+          "智能手机",
+          "折叠屏技术"
+        ],
+        "key_topics": [
+          "折叠屏手机",
+          "AI终端",
+          "多任务处理",
+          "人机交互",
+          "生产力工具"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "多地发布“618”消费提示：警惕AI造假 理性看待秒杀 【多地发布“618”消费提示：警惕AI造假 理性看待秒杀】近日，包括北京、天津、河北、广东广州等多地发布2026年“6·18”网络消费提示或合规提示，提醒消费者理性看待满减、秒杀、直播带货等促销活动，警惕AI造假等消费风险。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "多地发布“618”消费提示：警惕AI造假 理性看待秒杀",
+      "publish_time": "2026-06-10 19:32:04",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "北京市市场监督管理局",
+            "role": "监管机构/提示发布方",
+            "industry": "政府监管"
+          },
+          {
+            "name": "天津市市场监督管理委员会",
+            "role": "监管机构/提示发布方",
+            "industry": "政府监管"
+          },
+          {
+            "name": "河北省市场监督管理局",
+            "role": "监管机构/提示发布方",
+            "industry": "政府监管"
+          },
+          {
+            "name": "广州市市场监督管理局",
+            "role": "监管机构/提示发布方",
+            "industry": "政府监管"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "政策发布",
+          "description": "北京、天津、河北、广州等地市场监管部门联合发布2026年‘6·18’网络消费提示，强调警惕AI造假、理性参与促销",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "电子商务",
+          "互联网平台",
+          "市场监管",
+          "人工智能应用"
+        ],
+        "key_topics": [
+          "618购物节",
+          "AI造假风险",
+          "消费提示",
+          "直播带货监管",
+          "网络促销合规"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "AI人工智能赋能金融科技 智能投顾市场规模快速扩张 AI人工智能赋能金融科技 智能投顾市场规模快速扩张。详细分析内容...（模拟数据第1条）",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI人工智能赋能金融科技 智能投顾市场规模快速扩张",
+      "publish_time": "2026-06-14 15:22:44",
+      "content_url": "",
+      "fetched_at": "2026-06-14 15:22:48",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "行业趋势",
+          "description": "AI人工智能赋能金融科技，推动智能投顾市场规模快速扩张",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "金融科技",
+          "智能投顾"
+        ],
+        "key_topics": [
+          "AI人工智能",
+          "金融科技",
+          "智能投顾",
+          "市场规模",
+          "数字化转型"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "芯片行业景气度回升 AI芯片需求强劲拉动增长 芯片行业景气度回升 AI芯片需求强劲拉动增长。详细分析内容...（模拟数据第2条）",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "芯片行业景气度回升 AI芯片需求强劲拉动增长",
+      "publish_time": "2026-06-14 13:22:44",
+      "content_url": "",
+      "fetched_at": "2026-06-14 15:22:48",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "行业动态",
+          "description": "芯片行业景气度回升，AI芯片需求强劲拉动增长",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "半导体",
+          "芯片",
+          "人工智能硬件"
+        ],
+        "key_topics": [
+          "芯片行业",
+          "景气度回升",
+          "AI芯片",
+          "需求增长",
+          "半导体周期"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "中信证券：接下来霍尔木兹海峡通航是A股非AI板块转机的临界点 【中信证券：接下来霍尔木兹海峡通航是A股非AI板块转机的临界点】中信证券最新A股策略报告指出，市场情绪降温后，科技、周期、金融和消费板块各自有各自的驱动逻辑和节奏。对市场而言，目前最大的挑战是霍尔木兹海峡短期通航的假设开始动摇，通胀和紧缩预期升温。中信证券认为接下来海峡通航是“换副牌”的时刻，亦是非AI板块转机的临界点。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "中信证券：接下来霍尔木兹海峡通航是A股非AI板块转机的临界点",
+      "publish_time": "2026-06-07 18:15:05",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "中信证券",
+            "role": "发布机构",
+            "industry": "证券/金融"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "政策与地缘风险事件",
+          "description": "霍尔木兹海峡通航不确定性加剧，引发市场对通胀和货币政策紧缩预期升温",
+          "impact": "负面"
+        },
+        "related_companies": [],
+        "industries": [
+          "科技",
+          "周期",
+          "金融",
+          "消费",
+          "AI"
+        ],
+        "key_topics": [
+          "霍尔木兹海峡",
+          "A股策略",
+          "非AI板块",
+          "通胀预期",
+          "地缘风险"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "陈茂波：香港AI+与产业发展策略委员会顺利组成 【陈茂波：香港AI+与产业发展策略委员会顺利组成】香港特区政府财政司司长陈茂波今日（7日）表示，财政预算案宣布成立的“AI+与产业发展策略委员会”已经顺利组成，成员包括专家、学者、以及商会、企业及园区公司的代表等，本月内将召开首次会议。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "陈茂波：香港AI+与产业发展策略委员会顺利组成",
+      "publish_time": "2026-06-07 15:02:52",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "香港特区政府",
+            "role": "发起方/主管机构",
+            "industry": "政府机构"
+          },
+          {
+            "name": "AI+与产业发展策略委员会",
+            "role": "新成立的政策协调机构",
+            "industry": "政策咨询/产业规划"
+          }
+        ],
+        "persons": [
+          {
+            "name": "陈茂波",
+            "title": "香港特区政府财政司司长"
+          }
+        ],
+        "financial_figures": [],
+        "event": {
+          "type": "政策发布",
+          "description": "香港特区政府正式成立AI+与产业发展策略委员会",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "产业发展",
+          "数字经济",
+          "科技创新"
+        ],
+        "key_topics": [
+          "AI+",
+          "产业发展",
+          "政策制定",
+          "香港经济",
+          "科技战略"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "黄仁勋会见韩国两大游戏商代表共商游戏AI合作方案 【黄仁勋会见韩国两大游戏商代表共商游戏AI合作方案】据报道，英伟达首席执行官（CEO）黄仁勋7日在首尔江南区的网吧先后会见韩国游戏公司KRAFTON创始人兼董事长蔣柄圭和游戏开发商NCSOFT代表金泽辰。据悉，当天黄仁勋和蔣柄圭可能就物理AI等人形机器人，以及基于英伟达近期发布的首款AI笔记本电脑系列“RTX Spark”的游戏领域合作等进行讨论。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "黄仁勋会见韩国两大游戏商代表共商游戏AI合作方案",
+      "publish_time": "2026-06-07 14:53:02",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "英伟达",
+            "role": "技术提供方/合作主导方",
+            "industry": "半导体/AI芯片"
+          },
+          {
+            "name": "KRAFTON",
+            "role": "游戏开发商/合作方",
+            "industry": "游戏"
+          },
+          {
+            "name": "NCSOFT",
+            "role": "游戏开发商/合作方",
+            "industry": "游戏"
+          }
+        ],
+        "persons": [
+          {
+            "name": "黄仁勋",
+            "title": "英伟达首席执行官（CEO）"
+          },
+          {
+            "name": "蔣柄圭",
+            "title": "KRAFTON创始人兼董事长"
+          },
+          {
+            "name": "金泽辰",
+            "title": "NCSOFT代表"
+          }
+        ],
+        "financial_figures": [],
+        "event": {
+          "type": "战略合作会谈",
+          "description": "黄仁勋在首尔会见KRAFTON和NCSOFT代表，共商游戏AI、物理AI及人形机器人等领域合作，涉及RTX Spark AI笔记本在游戏领域的应用",
+          "impact": "正面"
+        },
+        "related_companies": [
+          "KRAFTON",
+          "NCSOFT",
+          "英伟达"
+        ],
+        "industries": [
+          "半导体",
+          "人工智能",
+          "游戏",
+          "人形机器人",
+          "消费电子"
+        ],
+        "key_topics": [
+          "游戏AI",
+          "物理AI",
+          "人形机器人",
+          "RTX Spark",
+          "跨国科技合作"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "AI等机器网络请求量首超人类 【AI等机器网络请求量首超人类】据央视新闻，全球最大的互联网托管服务商之一——云网络安全服务公司发布的最新数据显示，在其托管网站收到的网络访问请求中，约57.4%来自人工智能和自动化程序，42.6%来自人类用户。该公司称，这是互联网历史上来自人类的网络访问请求数量首次被机器超越。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI等机器网络请求量首超人类",
+      "publish_time": "2026-06-07 13:32:46",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": null,
+        "net_income": null,
+        "gross_margin": null,
+        "operating_cash_flow": null,
+        "total_assets": null,
+        "total_liabilities": null,
+        "eps": null,
+        "roe": null,
+        "asset_liability_ratio": null,
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "云网络安全服务公司",
+            "role": "数据发布方",
+            "industry": "云计算/网络安全"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "AI及自动化程序请求占比",
+            "value": 57.4,
+            "unit": "%"
+          },
+          {
+            "label": "人类用户请求占比",
+            "value": 42.6,
+            "unit": "%"
+          }
+        ],
+        "event": {
+          "type": "技术趋势事件",
+          "description": "全球互联网托管流量中AI和自动化程序请求量首次超过人类用户",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "网络安全",
+          "云计算",
+          "互联网基础设施"
+        ],
+        "key_topics": [
+          "AI流量",
+          "网络请求结构变化",
+          "自动化崛起",
+          "人机交互范式转变",
+          "数字基础设施演进"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "OpenAI正在准备对ChatGPT进行其推出以来规模最大的一次改版 OpenAI正在准备对ChatGPT进行其推出以来规模最大的一次改版。该公司计划将ChatGPT转型为结合编码工具和人工智能体的“超级应用”，并添加高管们认为能够创造更多收入的产品。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "OpenAI正在准备对ChatGPT进行其推出以来规模最大的一次改版",
+      "publish_time": "2026-06-07 12:08:40",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "OpenAI",
+            "role": "主体公司",
+            "industry": "人工智能/软件"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "产品升级",
+          "description": "OpenAI计划对ChatGPT进行推出以来规模最大的一次改版，将其转型为集成编码工具和AI智能体的‘超级应用’",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "软件开发",
+          "人机交互"
+        ],
+        "key_topics": [
+          "ChatGPT",
+          "AI超级应用",
+          "产品升级",
+          "AI编码工具",
+          "商业化"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "北京高考作文考教老人用AI 【北京高考作文考教老人用AI】北京高考作文题目出炉，在微写作部分，考题提到教老人用AI。从下面三个题目中任选一题，按要求作答。不超过150字。不透露所在区、学校及个人信息。（1）为增强同学们的劳动意识，班级打算利用半天时间走进社区开展劳动实践活动，现征集同学们的建议。你想设计一项怎样的活动？请说说理由。要求：写出活动的主要内容，理由充分，条理清晰。（2）重阳节到来之际，学校拟组织志愿者到敬老院开展“人工智能（AI）与幸福晚年”主题活动。请你写一段活动的宣传语，吸引老人们积极参加。要求：语言得体，有吸引力。（3）请以“因为向往”为题目，写一首小诗或一段抒情文字。要求：感情真挚，语言生动，有感染力。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "北京高考作文考教老人用AI",
+      "publish_time": "2026-06-07 11:41:45",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "教育考试命题",
+          "description": "北京高考微写作题目中设置‘教老人用AI’相关情境，聚焦人工智能在老年群体中的普及应用",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "教育",
+          "人工智能",
+          "养老/老龄服务"
+        ],
+        "key_topics": [
+          "高考作文",
+          "人工智能普及",
+          "适老化技术",
+          "代际数字鸿沟",
+          "重阳节主题活动"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "AI巨无霸冲击IPO！警惕资本市场“最贵的陷阱” 【AI巨无霸冲击IPO！警惕资本市场“最贵的陷阱”】人工智能初创公司Anthropic本周官方宣布，已向美国证券交易委员会（SEC）秘密递交S-1招股书，就在交表前夕，该公司刚刚宣布完成了H轮融资，投后估值为6.5万亿元人民币（9650亿美元）。这家成立时间仅5年、今年二季度才开始盈利的公司，正创造着资本市场历史上的奇迹。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI巨无霸冲击IPO！警惕资本市场“最贵的陷阱”",
+      "publish_time": "2026-06-07 07:24:00",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "total_valuation": {
+          "value": 6.5,
+          "unit": "万亿元人民币",
+          "yoy_growth": "无",
+          "period": "H轮融资后"
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "Anthropic",
+            "role": "AI初创公司",
+            "industry": "人工智能"
+          },
+          {
+            "name": "美国证券交易委员会（SEC）",
+            "role": "监管机构",
+            "industry": "金融监管"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "投后估值",
+            "value": 6.5,
+            "unit": "万亿元人民币"
+          },
+          {
+            "label": "投后估值",
+            "value": 9650,
+            "unit": "亿美元"
+          }
+        ],
+        "event": {
+          "type": "IPO",
+          "description": "Anthropic向SEC秘密递交S-1招股书，启动IPO进程",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "资本市场",
+          "金融科技"
+        ],
+        "key_topics": [
+          "IPO",
+          "AI初创公司",
+          "估值泡沫",
+          "资本市场风险",
+          "H轮融资"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "AI触角伸到赛事经济 海口要做产城融合之城 【AI触角伸到赛事经济 海口要做产城融合之城】科技、赛事、旅游，海口正借赛事经济风口，重构产城融合创新之城的想象。当AI从产业端延伸至赛事端，并在一个城市形成闭环，海口的思路本质上是“以赛为媒，以赛兴业”。当越来越多的国际科创赛事开始将亚洲目光投向南海之滨，这个曾经被视为“冬季度假地”的城市，正在进入一条新的叙事轨道。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI触角伸到赛事经济 海口要做产城融合之城",
+      "publish_time": "2026-06-07 06:01:00",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "城市发展战略升级",
+          "description": "海口市推动AI技术与赛事经济融合，打造产城融合创新之城",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "赛事经济",
+          "文化旅游",
+          "城市运营",
+          "科技创新"
+        ],
+        "key_topics": [
+          "AI赋能赛事",
+          "产城融合",
+          "赛事经济",
+          "城市转型升级",
+          "科创赛事集聚"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "估值37亿！端侧AI芯片新秀曦华科技再递表港交所 奇瑞投了 【估值37亿！端侧AI芯片新秀曦华科技再递表港交所 奇瑞投了】继2025年12月首次递表后，深圳曦华科技股份有限公司近日再次向港交所提交上市申请书，独家保荐人为农银国际。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "估值37亿！端侧AI芯片新秀曦华科技再递表港交所 奇瑞投了",
+      "publish_time": "2026-06-07 01:15:00",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "valuation": {
+          "value": 37,
+          "unit": "亿元",
+          "yoy_growth": "无",
+          "period": "递表时点"
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "深圳曦华科技股份有限公司",
+            "role": "申请上市主体",
+            "industry": "半导体/AI芯片"
+          },
+          {
+            "name": "农银国际",
+            "role": "独家保荐人",
+            "industry": "金融服务/投资银行"
+          },
+          {
+            "name": "奇瑞汽车股份有限公司",
+            "role": "战略投资者",
+            "industry": "汽车制造/智能网联"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "估值",
+            "value": 37,
+            "unit": "亿元"
+          }
+        ],
+        "event": {
+          "type": "IPO申请",
+          "description": "曦华科技再次向港交所提交上市申请",
+          "impact": "正面"
+        },
+        "related_companies": [
+          "奇瑞汽车股份有限公司"
+        ],
+        "industries": [
+          "半导体",
+          "人工智能",
+          "端侧AI",
+          "集成电路",
+          "智能汽车"
+        ],
+        "key_topics": [
+          "IPO",
+          "端侧AI芯片",
+          "港股上市",
+          "半导体国产化",
+          "战略投资"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "Altman预计OpenAI将于未来一年内IPO 【Altman预计OpenAI将于未来一年内IPO】据知情人士透露，OpenAI的CEOAltman周一发送员工内部信息，预计OpenAI将在未来一年内上市。该公司正在筹备全新的人工智能（AI）模型。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "Altman预计OpenAI将于未来一年内IPO",
+      "publish_time": "2026-06-10 23:42:49",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "OpenAI",
+            "role": "主体公司",
+            "industry": "人工智能"
+          }
+        ],
+        "persons": [
+          {
+            "name": "Altman",
+            "title": "CEO"
+          }
+        ],
+        "financial_figures": [],
+        "event": {
+          "type": "IPO",
+          "description": "OpenAI预计在未来一年内上市",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "科技",
+          "软件"
+        ],
+        "key_topics": [
+          "IPO",
+          "人工智能",
+          "OpenAI",
+          "上市",
+          "AI模型"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "赛意信息：自研PCB行业工艺AI大模型已实现规模化商用 【赛意信息：自研PCB行业工艺AI大模型已实现规模化商用】赛意信息(300687.SZ)发布投资者关系活动记录表公告，依托二十年工业领域深耕经验与自有算力底座，公司重点打造工业垂类模型与AI数字员工产品，多款行业模型已在工艺设计优化、物流路径优化、工业质检、智能排产等场景落地，其中自研PCB行业工艺AI大模型已实现规模化商用，获得市场认可。针对现有智能体领域普遍灵活性不足的问题，公司研发新一代AI数字员工产品体系，计划于今年8月正式发布。尽管行业有观点认为目前工业垂类模型、数字员工仍然处于产品打磨与市场推广阶段，但结合行业发展规律来看，该类业务长期成长空间可观。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "赛意信息：自研PCB行业工艺AI大模型已实现规模化商用",
+      "publish_time": "2026-06-10 22:53:00",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "赛意信息",
+            "role": "AI模型研发与商用主体",
+            "industry": "工业软件/AI解决方案"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "产品发布与商用",
+          "description": "赛意信息自研PCB行业工艺AI大模型实现规模化商用，并计划于2024年8月发布新一代AI数字员工产品体系",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "PCB制造",
+          "工业人工智能",
+          "智能制造",
+          "工业软件"
+        ],
+        "key_topics": [
+          "AI大模型",
+          "工业垂类模型",
+          "AI数字员工",
+          "PCB工艺优化",
+          "规模化商用"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "摩根士丹利：2026年全球AI相关债券发行规模将接近5700亿美元 【摩根士丹利：2026年全球AI相关债券发行规模将接近5700亿美元】根据摩根士丹利的最新预测，2026年全球与人工智能（AI）相关的债券发行规模有望接近5700亿美元，较去年增长逾一倍。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "摩根士丹利：2026年全球AI相关债券发行规模将接近5700亿美元",
+      "publish_time": "2026-06-10 22:37:44",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "摩根士丹利",
+            "role": "预测发布机构",
+            "industry": "投资银行/金融服务"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "AI相关债券发行规模（2026年）",
+            "value": 5700,
+            "unit": "亿美元"
+          }
+        ],
+        "event": {
+          "type": "预测发布",
+          "description": "摩根士丹利预测2026年全球AI相关债券发行规模将达约5700亿美元，较上年增长逾一倍",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "债券市场",
+          "金融科技",
+          "资本市场"
+        ],
+        "key_topics": [
+          "AI融资",
+          "债券发行",
+          "资本市场预测",
+          "人工智能投资",
+          "全球债券市场"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "普华永道：中国内地企业AI应用能力领跑全球 【普华永道：中国内地企业AI应用能力领跑全球】普华永道宏观经济研报指出，一系列数据展现出中国经济强劲的新动能——今年一季度，中国高技术产业实际使用外资同比增长30.7%，其中，研发与设计服务、计算机及办公设备制造业实际使用外资增幅分别达127.8%和88.1%。中国AI领域也表现亮眼，内地企业AI应用能力领跑全球，17%的企业实现AI降本增收。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "普华永道：中国内地企业AI应用能力领跑全球",
+      "publish_time": "2026-06-10 22:15:42",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "普华永道",
+            "role": "研究报告发布机构",
+            "industry": "专业服务/审计咨询"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "高技术产业实际使用外资同比增长率",
+            "value": 30.7,
+            "unit": "%"
+          },
+          {
+            "label": "研发与设计服务实际使用外资同比增长率",
+            "value": 127.8,
+            "unit": "%"
+          },
+          {
+            "label": "计算机及办公设备制造业实际使用外资同比增长率",
+            "value": 88.1,
+            "unit": "%"
+          },
+          {
+            "label": "实现AI降本增收的内地企业占比",
+            "value": 17,
+            "unit": "%"
+          }
+        ],
+        "event": {
+          "type": "研究报告发布",
+          "description": "普华永道发布宏观经济研报，指出中国内地企业AI应用能力领跑全球，并呈现高技术产业外资快速增长态势",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "高技术产业",
+          "研发与设计服务",
+          "计算机及办公设备制造",
+          "人工智能"
+        ],
+        "key_topics": [
+          "AI应用能力",
+          "外商投资",
+          "高技术产业",
+          "宏观经济",
+          "数字化转型"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "另类资产管理公司KKR称市场可能低估了AI的电力需求 【另类资产管理公司KKR称市场可能低估了AI的电力需求】另类资产管理公司KKR称市场可能低估了AI的电力需求，但数字基础设施领域有泡沫。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "另类资产管理公司KKR称市场可能低估了AI的电力需求",
+      "publish_time": "2026-06-10 21:52:57",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "KKR",
+            "role": "发布观点的另类资产管理公司",
+            "industry": "另类资产管理"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "观点发布",
+          "description": "KKR指出市场可能低估AI的电力需求，并警示数字基础设施领域存在泡沫",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "电力能源",
+          "数字基础设施",
+          "另类资产管理"
+        ],
+        "key_topics": [
+          "AI电力需求",
+          "数字基础设施泡沫",
+          "另类资产管理观点"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "科大讯飞与万新光学集团签署AI眼镜战略合作协议 【科大讯飞与万新光学集团签署AI眼镜战略合作协议】6月10日，科大讯飞股份有限公司与万新光学集团正式签署AI眼镜战略合作协议。双方将在渠道运维、产品共创、产业生态三大领域开展深度合作。在产品共创方面，双方将联合推出专属联名系列智能光学眼镜，并共建智能光学眼镜生态产业基地。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "科大讯飞与万新光学集团签署AI眼镜战略合作协议",
+      "publish_time": "2026-06-10 21:31:19",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "科大讯飞股份有限公司",
+            "role": "战略合作方（AI技术与平台提供方）",
+            "industry": "人工智能/智能硬件"
+          },
+          {
+            "name": "万新光学集团",
+            "role": "战略合作方（光学镜片与眼镜制造方）",
+            "industry": "光学制造/眼镜行业"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "战略合作",
+          "description": "科大讯飞与万新光学集团签署AI眼镜战略合作协议，聚焦渠道运维、产品共创及产业生态共建",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "智能硬件",
+          "光学制造",
+          "眼镜行业",
+          "消费电子"
+        ],
+        "key_topics": [
+          "AI眼镜",
+          "战略合作",
+          "产品共创",
+          "智能光学眼镜生态",
+          "产业生态基地"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "AI基础设施初创公司TensorWave完成3.5亿美元B轮融资 【AI基础设施初创公司TensorWave完成3.5亿美元B轮融资】AI基础设施初创公司TensorWave完成3.5亿美元B轮融资，投后估值达15.5亿美元，用于扩建由AMD驱动的全球AI基础设施。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI基础设施初创公司TensorWave完成3.5亿美元B轮融资",
+      "publish_time": "2026-06-10 21:02:11",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "TensorWave",
+            "role": "融资方",
+            "industry": "AI基础设施"
+          },
+          {
+            "name": "AMD",
+            "role": "技术供应商",
+            "industry": "半导体/芯片"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [
+          {
+            "label": "B轮融资金额",
+            "value": 3.5,
+            "unit": "亿美元"
+          },
+          {
+            "label": "投后估值",
+            "value": 15.5,
+            "unit": "亿美元"
+          }
+        ],
+        "event": {
+          "type": "融资",
+          "description": "TensorWave完成3.5亿美元B轮融资，投后估值达15.5亿美元，用于扩建AMD驱动的全球AI基础设施",
+          "impact": "正面"
+        },
+        "related_companies": [
+          "AMD"
+        ],
+        "industries": [
+          "人工智能",
+          "AI基础设施",
+          "半导体",
+          "云计算"
+        ],
+        "key_topics": [
+          "AI基础设施",
+          "B轮融资",
+          "AMD合作",
+          "全球扩张",
+          "人工智能硬件"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "天娱数科：没有物理AI业务 与2026年世界杯不存在业务合作关系 【天娱数科：没有物理AI业务 与2026年世界杯不存在业务合作关系】天娱数科(002354)发布股票交易异常波动的公告，公司关注到近期有部分媒体对公司业务相关讨论涉及“物理AI”“世界杯”概念。截至目前，公司没有物理AI业务，未形成相关业务收入；公司与2026年世界杯不存在业务合作关系，未在任何网络平台为2026年世界杯赛事提供营销服务，亦未形成相关业务收入。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "天娱数科：没有物理AI业务 与2026年世界杯不存在业务合作关系",
+      "publish_time": "2026-06-10 19:50:45",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "天娱数科",
+            "role": "公告发布主体",
+            "industry": "数字营销/人工智能应用"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "澄清公告",
+          "description": "天娱数科就市场误传的‘物理AI’及‘2026年世界杯业务合作’概念发布澄清公告，明确否认相关业务存在及收入形成",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "数字营销",
+          "人工智能应用",
+          "体育营销"
+        ],
+        "key_topics": [
+          "物理AI",
+          "2026年世界杯",
+          "股票交易异常波动",
+          "业务澄清",
+          "概念炒作"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "机构：书本式折叠屏（大折叠）手机将成AI落地的最佳终端载体 【机构：书本式折叠屏（大折叠）手机将成AI落地的最佳终端载体】Counterpoint报告称，复杂任务需要同时查看原始内容、比对AI生成结果并确认下一步操作，频繁切换应用会严重拖累效率。书本式折叠屏手机凭借更大的内屏和更强的多任务承载能力，恰好满足这一需求，能够让复杂工作流持续可视化，信息并行、一步到位，从而充分释放AI生产力。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "机构：书本式折叠屏（大折叠）手机将成AI落地的最佳终端载体",
+      "publish_time": "2026-06-10 19:37:32",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "Counterpoint",
+            "role": "研究机构",
+            "industry": "市场研究/科技咨询"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "行业趋势研判",
+          "description": "Counterpoint报告指出书本式折叠屏（大折叠）手机将成为AI落地的最佳终端载体",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "消费电子",
+          "人工智能",
+          "智能手机",
+          "折叠屏技术"
+        ],
+        "key_topics": [
+          "折叠屏手机",
+          "AI终端",
+          "多任务处理",
+          "人机交互",
+          "生产力工具"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "多地发布“618”消费提示：警惕AI造假 理性看待秒杀 【多地发布“618”消费提示：警惕AI造假 理性看待秒杀】近日，包括北京、天津、河北、广东广州等多地发布2026年“6·18”网络消费提示或合规提示，提醒消费者理性看待满减、秒杀、直播带货等促销活动，警惕AI造假等消费风险。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "多地发布“618”消费提示：警惕AI造假 理性看待秒杀",
+      "publish_time": "2026-06-10 19:32:04",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "北京市市场监管局",
+            "role": "发布机构",
+            "industry": "政府监管"
+          },
+          {
+            "name": "天津市市场监管局",
+            "role": "发布机构",
+            "industry": "政府监管"
+          },
+          {
+            "name": "河北省市场监管局",
+            "role": "发布机构",
+            "industry": "政府监管"
+          },
+          {
+            "name": "广州市市场监管局",
+            "role": "发布机构",
+            "industry": "政府监管"
+          }
+        ],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "政策发布",
+          "description": "多地市场监管部门联合发布2026年‘6·18’网络消费提示，提醒消费者警惕AI造假、理性参与促销活动",
+          "impact": "中性"
+        },
+        "related_companies": [],
+        "industries": [
+          "电子商务",
+          "网络零售",
+          "市场监管",
+          "人工智能应用"
+        ],
+        "key_topics": [
+          "618购物节",
+          "AI造假风险",
+          "消费提示",
+          "直播带货",
+          "理性消费"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "AI人工智能赋能金融科技 智能投顾市场规模快速扩张 AI人工智能赋能金融科技 智能投顾市场规模快速扩张。详细分析内容...（模拟数据第1条）",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI人工智能赋能金融科技 智能投顾市场规模快速扩张",
+      "publish_time": "2026-06-14 15:22:44",
+      "content_url": "",
+      "fetched_at": "2026-06-14 15:22:48",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "行业趋势",
+          "description": "AI人工智能赋能金融科技，推动智能投顾市场规模快速扩张",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "人工智能",
+          "金融科技",
+          "智能投顾"
+        ],
+        "key_topics": [
+          "AI人工智能",
+          "金融科技",
+          "智能投顾",
+          "数字化转型",
+          "资产管理"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
+    }
+  },
+  {
+    "text": "芯片行业景气度回升 AI芯片需求强劲拉动增长 芯片行业景气度回升 AI芯片需求强劲拉动增长。详细分析内容...（模拟数据第2条）",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "芯片行业景气度回升 AI芯片需求强劲拉动增长",
+      "publish_time": "2026-06-14 13:22:44",
+      "content_url": "",
+      "fetched_at": "2026-06-14 15:22:48",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "net_income": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "gross_margin": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "operating_cash_flow": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_assets": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "total_liabilities": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "eps": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "roe": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "asset_liability_ratio": {
+          "value": null,
+          "unit": "",
+          "yoy_growth": "无",
+          "period": ""
+        },
+        "_confidence": "high",
+        "_source": "llm"
+      },
+      "entities": {
+        "companies": [],
+        "persons": [],
+        "financial_figures": [],
+        "event": {
+          "type": "行业动态",
+          "description": "芯片行业景气度回升，AI芯片需求强劲拉动增长",
+          "impact": "正面"
+        },
+        "related_companies": [],
+        "industries": [
+          "半导体",
+          "芯片",
+          "人工智能"
+        ],
+        "key_topics": [
+          "芯片行业",
+          "景气度回升",
+          "AI芯片",
+          "需求增长"
+        ],
+        "_confidence": "high",
+        "_source": "llm"
+      }
     }
   }
 ]
