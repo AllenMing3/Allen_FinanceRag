@@ -8,6 +8,8 @@ import os
 import sys
 import time
 import logging
+import signal
+import threading
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -115,62 +117,95 @@ def _save_meta(meta: list):
 
 # Lazy-init holder so import doesn't block
 _state: dict = {}
+_state_lock = threading.Lock()
 
 
 def _ensure_init():
-    """Lazy-init heavy components on first request"""
+    """Lazy-init heavy components on first request (thread-safe)"""
     if "ready" in _state:
         return
-    from financial_rag.config import config as _cfg
-    from financial_rag.llm import get_llm
-    from financial_rag.core.factory import create_orchestrator, create_hybrid_retriever
-    from financial_rag.core.pipeline import PipelineConfig, create_pipeline_scheduler
-    from financial_rag.tools import create_financial_registry, ToolExecutor, create_tool_session
-    from financial_rag.slot_filler import create_slot_filler
+    with _state_lock:
+        # Double-check after acquiring lock
+        if "ready" in _state:
+            return
+        from financial_rag.config import config as _cfg
+        from financial_rag.llm import get_llm
+        from financial_rag.core.factory import create_orchestrator, create_hybrid_retriever
+        from financial_rag.core.pipeline import PipelineConfig, create_pipeline_scheduler
+        from financial_rag.tools import create_financial_registry, ToolExecutor, create_tool_session
+        from financial_rag.slot_filler import create_slot_filler
 
-    _state["cfg"] = _cfg
-    _state["has_key"] = bool(_cfg.llm.api_key)
-    _state["llm"] = get_llm(api_key=_cfg.llm.api_key, model=_cfg.llm.model) if _state["has_key"] else None
+        _state["cfg"] = _cfg
+        _state["has_key"] = bool(_cfg.llm.api_key)
+        _state["llm"] = get_llm(api_key=_cfg.llm.api_key, model=_cfg.llm.model) if _state["has_key"] else None
 
-    _state["retriever"] = create_hybrid_retriever()
-    _state["registry"] = create_financial_registry(retriever=_state["retriever"], llm=_state["llm"])
-    _state["executor"] = ToolExecutor(_state["registry"])
-    _state["filler"] = create_slot_filler(llm=_state["llm"], verbose=False) if _state["llm"] else None
-    _state["orchestrator"] = create_orchestrator(retriever=_state["retriever"], llm=_state["llm"])
-    _state["scheduler"] = create_pipeline_scheduler(
-        orchestrator=_state["orchestrator"],
-        retriever=_state["retriever"],
-        registry=_state["registry"],
-        executor=_state["executor"],
-        llm=_state["llm"],
-        filler=_state["filler"],
-        config=PipelineConfig(verbose=False),
-    )
-    _state["sample_docs"] = [
-        {"text": "商汤科技2024年营收50.3亿元，同比增长36%，生成式AI业务收入占比达60%", "meta": {"source": "sensetime_2024"}},
-        {"text": "日日新大模型API日均调用量突破2000万次，同比增长400%，企业客户数达5800家", "meta": {"source": "sensetime_2024"}},
-        {"text": "训练集群规模达4万卡A100，算力利用率提升至85%，推理成本降至0.5元/百万token", "meta": {"source": "sensetime_2024"}},
-        {"text": "英伟达发布Blackwell B200 GPU，单卡AI训练性能较H100提升4倍", "meta": {"source": "nvidia_2025"}},
-        {"text": "智谱AI完成B+轮融资，估值超200亿元，GLM-5系列模型Q2发布", "meta": {"source": "zhipu_2025"}},
-        {"text": "微软Azure部署10万张B200用于训练GPT-5，OpenAI表示推理成本将显著降低", "meta": {"source": "microsoft_2025"}},
-        {"text": "谷歌宣布TPU v6将于Q4量产，直接对标Blackwell架构", "meta": {"source": "google_2025"}},
-    ]
-    # Load persisted KB from disk
-    _state["kb_docs"] = _load_kb()
-    _state["kb_built"] = False
-    if _state["kb_docs"]:
-        # Auto-rebuild index if KB was persisted
-        try:
-            r = _state["retriever"]
-            r.clear()
-            r.index(_state["kb_docs"], precompute_embeddings=True)
-            _state["kb_built"] = True
-            logger.info(f"KB auto-rebuilt from {len(_state['kb_docs'])} persisted docs")
-        except Exception as e:
-            logger.warning(f"KB auto-rebuild failed: {e}")
-    _state["kb_path"] = _KB_PATH
-    _state["meta_store"] = _load_meta()
-    _state["ready"] = True
+        _state["retriever"] = create_hybrid_retriever()
+        _state["registry"] = create_financial_registry(retriever=_state["retriever"], llm=_state["llm"])
+        _state["executor"] = ToolExecutor(_state["registry"])
+        _state["filler"] = create_slot_filler(llm=_state["llm"], verbose=False) if _state["llm"] else None
+        _state["orchestrator"] = create_orchestrator(retriever=_state["retriever"], llm=_state["llm"])
+        _state["scheduler"] = create_pipeline_scheduler(
+            orchestrator=_state["orchestrator"],
+            retriever=_state["retriever"],
+            registry=_state["registry"],
+            executor=_state["executor"],
+            llm=_state["llm"],
+            filler=_state["filler"],
+            config=PipelineConfig(verbose=False),
+        )
+        _state["sample_docs"] = [
+            {"text": "商汤科技2024年营收50.3亿元，同比增长36%，生成式AI业务收入占比达60%", "meta": {"source": "sensetime_2024"}},
+            {"text": "日日新大模型API日均调用量突破2000万次，同比增长400%，企业客户数达5800家", "meta": {"source": "sensetime_2024"}},
+            {"text": "训练集群规模达4万卡A100，算力利用率提升至85%，推理成本降至0.5元/百万token", "meta": {"source": "sensetime_2024"}},
+            {"text": "英伟达发布Blackwell B200 GPU，单卡AI训练性能较H100提升4倍", "meta": {"source": "nvidia_2025"}},
+            {"text": "智谱AI完成B+轮融资，估值超200亿元，GLM-5系列模型Q2发布", "meta": {"source": "zhipu_2025"}},
+            {"text": "微软Azure部署10万张B200用于训练GPT-5，OpenAI表示推理成本将显著降低", "meta": {"source": "microsoft_2025"}},
+            {"text": "谷歌宣布TPU v6将于Q4量产，直接对标Blackwell架构", "meta": {"source": "google_2025"}},
+        ]
+        # Load persisted KB from disk
+        _state["kb_docs"] = _load_kb()
+        _state["kb_built"] = False
+        _state["has_samples"] = False
+
+        # Auto-load sample data if KB is empty
+        if not _state["kb_docs"]:
+            _state["kb_docs"] = list(_state["sample_docs"])
+            _state["has_samples"] = True
+            _save_kb(_state["kb_docs"])
+            logger.info(f"KB auto-loaded with {len(_state['kb_docs'])} sample docs")
+
+        # Auto-build index for existing docs
+        if _state["kb_docs"]:
+            try:
+                r = _state["retriever"]
+                r.clear()
+                r.index(_state["kb_docs"], precompute_embeddings=True)
+                _state["kb_built"] = True
+                logger.info(f"KB auto-built from {len(_state['kb_docs'])} docs")
+            except Exception as e:
+                logger.warning(f"KB auto-build failed: {e}")
+        _state["kb_path"] = _KB_PATH
+        _state["meta_store"] = _load_meta()
+        _state["ready"] = True
+
+
+def _shutdown_handler(signum, frame):
+    """Graceful shutdown: persist state before exit"""
+    logger.info("Shutdown signal received, saving state...")
+    try:
+        with _state_lock:
+            if _state.get("kb_docs") is not None:
+                _save_kb(_state["kb_docs"])
+            if _state.get("meta_store") is not None:
+                _save_meta(_state["meta_store"])
+    except Exception as e:
+        logger.warning(f"Shutdown save failed: {e}")
+    logger.info("State saved. Exiting.")
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, _shutdown_handler)
+signal.signal(signal.SIGTERM, _shutdown_handler)
 
 
 # ---------------------------------------------------------------------------
@@ -406,9 +441,16 @@ def api_ingest_files(req: IngestFilesRequest):
                 logger.warning(f"Analysis failed for doc: {e}")
                 doc["meta"]["analyzed"] = False
 
-    # Store in KB
-    _state["kb_docs"] = _state.get("kb_docs", []) + raw_docs
-    _save_kb(_state["kb_docs"])
+    # Store in KB (thread-safe) — replace samples with real data
+    with _state_lock:
+        if _state.get("has_samples"):
+            # Clear sample data, keep only real imports
+            _state["kb_docs"] = raw_docs
+            _state["has_samples"] = False
+            logger.info("Sample data replaced with real imports")
+        else:
+            _state["kb_docs"] = _state.get("kb_docs", []) + raw_docs
+        _save_kb(_state["kb_docs"])
     return {
         "loaded": len(raw_docs),
         "analyzed": analyzed_count,
@@ -444,8 +486,9 @@ def api_ingest_news(req: IngestNewsRequest):
             "fetched_at": fetched_at,
         })
 
-    _state["meta_store"] = _state.get("meta_store", []) + meta_items
-    _save_meta(_state["meta_store"])
+    with _state_lock:
+        _state["meta_store"] = _state.get("meta_store", []) + meta_items
+        _save_meta(_state["meta_store"])
 
     # Also append to archive JSONL
     _append_news_archive(data.get("items", []), data.get("main_keyword", ""))
@@ -465,8 +508,9 @@ def api_ingest_sample():
     """Load built-in sample data into KB buffer"""
     _ensure_init()
     docs = _state["sample_docs"]
-    _state["kb_docs"] = _state.get("kb_docs", []) + docs
-    _save_kb(_state["kb_docs"])
+    with _state_lock:
+        _state["kb_docs"] = _state.get("kb_docs", []) + docs
+        _save_kb(_state["kb_docs"])
     return {"loaded": len(docs), "total": len(_state["kb_docs"]), "documents": _state["kb_docs"],
             "kb_path": _KB_PATH}
 
@@ -486,7 +530,8 @@ def api_build_kb(req: BuildRequest):
     r.index(documents, precompute_embeddings=True)
     elapsed = (time.time() - t0) * 1000
 
-    _state["kb_built"] = True
+    with _state_lock:
+        _state["kb_built"] = True
 
     # Run test queries to verify
     test_queries = []
@@ -517,10 +562,11 @@ def api_build_kb(req: BuildRequest):
 def api_kb_clear():
     """Clear the KB: remove all docs from memory and disk"""
     _ensure_init()
-    _state["kb_docs"] = []
-    _state["kb_built"] = False
-    _state["retriever"].clear()
-    _save_kb([])
+    with _state_lock:
+        _state["kb_docs"] = []
+        _state["kb_built"] = False
+        _state["retriever"].clear()
+        _save_kb([])
     return {"ok": True, "kb_path": _KB_PATH}
 
 
@@ -528,8 +574,9 @@ def api_kb_clear():
 def api_metadata_clear():
     """Clear collected news metadata"""
     _ensure_init()
-    _state["meta_store"] = []
-    _save_meta([])
+    with _state_lock:
+        _state["meta_store"] = []
+        _save_meta([])
     return {"ok": True}
 
 
@@ -583,14 +630,24 @@ def api_kb_query(req: QueryRequest):
     from financial_rag.core.reflector import HallucinationGuard
 
     if not _state.get("kb_built"):
-        raise HTTPException(400, "请先构建知识库")
+        # Auto-build if docs exist but not indexed
+        docs = _state.get("kb_docs", [])
+        if not docs:
+            raise HTTPException(400, "知识库为空，请先导入数据")
+        try:
+            r = _state["retriever"]
+            r.clear()
+            r.index(docs, precompute_embeddings=True)
+            _state["kb_built"] = True
+        except Exception as e:
+            raise HTTPException(500, f"自动构建索引失败: {e}")
 
     r = _state["retriever"]
     card = PipelineScoreCard(query=req.query)
     results, ret_card = r.search_with_scores(req.query, top_k=req.top_k)
     card.stages.extend(ret_card.stages)
 
-    # Build retrieval list with source info
+    # Build retrieval list with source info and score breakdown
     retrieval = []
     for item in results[:req.top_k]:
         retrieval.append({
@@ -598,6 +655,10 @@ def api_kb_query(req: QueryRequest):
             "score": round(item.get("score", 0), 4),
             "text": item.get("text", ""),
             "source": item.get("meta", {}).get("source", ""),
+            "bm25_rank": item.get("bm25_rank"),
+            "bm25_score": round(item.get("bm25_score", 0) or 0, 4),
+            "vector_rank": item.get("vector_rank"),
+            "vector_score": round(item.get("vector_score", 0) or 0, 4),
         })
 
     # Slot fill answer
@@ -795,8 +856,9 @@ def api_news(req: NewsRequest):
                 "fetched_at": fetched_at,
             })
 
-    _state["meta_store"] = _state.get("meta_store", []) + meta_items
-    _save_meta(_state["meta_store"])
+    with _state_lock:
+        _state["meta_store"] = _state.get("meta_store", []) + meta_items
+        _save_meta(_state["meta_store"])
 
     # Append to archive JSONL (raw data source)
     archive_path = _append_news_archive(data.get("items", []), data.get("main_keyword", ""))

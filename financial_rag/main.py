@@ -34,9 +34,6 @@ def main():
     bp = sub.add_parser("build", help="构建知识库")
     bp.add_argument("--dir")
 
-    # demo
-    sub.add_parser("demo", help="演示模式")
-
     # news
     np = sub.add_parser("news", help="拉取新闻")
     np.add_argument("query")
@@ -77,7 +74,7 @@ def main():
     args = parser.parse_args()
 
     # 初始化环境
-    if not setup_environment() and args.command not in ("demo", "score", "web", None):
+    if not setup_environment() and args.command not in ("score", "web", None):
         sys.exit(1)
 
     # web 命令单独处理

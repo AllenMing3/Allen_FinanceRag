@@ -192,11 +192,11 @@ th { color: var(--text2); font-weight: 500; }
 <div class="pipeline-flow">
   <div class="flow-step" data-panel="agents"><span class="step-icon">🤖</span> Agent 架构</div>
   <span class="flow-arrow">|</span>
-  <div class="flow-step active" data-panel="ingest"><span class="step-icon">📥</span> 数据源 <span class="step-count" id="ingestCount">0</span></div>
+  <div class="flow-step" data-panel="ingest"><span class="step-icon">📥</span> 导入数据 <span class="step-count" id="ingestCount">0</span></div>
   <span class="flow-arrow">→</span>
   <div class="flow-step" data-panel="build"><span class="step-icon">🏗️</span> 构建知识库 <span class="step-count" id="buildCount">0</span></div>
   <span class="flow-arrow">→</span>
-  <div class="flow-step" data-panel="query"><span class="step-icon">🔍</span> RAG 查询 <span class="step-count" id="queryCount">0</span></div>
+  <div class="flow-step active" data-panel="query"><span class="step-icon">🔍</span> RAG 查询 <span class="step-count" id="queryCount">0</span></div>
   <span class="flow-arrow">→</span>
   <div class="flow-step" data-panel="tools"><span class="step-icon">🔧</span> 分析工具</div>
 </div>
@@ -319,7 +319,7 @@ th { color: var(--text2); font-weight: 500; }
   </div>
 
   <!-- ========== STEP 1: INGEST ========== -->
-  <div class="panel active" id="panel-ingest">
+  <div class="panel" id="panel-ingest">
 
     <!-- Section A: File Import → Knowledge Base -->
     <div class="card" style="margin-bottom:20px">
@@ -403,7 +403,7 @@ th { color: var(--text2); font-weight: 500; }
   </div>
 
   <!-- ========== STEP 3: QUERY (RAG) ========== -->
-  <div class="panel" id="panel-query">
+  <div class="panel active" id="panel-query">
     <div class="query-box">
       <input class="input" id="query-input" placeholder="基于知识库查询，如：茅台2024年净利润多少？" />
       <select class="input" id="query-topk" style="flex:none;width:80px">
@@ -796,8 +796,9 @@ async function runKBQuery() {
           <div class="source-body">
             <div class="text">${escHtml(r.text)}</div>
             <div class="meta">
-              <span>检索器: <strong style="color:var(--accent)">${r.retriever}</strong></span>
-              <span>相关度: <strong style="color:${scoreColor(r.score)}">${r.score.toFixed(4)}</strong></span>
+              <span>RRF融合分: <strong style="color:${scoreColor(r.score)}">${r.score.toFixed(4)}</strong></span>
+              ${r.bm25_rank ? `<span>BM25: #${r.bm25_rank} (${r.bm25_score.toFixed(4)})</span>` : '<span style="color:#999">BM25: -</span>'}
+              ${r.vector_rank ? `<span>Vector: #${r.vector_rank} (${r.vector_score.toFixed(4)})</span>` : '<span style="color:#999">Vector: -</span>'}
               ${r.source ? `<span>来源: ${escHtml(r.source)}</span>` : ''}
             </div>
           </div>

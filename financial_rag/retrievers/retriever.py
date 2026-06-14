@@ -356,22 +356,39 @@ class HybridRetriever:
         """RRF 融合排序 — 作为 Rerank 前的候选集"""
         rrf_scores: Dict[str, float] = {}
         doc_map: Dict[str, Dict] = {}
+        # Track per-retriever ranks for score breakdown
+        bm25_ranks: Dict[str, int] = {}
+        vec_ranks: Dict[str, int] = {}
+        bm25_scores: Dict[str, float] = {}
+        vec_scores: Dict[str, float] = {}
 
-        for results, weight in [(bm25_results, self.bm25_weight),
-                                 (vector_results, self.vector_weight)]:
+        for results, weight, rank_store, score_store in [
+            (bm25_results, self.bm25_weight, bm25_ranks, bm25_scores),
+            (vector_results, self.vector_weight, vec_ranks, vec_scores),
+        ]:
             for r in results:
                 text = r.get("text", "")
                 doc_id = hashlib.md5(text.encode()).hexdigest()[:16]
                 rank = r.get("rank", 1)
                 rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + weight / (self.rrf_k + rank)
+                rank_store[doc_id] = rank
+                score_store[doc_id] = r.get("score", 0)
                 doc_map[doc_id] = r
 
         ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
         result = []
         for rank_i, (doc_id, rrf_score) in enumerate(ranked):
             item = dict(doc_map[doc_id])
+            # Primary score = RRF fused score (what determines ranking)
+            item["score"] = rrf_score
             item["rrf_score"] = rrf_score
+            item["retriever"] = "hybrid"
             item["rank"] = rank_i + 1
+            # Breakdown: per-retriever detail
+            item["bm25_rank"] = bm25_ranks.get(doc_id)
+            item["bm25_score"] = bm25_scores.get(doc_id)
+            item["vector_rank"] = vec_ranks.get(doc_id)
+            item["vector_score"] = vec_scores.get(doc_id)
             result.append(item)
         return result
 
