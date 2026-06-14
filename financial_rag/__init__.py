@@ -48,7 +48,8 @@ from financial_rag.tools import (
     CATEGORIES, create_financial_registry, create_tool_session,
 )
 from financial_rag.rss_fetcher import (
-    search_news, fetch_all_news, fetch_cls_telegraph_api,
+    search_news, fetch_all_news,
+    fetch_ths_news, fetch_sina_finance, fetch_eastmoney_search,
 )
 from financial_rag.tushare_client import (
     fetch_stock_kline, fetch_etf_kline, compute_kline_stats,
@@ -84,8 +85,9 @@ __all__ = [
     "FunctionRegistry", "FunctionDef", "ToolExecutor", "ToolCallSession",
     "ToolCallStats", "ToolCallResult", "ToolCallRequest",
     "CATEGORIES", "create_financial_registry", "create_tool_session",
-    # News Fetcher (feedparser RSS)
-    "search_news", "fetch_all_news", "fetch_cls_telegraph_api",
+    # News Fetcher (domestic APIs)
+    "search_news", "fetch_all_news",
+    "fetch_ths_news", "fetch_sina_finance", "fetch_eastmoney_search",
     # Tushare Client
     "fetch_stock_kline", "fetch_etf_kline", "compute_kline_stats",
     "compute_technical_indicators", "search_stock", "search_etf",

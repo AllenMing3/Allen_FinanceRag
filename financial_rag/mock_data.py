@@ -1,10 +1,9 @@
 """
 Mock 数据生成器 — 为无 API Key / 无网络环境提供逼真的模拟数据
 
-覆盖三个外部依赖:
+覆盖两个外部数据源:
 1. Tushare: K 线、股票搜索、ETF 搜索、财务指标
-2. RSS News: 新闻搜索、全量新闻
-3. DashScope LLM: 对话、Embedding、Rerank
+2. 财经新闻: 新闻搜索、全量新闻（同花顺/新浪财经/东方财富）
 
 所有 mock 函数返回与真实 API 完全相同的数据结构。
 """
@@ -221,31 +220,31 @@ def mock_financial_indicators(ts_code: str, periods: int = 4) -> List[Dict]:
 # ============================================================================
 
 _MOCK_NEWS_POOL = [
-    {"title": "央行宣布降准0.5个百分点 释放长期资金约1万亿元", "source": "财联社", "sentiment": "正面"},
+    {"title": "央行宣布降准0.5个百分点 释放长期资金约1万亿元", "source": "同花顺", "sentiment": "正面"},
     {"title": "贵州茅台2024年净利润同比增长15.38% 拟每股派息30.876元", "source": "新浪财经", "sentiment": "正面"},
     {"title": "比亚迪5月新能源汽车销量超33万辆 同比增长38%", "source": "东方财富", "sentiment": "正面"},
-    {"title": "宁德时代获欧洲大单 动力电池出货量全球第一", "source": "财联社", "sentiment": "正面"},
+    {"title": "宁德时代获欧洲大单 动力电池出货量全球第一", "source": "同花顺", "sentiment": "正面"},
     {"title": "招商银行一季度营收同比增长5.2% 不良率降至0.91%", "source": "新浪财经", "sentiment": "正面"},
     {"title": "A股三大指数集体收涨 沪指站上3200点", "source": "东方财富", "sentiment": "正面"},
-    {"title": "证监会发布深化科创板改革八条措施 支持硬科技企业上市", "source": "财联社", "sentiment": "正面"},
+    {"title": "证监会发布深化科创板改革八条措施 支持硬科技企业上市", "source": "同花顺", "sentiment": "正面"},
     {"title": "人工智能概念股持续走强 多只个股涨停", "source": "东方财富", "sentiment": "正面"},
     {"title": "人民币汇率中间价报7.0988 较上日调升52个基点", "source": "新浪财经", "sentiment": "正面"},
-    {"title": "国际油价突码80美元/桶 能源板块全线上涨", "source": "财联社", "sentiment": "正面"},
+    {"title": "国际油价突码80美元/桶 能源板块全线上涨", "source": "同花顺", "sentiment": "正面"},
     {"title": "中国平安一季度净利润同比增长22% 寿险改革成效显现", "source": "新浪财经", "sentiment": "正面"},
     {"title": "五粮液推出新品系列 加速高端化布局", "source": "东方财富", "sentiment": "正面"},
-    {"title": "光伏产业链价格企稳 行业产能过剩问题有望缓解", "source": "财联社", "sentiment": "正面"},
+    {"title": "光伏产业链价格企稳 行业产能过剩问题有望缓解", "source": "同花顺", "sentiment": "正面"},
     {"title": "半导体设备国产替代加速 多家公司订单饱满", "source": "东方财富", "sentiment": "正面"},
     {"title": "新能源车渗透率突码50% 燃油车市场份额持续萎缩", "source": "新浪财经", "sentiment": "正面"},
-    {"title": "多家银行下调存款利率 理财市场迎来资金回流", "source": "财联社", "sentiment": "正面"},
+    {"title": "多家银行下调存款利率 理财市场迎来资金回流", "source": "同花顺", "sentiment": "正面"},
     {"title": "消费复苏态势明确 5月社零总额同比增长6.8%", "source": "新浪财经", "sentiment": "正面"},
     {"title": "房地产政策持续优化 一线城市限购松绑效果显现", "source": "东方财富", "sentiment": "正面"},
-    {"title": "锂电池技术突破 固态电池量产时间表提前", "source": "财联社", "sentiment": "正面"},
+    {"title": "锂电池技术突破 固态电池量产时间表提前", "source": "同花顺", "sentiment": "正面"},
     {"title": "医药板块估值修复 创新药企业业绩超预期", "source": "新浪财经", "sentiment": "正面"},
     {"title": "AI人工智能赋能金融科技 智能投顾市场规模快速扩张", "source": "东方财富", "sentiment": "正面"},
-    {"title": "芯片行业景气度回升 AI芯片需求强劲拉动增长", "source": "财联社", "sentiment": "正面"},
+    {"title": "芯片行业景气度回升 AI芯片需求强劲拉动增长", "source": "同花顺", "sentiment": "正面"},
     {"title": "智能制造产业政策密集出台 工业机器人订单放量", "source": "新浪财经", "sentiment": "正面"},
     {"title": "云计算行业竞争加剧 头部企业市场份额持续提升", "source": "东方财富", "sentiment": "正面"},
-    {"title": "中国经济复苏势头强劲 GDP增速超预期", "source": "财联社", "sentiment": "正面"},
+    {"title": "中国经济复苏势头强劲 GDP增速超预期", "source": "同花顺", "sentiment": "正面"},
 ]
 
 

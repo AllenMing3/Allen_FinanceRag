@@ -1,18 +1,18 @@
 """
-RSS 新闻获取模块 — 基于 feedparser 拉取财经新闻 RSS
+RSS 新闻获取模块 — 国内直连 API + feedparser 备用
 
 功能:
-- 财联社电报: 实时财经快讯
-- 新浪财经: 国内财经新闻
-- 东方财富: 按关键词搜索新闻
+- 同花顺: 实时财经资讯（直连 10jqka API）
+- 新浪财经: 国内财经新闻（直连 Sina Roll API）
+- 东方财富: 按关键词搜索新闻（直连 Eastmoney Search API）
 
-数据源: RSSHub (开源 RSS 生成器) + 财联社直接 API
+数据源: 全部使用国内直连 API，不依赖海外服务
 """
+import json
 import logging
 import re
 import time
 from typing import Dict, List, Optional
-from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
@@ -24,33 +24,233 @@ except ImportError:
     HAS_FEEDPARSER = False
     feedparser = None  # type: ignore
 
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
+    httpx = None  # type: ignore
 
-# ===================== RSS 源配置 =====================
 
-# RSSHub 公共实例（可替换为自建实例）
-RSSHUB_BASE = "https://rsshub.app"
+# ===================== 通用 HTTP 配置 =====================
 
-# 默认 RSS 源
-FEED_SOURCES = {
-    "cls_telegraph": {
-        "name": "财联社电报",
-        "url": f"{RSSHUB_BASE}/cls/telegraph",
-        "type": "rsshub",
-    },
-    "cls_depth": {
-        "name": "财联社深度",
-        "url": f"{RSSHUB_BASE}/cls/depth/1000",
-        "type": "rsshub",
-    },
-    "sina_finance": {
-        "name": "新浪财经",
-        "url": f"{RSSHUB_BASE}/sina/finance",
-        "type": "rsshub",
-    },
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
 }
+_TIMEOUT = 10  # 秒
 
 
-# ===================== 核心获取函数 =====================
+# ===================== 同花顺 (10jqka) 直连 API =====================
+
+def fetch_ths_news(max_news: int = 30) -> List[Dict]:
+    """
+    同花顺财经资讯 API — 实时财经新闻
+
+    API: https://news.10jqka.com.cn/tapp/news/push/stock/
+    """
+    if not HAS_HTTPX:
+        logger.warning("请安装 httpx: pip install httpx")
+        return []
+
+    try:
+        url = "https://news.10jqka.com.cn/tapp/news/push/stock/"
+        params = {
+            "page": "1",
+            "tag": "",
+            "track": "website",
+            "pagesize": str(max_news),
+        }
+        headers = {
+            **_HEADERS,
+            "Referer": "https://news.10jqka.com.cn/",
+        }
+
+        resp = httpx.get(url, params=params, headers=headers, timeout=_TIMEOUT)
+        if resp.status_code != 200:
+            logger.warning(f"同花顺 API 返回 {resp.status_code}")
+            return []
+
+        data = resp.json()
+        news_list = data.get("data", {}).get("list", [])
+
+        items = []
+        for item in news_list[:max_news]:
+            title = item.get("title", "")
+            content = item.get("digest", "") or title
+            content = _strip_html(content)
+
+            pub_time = item.get("ctime", "")
+            # 同花顺返回格式: "2026-06-14 15:30:00"
+
+            items.append({
+                "title": title,
+                "content": content[:500],
+                "source": "同花顺",
+                "publish_time": pub_time,
+                "url": f"https://news.10jqka.com.cn/{item.get('id', '')}.shtml",
+                "sentiment": _guess_sentiment(title),
+            })
+
+        logger.info(f"同花顺: {len(items)} 条")
+        return items
+
+    except Exception as e:
+        logger.error(f"同花顺获取失败: {e}")
+        return []
+
+
+# ===================== 新浪财经直连 API =====================
+
+def fetch_sina_finance(max_news: int = 30) -> List[Dict]:
+    """
+    新浪财经滚动新闻 API — 国内财经新闻
+
+    API: https://feed.mix.sina.com.cn/api/roll/get
+    频道: pageid=153 (财经), lid=2516 (全部)
+    """
+    if not HAS_HTTPX:
+        logger.warning("请安装 httpx: pip install httpx")
+        return []
+
+    try:
+        url = "https://feed.mix.sina.com.cn/api/roll/get"
+        params = {
+            "pageid": "153",
+            "lid": "2516",
+            "k": "",
+            "num": max_news,
+            "page": 1,
+        }
+
+        resp = httpx.get(url, params=params, headers=_HEADERS, timeout=_TIMEOUT)
+        if resp.status_code != 200:
+            logger.warning(f"新浪财经 API 返回 {resp.status_code}")
+            return []
+
+        data = resp.json()
+        result_data = data.get("result", {}).get("data", [])
+
+        items = []
+        for item in result_data[:max_news]:
+            title = item.get("title", "")
+            content = item.get("intro", "") or item.get("summary", "")
+            content = _strip_html(content)
+
+            # 新浪返回 ctime 为 Unix 时间戳字符串
+            pub_time = ""
+            ctime = item.get("ctime", "")
+            if ctime:
+                try:
+                    pub_time = time.strftime(
+                        "%Y-%m-%d %H:%M:%S", time.localtime(int(ctime))
+                    )
+                except Exception:
+                    pass
+
+            items.append({
+                "title": title,
+                "content": content[:500],
+                "source": "新浪财经",
+                "publish_time": pub_time,
+                "url": item.get("url", ""),
+                "sentiment": _guess_sentiment(title),
+            })
+
+        logger.info(f"新浪财经: {len(items)} 条")
+        return items
+
+    except Exception as e:
+        logger.error(f"新浪财经获取失败: {e}")
+        return []
+
+
+# ===================== 东方财富直连 API =====================
+
+def fetch_eastmoney_search(keyword: str, max_news: int = 30) -> List[Dict]:
+    """
+    东方财富搜索 API — 按关键词搜索财经新闻
+
+    API: https://search-api-web.eastmoney.com/search/jsonp
+    使用 JSON param 格式发送请求，返回 JSONP 包装数据
+    """
+    if not HAS_HTTPX:
+        logger.warning("请安装 httpx: pip install httpx")
+        return []
+
+    try:
+        url = "https://search-api-web.eastmoney.com/search/jsonp"
+        # 东方财富搜索需要 JSON param 参数
+        param_obj = {
+            "uid": "",
+            "keyword": keyword,
+            "type": ["cmsArticleWebOld"],
+            "client": "web",
+            "clientType": "web",
+            "clientVersion": "curr",
+            "param": {
+                "cmsArticleWebOld": {
+                    "searchScope": "default",
+                    "sort": "default",
+                    "pageIndex": 1,
+                    "pageSize": max_news,
+                    "preTag": "",
+                    "postTag": "",
+                }
+            },
+        }
+        params = {
+            "cb": "jQuery",
+            "param": json.dumps(param_obj, ensure_ascii=False),
+        }
+        headers = {
+            **_HEADERS,
+            "Referer": "https://so.eastmoney.com/",
+        }
+
+        resp = httpx.get(url, params=params, headers=headers, timeout=_TIMEOUT)
+        if resp.status_code != 200:
+            logger.warning(f"东方财富 API 返回 {resp.status_code}")
+            return []
+
+        # 去掉 JSONP 包装: jQuery({ ... })
+        text = resp.text
+        json_start = text.find("(")
+        json_end = text.rfind(")")
+        if json_start >= 0 and json_end > json_start:
+            text = text[json_start + 1:json_end]
+
+        data = json.loads(text)
+        # 结果在 result.cmsArticleWebOld 中
+        result_list = data.get("result", {}).get("cmsArticleWebOld", [])
+
+        items = []
+        for item in result_list[:max_news]:
+            title = item.get("title", "")
+            title = _strip_html(title)
+            content = item.get("content", "") or title
+            content = _strip_html(content)
+
+            pub_time = item.get("date", "")
+            # 东方财富返回格式: "2024-01-15 10:30:00"
+
+            items.append({
+                "title": title,
+                "content": content[:500],
+                "source": "东方财富",
+                "publish_time": pub_time,
+                "url": item.get("url", ""),
+                "sentiment": _guess_sentiment(title),
+            })
+
+        logger.info(f"东方财富搜索 '{keyword}': {len(items)} 条")
+        return items
+
+    except Exception as e:
+        logger.error(f"东方财富搜索获取失败: {e}")
+        return []
+
+
+# ===================== 通用 RSS 获取（备用） =====================
 
 def fetch_rss_news(
     feed_url: str,
@@ -58,15 +258,12 @@ def fetch_rss_news(
     source_name: str = "",
 ) -> List[Dict]:
     """
-    从 RSS feed 获取新闻
+    通用 RSS feed 获取（仅作为备用，主流程使用直连 API）
 
     Args:
         feed_url: RSS feed URL
         max_news: 最大返回条数
         source_name: 来源名称（用于标记）
-
-    Returns:
-        List of news item dicts: {title, content, source, publish_time, url, sentiment}
     """
     if not HAS_FEEDPARSER:
         logger.warning("请安装 feedparser: pip install feedparser")
@@ -83,15 +280,12 @@ def fetch_rss_news(
         items = []
         for entry in feed.entries[:max_news]:
             title = entry.get("title", "")
-            # feedparser 的 summary 通常是内容摘要
             content = entry.get("summary", "")
-            # 清理 HTML 标签
             content = _strip_html(content)
 
             link = entry.get("link", "")
             source = source_name or feed.get("feed", {}).get("title", "RSS")
 
-            # 发布时间
             pub_time = ""
             if hasattr(entry, "published_parsed") and entry.published_parsed:
                 try:
@@ -106,7 +300,7 @@ def fetch_rss_news(
 
             items.append({
                 "title": title,
-                "content": content[:500],  # 限制内容长度
+                "content": content[:500],
                 "source": source,
                 "publish_time": pub_time,
                 "url": link,
@@ -122,68 +316,6 @@ def fetch_rss_news(
         return []
 
 
-def fetch_cls_telegraph_api(max_news: int = 50) -> List[Dict]:
-    """
-    直接从财联社 API 获取电报快讯（feedparser 备用方案）
-
-    财联社电报 API: https://www.cls.cn/nodeapi/updateTelegraphList
-    """
-    try:
-        import httpx
-        url = "https://www.cls.cn/nodeapi/updateTelegraphList"
-        params = {
-            "app": "CailianpressWeb",
-            "os": "web",
-            "sv": "8.4.6",
-            "rn": max_news,
-        }
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://www.cls.cn/telegraph",
-        }
-
-        resp = httpx.get(url, params=params, headers=headers, timeout=10)
-        if resp.status_code != 200:
-            logger.warning(f"财联社 API 返回 {resp.status_code}")
-            return []
-
-        data = resp.json()
-        roll_data = data.get("data", {}).get("roll_data", [])
-
-        items = []
-        for item in roll_data[:max_news]:
-            title = item.get("title", "") or item.get("brief", "")[:50]
-            content = item.get("content", "") or item.get("brief", "")
-            content = _strip_html(content)
-
-            pub_time = ""
-            ctime = item.get("ctime", 0)
-            if ctime:
-                try:
-                    pub_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ctime))
-                except Exception:
-                    pass
-
-            items.append({
-                "title": title,
-                "content": content[:500],
-                "source": "财联社",
-                "publish_time": pub_time,
-                "url": f"https://www.cls.cn/detail/{item.get('id', '')}",
-                "sentiment": _guess_sentiment(title),
-            })
-
-        logger.info(f"财联社 API 获取 {len(items)} 条电报")
-        return items
-
-    except ImportError:
-        logger.warning("请安装 httpx: pip install httpx")
-        return []
-    except Exception as e:
-        logger.error(f"财联社 API 获取失败: {e}")
-        return []
-
-
 # ===================== 搜索与聚合 =====================
 
 def search_news(
@@ -192,11 +324,11 @@ def search_news(
     max_news: int = 30,
 ) -> Dict:
     """
-    从多个 RSS 源搜索新闻并按关键词过滤
+    从多个国内数据源搜索新闻并按关键词过滤
 
     Args:
         keyword: 搜索关键词（支持逗号/顿号分隔多关键词）
-        feeds: 自定义 feed URL 列表，默认使用内置源
+        feeds: 未使用，保留兼容
         max_news: 每个源最大返回条数
 
     Returns:
@@ -223,28 +355,16 @@ def search_news(
         if kw.strip()
     ]
 
-    # 1. 尝试从东方财富 RSSHub 按关键词搜索（需 URL 编码）
-    encoded_kw = quote(keyword)
-    eastmoney_url = f"{RSSHUB_BASE}/eastmoney/search/{encoded_kw}"
-    items = fetch_rss_news(eastmoney_url, max_news=max_news, source_name="东方财富")
+    # 1. 东方财富搜索（直连 API，按关键词精准搜索）
+    items = fetch_eastmoney_search(keyword, max_news=max_news)
     all_items.extend(items)
 
-    # 2. 从财联社获取（优先直接 API，失败则用 RSS）
-    cls_items = fetch_cls_telegraph_api(max_news=max_news * 2)
-    if not cls_items:
-        cls_items = fetch_rss_news(
-            FEED_SOURCES["cls_telegraph"]["url"],
-            max_news=max_news,
-            source_name="财联社",
-        )
-    all_items.extend(cls_items)
+    # 2. 同花顺（直连 API，实时资讯）
+    items = fetch_ths_news(max_news=max_news * 2)
+    all_items.extend(items)
 
-    # 3. 从新浪财经获取
-    items = fetch_rss_news(
-        FEED_SOURCES["sina_finance"]["url"],
-        max_news=max_news,
-        source_name="新浪财经",
-    )
+    # 3. 新浪财经（直连 API，滚动新闻）
+    items = fetch_sina_finance(max_news=max_news)
     all_items.extend(items)
 
     # 按关键词过滤
@@ -281,7 +401,7 @@ def search_news(
 
 def fetch_all_news(max_per_source: int = 20) -> List[Dict]:
     """
-    获取所有 RSS 源的最新新闻（不过滤）
+    获取所有数据源的最新新闻（不过滤）
 
     Returns:
         List of news item dicts
@@ -294,30 +414,16 @@ def fetch_all_news(max_per_source: int = 20) -> List[Dict]:
 
     all_items = []
 
-    # 财联社
-    cls_items = fetch_cls_telegraph_api(max_news=max_per_source)
-    if not cls_items:
-        cls_items = fetch_rss_news(
-            FEED_SOURCES["cls_telegraph"]["url"],
-            max_news=max_per_source,
-            source_name="财联社",
-        )
-    all_items.extend(cls_items)
-
-    # 新浪财经
-    items = fetch_rss_news(
-        FEED_SOURCES["sina_finance"]["url"],
-        max_news=max_per_source,
-        source_name="新浪财经",
-    )
+    # 同花顺（直连 API）
+    items = fetch_ths_news(max_news=max_per_source)
     all_items.extend(items)
 
-    # 财联社深度
-    items = fetch_rss_news(
-        FEED_SOURCES["cls_depth"]["url"],
-        max_news=max_per_source,
-        source_name="财联社深度",
-    )
+    # 新浪财经（直连 API）
+    items = fetch_sina_finance(max_news=max_per_source)
+    all_items.extend(items)
+
+    # 东方财富（直连 API，取最新资讯）
+    items = fetch_eastmoney_search("财经", max_news=max_per_source)
     all_items.extend(items)
 
     return all_items[:max_per_source * 3]
