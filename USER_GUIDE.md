@@ -28,11 +28,12 @@ python -m financial_rag.main web
 
 | 步骤 | 页面 | 操作 | 说明 |
 |------|------|------|------|
-| 1 | 数据源 | 搜索新闻（如"AI人工智能"） | 收集元数据，辅助后续文件解析。新闻**不进知识库** |
-| 2 | 数据源 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库 |
+| 1 | 导入数据 | 搜索新闻（如"AI人工智能"） | 收集元数据，辅助后续文件解析。新闻**不进知识库** |
+| 2 | 导入数据 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库 |
 | 3 | 构建知识库 | 构建索引 | BM25 + 向量双通道索引 |
 | 4 | RAG 查询 | 提问 | 检索知识库 + 匹配新闻 + LLM 回答（带引用和 RRF 分数明细） |
-| 5 | 工具 | K线分析 | 输入"茅台"或"600519"，生成技术分析报告 |
+| 5 | 智能分析 | 粘贴新闻 / 输入话题 | 抽取指标+实体+KB上下文 → 利好/利空/中性判断 |
+| 6 | 分析工具 | K线分析 | 输入"茅台"或"600519"，生成技术分析报告 |
 
 **数据来源：**
 - 文件放 `./data/financial` 目录
@@ -55,6 +56,7 @@ set MOCK_MODE=true && python -m financial_rag.main web
 |--------|----------|
 | 新闻 | 25 条内置 AI 行业新闻 |
 | K线 | 8 只股票 + 7 只 ETF 的模拟行情（几何布朗运动） |
+| 话题调研 | 智能分析的话题调研使用 mock 新闻数据，不调用真实 API |
 | LLM/Embedding | **真实 DashScope API**（需 Key） |
 
 ---
@@ -62,11 +64,14 @@ set MOCK_MODE=true && python -m financial_rag.main web
 ## 4. 测试
 
 ```cmd
-:: 全量（103 tests，无需 API Key）
+:: 全量（125 tests，无需 API Key）
 python -m pytest tests/ -v
 
 :: 只看 Agent 链
 python -m pytest tests/test_agents.py -v
+
+:: 只看智能分析
+python -m pytest tests/test_analysis.py -v
 
 :: 只看 Mock 数据
 python -m pytest tests/test_mock_data.py -v

@@ -261,6 +261,27 @@ th { color: var(--text2); font-weight: 500; }
         </div>
       </div>
 
+      <!-- Analysis phase -->
+      <div>
+        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">ANALYSIS PHASE — 智能分析（用户视角核心）</h3>
+        <div class="agent-row">
+          <div class="agent-card" style="border-color:#e879f9">
+            <span class="agent-phase" style="background:rgba(232,121,249,.15);color:#e879f9;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">分析时</span>
+            <div class="agent-icon">📰</div>
+            <div class="agent-name">News Analyzer</div>
+            <div class="agent-role">用户粘贴新闻 → 结构化抽取（ExtractionAgent 复用）→ KB 上下文检索 → LLM/规则研判，输出利好/利空/中性结论。</div>
+            <div class="agent-io"><strong>输入:</strong> 新闻全文 + 可选补充说明<br><strong>输出:</strong> metrics + entities + assessment + KB sources</div>
+          </div>
+          <div class="agent-card" style="border-color:#e879f9">
+            <span class="agent-phase" style="background:rgba(232,121,249,.15);color:#e879f9;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">分析时</span>
+            <div class="agent-icon">🔍</div>
+            <div class="agent-name">Topic Researcher</div>
+            <div class="agent-role">用户输入话题 → 自动抓取相关新闻（mock 可切换）→ KB 关联检索 → LLM 综合研判，给出投资方向判断。</div>
+            <div class="agent-io"><strong>输入:</strong> 研究话题 + max_news<br><strong>输出:</strong> news + assessment + KB sources</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Standalone agents -->
       <div>
         <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">STANDALONE — 独立按需调用</h3>
@@ -272,12 +293,24 @@ th { color: var(--text2); font-weight: 500; }
             <div class="agent-role">K线技术分析代理。从 Tushare 拉取行情数据，计算 MA/MACD/RSI/KDJ/布林带等技术指标，LLM 生成自然语言分析。结果不进入知识库。</div>
             <div class="agent-io"><strong>输入:</strong> 股票名称/代码 + 时间范围<br><strong>输出:</strong> 技术指标 + LLM 分析报告</div>
           </div>
-          <div class="agent-card" style="border-color:var(--accent2)">
-            <span class="agent-phase" style="background:rgba(78,205,196,.15);color:var(--accent2);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">按需</span>
-            <div class="agent-icon">📰</div>
-            <div class="agent-name">News Collector</div>
-            <div class="agent-role">新闻元数据采集器（非 Agent）。从同花顺/新浪/东方财富拉取实时新闻，仅存储为元数据上下文，不进入知识库。</div>
-            <div class="agent-io"><strong>输入:</strong> 搜索关键词<br><strong>输出:</strong> 新闻元数据 (标题/来源/时间)</div>
+        </div>
+      </div>
+
+      <!-- Service layer -->
+      <div>
+        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">SERVICE LAYER — 纯函数业务逻辑（services/）</h3>
+        <div class="agent-row">
+          <div class="agent-card" style="border-color:var(--border)">
+            <div class="agent-icon">🧠</div>
+            <div class="agent-name">services/analysis.py</div>
+            <div class="agent-role">智能分析纯函数。不依赖 HTTP/FastAPI，接受依赖注入（llm, retriever），返回结构化 dict。支持 mock 模式切换。</div>
+            <div class="agent-io"><strong>函数:</strong> analyze_news_text(), analyze_topic_research()<br><strong>依赖:</strong> ExtractionAgent, HybridRetriever, News Collector</div>
+          </div>
+          <div class="agent-card" style="border-color:var(--border)">
+            <div class="agent-icon">💾</div>
+            <div class="agent-name">services/persistence.py</div>
+            <div class="agent-role">持久化层。KB 文档、元数据、新闻归档的 JSON 读写。web.py 作为 thin shell 调用，不直接操作文件。</div>
+            <div class="agent-io"><strong>函数:</strong> load_kb(), save_kb(), load_meta(), save_meta(), append_news_archive()<br><strong>存储:</strong> data/knowledge_base/</div>
           </div>
         </div>
       </div>
@@ -308,6 +341,28 @@ th { color: var(--text2); font-weight: 500; }
           <span class="df-node df-store">Metadata Store (上下文)</span>
           <span class="df-arrow" style="opacity:.3">···</span>
           <span style="font-size:12px;color:var(--text2)">查询时作为补充上下文注入</span>
+        </div>
+        <div class="dataflow-line">
+          <span class="df-node df-data">粘贴新闻</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-agent">News Analyzer</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-agent">ExtractionAgent</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-store">KB Context</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-data" style="background:rgba(232,121,249,.15);color:#e879f9">利好/利空/中性</span>
+        </div>
+        <div class="dataflow-line">
+          <span class="df-node df-data">研究话题</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-agent">Topic Researcher</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-agent">News Collector</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-store">KB Context</span>
+          <span class="df-arrow">→</span>
+          <span class="df-node df-data" style="background:rgba(232,121,249,.15);color:#e879f9">综合研判</span>
         </div>
         <div class="dataflow-line">
           <span class="df-node df-data">股票代码</span>

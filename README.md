@@ -38,22 +38,29 @@ graph TB
         Guard[HallucinationGuard<br/>6-layer check]
     end
 
+    subgraph Service Layer
+        AS[Analysis Service<br/>News Analyzer + Topic Researcher]
+        PS[Persistence Service<br/>KB/Meta/Archive I/O]
+    end
+    
     subgraph Tool Layer
         FC[Function Calling Registry<br/>15 tools]
-        Extract[Extraction Tools<br/>LLM-first + regex fallback]
+        Extract[Extraction tools<br/>LLM-first + regex fallback]
         News[News Tools]
         KLine[KLine Tools]
         Search[HybridRetriever]
     end
-
+    
     subgraph Data Layer
         KB[Knowledge Base<br/>kb_docs.json + news_metadata.json]
         LLM[DashScope<br/>Qwen + Embedding + Rerank]
         Ext[External APIs<br/>10jqka / Sina / Tushare]
     end
-
+    
     CLI --> Router
     Web --> Router
+    Web --> AS
+    Web --> PS
     Router --> Pipeline
     Pipeline --> Coord
     Pipeline --> Indexer
@@ -62,6 +69,9 @@ graph TB
     Coord --> EA
     Coord --> RA
     Coord --> KA
+    AS --> Extract
+    AS --> News
+    AS --> Search
     IA --> FC
     EA --> FC
     RA --> LLM
@@ -76,6 +86,7 @@ graph TB
     Search --> LLM
     News --> Ext
     KLine --> Ext
+    PS --> KB
 ```
 
 ### Component Responsibilities
@@ -226,7 +237,14 @@ graph TB
 | `slot_filler.py` | Parallel slot filling engine with TTFT measurement | `SlotFiller`, `create_slot_filler` |
 | `rss_fetcher.py` | Financial news via domestic APIs (10jqka/Sina/EastMoney) + feedparser fallback | `search_news`, `fetch_all_news` |
 | `tushare_client.py` | K-line & financial indicators via Tushare Pro | `fetch_stock_kline`, `compute_technical_indicators` |
-| `web.py` | FastAPI Web UI server — KB pipeline endpoints + static file serving | FastAPI app, `/api/*` endpoints |
+| `web.py` | FastAPI Web UI server — thin shell, delegates to services/ | FastAPI app, `/api/*` endpoints |
+
+### `financial_rag/services/` — Business Logic Layer
+
+| File | Role | Key exports |
+|------|------|-------------|
+| `analysis.py` | Pure analysis functions (no HTTP deps, DI via kwargs) | `analyze_news_text()`, `analyze_topic_research()` |
+| `persistence.py` | KB/Meta/Archive JSON read/write | `load_kb()`, `save_kb()`, `load_meta()`, `save_meta()`, `append_news_archive()` |
 
 ### `financial_rag/core/` — Architecture Layer
 
@@ -400,6 +418,12 @@ registry = create_financial_registry()
 session = create_tool_session(llm=get_llm(), registry=registry)
 stats = session.run("商汤科技营收增长多少")
 
+# Analysis service (pure functions, no HTTP)
+from financial_rag.services.analysis import analyze_news_text, analyze_topic_research
+result = analyze_news_text("商汤科技2024年营收50.3亿元，同比增长36.4%")
+print(result["assessment"])  # bullish / bearish / neutral
+topic = analyze_topic_research("DeepSeek", max_news=20)
+
 # Model routing
 from financial_rag.llm import ModelRouter
 router = ModelRouter()
@@ -459,9 +483,10 @@ The UI guides you through the KB pipeline:
 
 | Step | Action | Result |
 |------|--------|--------|
-| 📥 **数据摄取** | Browse directories, click "导入全部", or fetch news | Files loaded into KB buffer + persisted to `kb_docs.json` |
+| 📥 **导入数据** | Browse directories, click "分析并导入", or fetch news | Files loaded into KB buffer + persisted to `kb_docs.json` |
 | 🏗️ **构建知识库** | Click "构建索引" | BM25 index + 1024-dim embeddings built |
 | 🔍 **RAG 查询** | Ask questions against your KB | Hybrid retrieval with source citations |
+| 🧠 **智能分析** | Paste news for analysis, or input a topic for research | Extraction + KB context → bullish/bearish/neutral verdict |
 | 🔧 **分析工具** | News search, K-line, slot fill, score diagnostic | Standalone analysis tools |
 
 **Key features:**
@@ -482,6 +507,8 @@ The UI guides you through the KB pipeline:
 | `/api/build` | POST | Build BM25 + Embedding index |
 | `/api/kb/status` | GET | KB stats (doc count, path, size, sources) |
 | `/api/kb/clear` | POST | Clear KB from memory and disk |
+| `/api/analyze/news` | POST | Paste news → extract + KB + bullish/bearish verdict |
+| `/api/analyze/topic` | POST | Input topic → fetch news + KB + comprehensive verdict |
 | `/api/kb-query` | POST | RAG query against built KB |
 | `/api/news` | POST | News search (saves to archive + auto-ingests) |
 | `/api/kline` | POST | Stock/ETF K-line analysis |
@@ -492,7 +519,7 @@ The UI guides you through the KB pipeline:
 
 ## Testing
 
-103 tests covering agents, extraction tools, analysis tools, and mock data. No API key needed — all extraction tests run via regex fallback.
+125 tests covering agents, extraction tools, analysis service, analysis tools, and mock data. No API key needed — all extraction tests run via regex fallback.
 
 ```bash
 pip install pytest
@@ -503,6 +530,7 @@ python -m pytest tests/ -v
 |-----------|----------|-------|
 | `test_extraction_tools.py` | 5 extraction tools (regex fallback) + long-article extraction | 34 |
 | `test_agents.py` | IngestionAgent + ExtractionAgent + full chain (short + long text) | 22 |
+| `test_analysis.py` | Analysis service: news analyze + topic research (mock mode) + helpers | 22 |
 | `test_analysis_tools.py` | Growth rate, ratio, compare, summarize + registry/executor infra | 16 |
 | `test_mock_data.py` | K-line, search, indicators, news + long-form AI articles | 31 |
 
