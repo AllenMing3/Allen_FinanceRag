@@ -243,11 +243,23 @@ class AgentOrchestrator:
         return result
 
     def _apply_updates(self, result: AgentResult):
-        """应用 AgentResult 的 context_updates 到共享上下文，同时可选地发布到 MessageBus。"""
+        """应用 AgentResult 的 context_updates 到共享上下文，同时可选地发布到 MessageBus。
+
+        dict 类型属性 (如 metadata) 采用 merge 而非 replace，
+        防止后续 Agent 覆盖前序 Agent 写入的字段。
+        """
         if result.context_updates:
             for k, v in result.context_updates.items():
                 if hasattr(self.context, k):
-                    setattr(self.context, k, v)
+                    current = getattr(self.context, k)
+                    # dict 属性做 merge，不做 wholesale replace
+                    if isinstance(current, dict) and isinstance(v, dict):
+                        current.update(v)
+                    # list 属性做 extend（如 intermediate_findings 累积各 Agent 结果）
+                    elif isinstance(current, list) and isinstance(v, list):
+                        current.extend(v)
+                    else:
+                        setattr(self.context, k, v)
                 else:
                     self.context.metadata[k] = v
 

@@ -21,6 +21,73 @@ from financial_rag.tools.core import FunctionDef
 logger = logging.getLogger(__name__)
 
 
+# ===================== 股票关键词映射（共享数据，供 agents/router 使用） =====================
+
+STOCK_MAP = {
+    "茅台": ("600519.SH", "贵州茅台"),
+    "五粮液": ("000858.SZ", "五粮液"),
+    "宁德时代": ("300750.SZ", "宁德时代"),
+    "比亚迪": ("002594.SZ", "比亚迪"),
+    "招商银行": ("600036.SH", "招商银行"),
+    "中国平安": ("601318.SH", "中国平安"),
+    "腾讯": ("00700.HK", "腾讯控股"),
+    "阿里巴巴": ("09988.HK", "阿里巴巴"),
+    "沪深300": ("510300.SH", "沪深300ETF"),
+    "中证500": ("510500.SH", "中证500ETF"),
+    "创业板": ("159915.SZ", "创业板ETF"),
+}
+
+
+# ===================== LLM Prompt 模板 =====================
+
+KLINE_ANALYSIS_SYSTEM = """你是一个专业的金融技术分析师。请根据提供的 K 线数据和技术指标，给出专业的技术分析。
+
+分析要点:
+1. 趋势判断（多头/空头/震荡）
+2. 关键支撑位和压力位
+3. 技术指标信号解读
+4. 短期操作建议
+
+要求:
+- 语言简洁专业，不超过 500 字
+- 使用中文
+- 给出具体的价位和数值
+- 最后给出风险提示"""
+
+KLINE_ANALYSIS_PROMPT = """请对以下 {name} 的 K 线数据进行技术分析：
+
+## 基本信息
+- 标的: {name} ({ts_code})
+- 数据区间: {date_range}
+- 最新收盘价: {latest_close} 元
+
+## 基础统计
+- 区间涨跌幅: {change_pct}%
+- 区间最高: {period_high}  |  区间最低: {period_low}
+- 上涨天数: {up_days}  |  下跌天数: {down_days}
+- 5日均线: {ma5}  |  10日均线: {ma10}  |  20日均线: {ma20}
+- 平均成交量: {avg_volume}
+
+## 技术指标
+### MACD
+- DIF: {macd_dif}  |  DEA: {macd_dea}  |  MACD柱: {macd_value}
+- 信号: {macd_signal}
+
+### RSI (14日)
+- 数值: {rsi_value}
+- 信号: {rsi_signal}
+
+### 布林带 (20日)
+- 上轨: {boll_upper}  |  中轨: {boll_middle}  |  下轨: {boll_lower}
+- 位置: {boll_position}
+
+### KDJ
+- K: {kdj_k}  |  D: {kdj_d}  |  J: {kdj_j}
+- 信号: {kdj_signal}
+
+请给出你的技术分析。"""
+
+
 def fetch_etf_kline_report(
     keyword: str,
     days: int = 30,
@@ -365,3 +432,173 @@ KLINE_REPORT_TOOL = FunctionDef(
     category="data",
     tags=["K线", "ETF", "股票", "技术分析", "行情", "Tushare"],
 )
+
+
+# ===================== K线技术分析工具 (供 KLineAgent 调用) =====================
+
+
+def analyze_kline(ts_code: str, days: int = 60, period: str = "daily") -> Dict:
+    """获取 K 线数据并计算全套技术指标（不保存文件，纯数据返回）。
+
+    返回:
+    - data_points: 数据点数
+    - stats: 基础统计 (收盘价, 涨跌幅, MA5/10/20, 成交量等)
+    - indicators: 技术指标 (MACD, RSI, Bollinger, KDJ)
+
+    Args:
+        ts_code: Tushare 股票代码 (如 '600519.SH', '510300.SH')
+        days: 回溯交易天数，默认 60
+        period: K 线周期，'daily' 或 'weekly'，默认 'daily'
+    """
+    from financial_rag.tushare_client import (
+        fetch_stock_kline, fetch_etf_kline,
+        compute_kline_stats, compute_technical_indicators,
+    )
+
+    is_etf = ts_code.startswith("51") or ts_code.startswith("159")
+    if is_etf:
+        df = fetch_etf_kline(ts_code, days=days)
+    else:
+        df = fetch_stock_kline(ts_code, days=days, period=period)
+
+    if df.empty:
+        return {"error": f"未获取到 {ts_code} 的 K 线数据", "ts_code": ts_code}
+
+    stats = compute_kline_stats(df)
+    indicators = compute_technical_indicators(df)
+
+    return {
+        "ts_code": ts_code,
+        "data_points": len(df),
+        "is_etf": is_etf,
+        "stats": {k: v for k, v in stats.items() if v is not None},
+        "indicators": indicators,
+    }
+
+
+# LLM 注入引用
+_kline_llm_ref = {"llm": None}
+
+
+def inject_kline_llm(llm):
+    """注入 LLM 实例供 K 线分析工具使用"""
+    _kline_llm_ref["llm"] = llm
+
+
+def generate_kline_analysis(
+    ts_code: str,
+    name: str = "",
+    stats: Dict = None,
+    indicators: Dict = None,
+) -> Dict:
+    """使用 LLM 生成 K 线技术分析摘要。无 LLM 时返回纯数据摘要。
+
+    Args:
+        ts_code: 股票代码
+        name: 股票/ETF 名称
+        stats: 基础统计数据 (来自 analyze_kline)
+        indicators: 技术指标数据 (来自 analyze_kline)
+    """
+    llm = _kline_llm_ref["llm"]
+    stats = stats or {}
+    indicators = indicators or {}
+
+    macd = indicators.get("macd", {})
+    rsi = indicators.get("rsi", {})
+    boll = indicators.get("bollinger", {})
+    kdj = indicators.get("kdj", {})
+
+    if llm is None:
+        # 无 LLM 时的纯数据摘要
+        lines = [f"## K 线数据摘要", ""]
+        lines.append(f"- 最新收盘价: {stats.get('latest_close', 'N/A')}")
+        lines.append(f"- 区间涨跌幅: {stats.get('period_change_pct', 'N/A')}%")
+        lines.append(f"- 上涨/下跌天数: {stats.get('up_days', 'N/A')} / {stats.get('down_days', 'N/A')}")
+        if macd:
+            lines.append(f"- MACD 信号: {macd.get('signal', 'N/A')}")
+        if rsi:
+            lines.append(f"- RSI(14): {rsi.get('value', 'N/A')} ({rsi.get('signal', 'N/A')})")
+        if kdj:
+            lines.append(f"- KDJ 信号: {kdj.get('signal', 'N/A')}")
+        return {"analysis": "\n".join(lines), "method": "fallback"}
+
+    # prompts 已定义在本模块顶部
+
+    prompt = KLINE_ANALYSIS_PROMPT.format(
+        name=name or ts_code,
+        ts_code=ts_code,
+        date_range="",
+        latest_close=stats.get("latest_close", "N/A"),
+        change_pct=stats.get("period_change_pct", "N/A"),
+        period_high=stats.get("period_high", "N/A"),
+        period_low=stats.get("period_low", "N/A"),
+        up_days=stats.get("up_days", "N/A"),
+        down_days=stats.get("down_days", "N/A"),
+        ma5=stats.get("ma5", "N/A"),
+        ma10=stats.get("ma10", "N/A"),
+        ma20=stats.get("ma20", "N/A"),
+        avg_volume=stats.get("avg_volume", "N/A"),
+        macd_dif=macd.get("dif", "N/A"),
+        macd_dea=macd.get("dea", "N/A"),
+        macd_value=macd.get("macd", "N/A"),
+        macd_signal=macd.get("signal", "N/A"),
+        rsi_value=rsi.get("value", "N/A"),
+        rsi_signal=rsi.get("signal", "N/A"),
+        boll_upper=boll.get("upper", "N/A"),
+        boll_middle=boll.get("middle", "N/A"),
+        boll_lower=boll.get("lower", "N/A"),
+        boll_position=boll.get("position", "N/A"),
+        kdj_k=kdj.get("k", "N/A"),
+        kdj_d=kdj.get("d", "N/A"),
+        kdj_j=kdj.get("j", "N/A"),
+        kdj_signal=kdj.get("signal", "N/A"),
+    )
+
+    try:
+        response = llm.chat(
+            messages=prompt,
+            system=KLINE_ANALYSIS_SYSTEM,
+            max_tokens=800,
+            temperature=0.3,
+        )
+        return {"analysis": response.content.strip(), "method": "llm"}
+    except Exception as e:
+        return {"analysis": f"LLM 分析失败: {e}", "method": "error"}
+
+
+ANALYZE_KLINE_TOOL = FunctionDef(
+    name="analyze_kline",
+    description="获取股票/ETF K线数据并计算全套技术指标（MACD/RSI/Bollinger/KDJ），返回结构化分析数据。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "ts_code": {"type": "string", "description": "Tushare 股票代码，如 '600519.SH'、'510300.SH'"},
+            "days": {"type": "integer", "description": "回溯交易天数", "default": 60},
+            "period": {"type": "string", "description": "K线周期 daily/weekly", "default": "daily"},
+        },
+        "required": ["ts_code"],
+    },
+    callback=analyze_kline,
+    category="analysis",
+    tags=["K线", "技术分析", "指标", "MACD", "RSI"],
+)
+
+GENERATE_KLINE_ANALYSIS_TOOL = FunctionDef(
+    name="generate_kline_analysis",
+    description="基于K线统计数据和技术指标，使用 LLM 生成专业的技术分析摘要。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "ts_code": {"type": "string", "description": "股票代码"},
+            "name": {"type": "string", "description": "股票名称", "default": ""},
+            "stats": {"type": "object", "description": "基础统计数据 (来自 analyze_kline)"},
+            "indicators": {"type": "object", "description": "技术指标数据 (来自 analyze_kline)"},
+        },
+        "required": ["ts_code", "stats", "indicators"],
+    },
+    callback=generate_kline_analysis,
+    category="analysis",
+    tags=["K线", "LLM", "分析", "报告"],
+)
+
+KLINE_ANALYSIS_TOOLS = [ANALYZE_KLINE_TOOL, GENERATE_KLINE_ANALYSIS_TOOL]

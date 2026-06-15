@@ -9,28 +9,53 @@ from typing import Any, Optional
 
 from financial_rag.core.base import ExecutionMode
 from financial_rag.core.orchestrator import AgentOrchestrator, CoordinatorConfig
+from financial_rag.core.agent_router import AgentRouter, create_agent_router
 
 logger = logging.getLogger(__name__)
 
 
 def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
-    """创建 3-Agent 链: Ingestion → Extraction → Report
+    """创建 7-Agent 全量编排器 + AgentRouter
+
+    注册所有 7 个 Agent:
+    - CoordinatorAgent: 智能调度 (意图分类 + Agent 链选择)
+    - IngestionAgent:   数据摄取 (财报/新闻)
+    - ExtractionAgent:  指标抽取 (AI/科技行业)
+    - ReportAgent:      报告生成 (LLM 综合分析)
+    - KLineAgent:       K 线技术分析
+    - EventImpactAgent: 事件影响分析
+    - ScoringAgent:     全链路评分 + 防幻觉
+
+    AgentRouter 决定每次查询走哪条 Agent 链，
+    Orchestrator 负责执行链中的 Agent 并管理数据流。
 
     Args:
         retriever: 可选的 HybridRetriever (注入搜索工具)
         llm: 可选的 DashScopeLLM (注入抽取工具)
     """
+    from financial_rag.agents.coordinator_agent import CoordinatorAgent
     from financial_rag.agents.ingestion_agent import IngestionAgent
     from financial_rag.agents.extraction_agent import ExtractionAgent
     from financial_rag.agents.report_agent import ReportAgent
+    from financial_rag.agents.kline_agent import KLineAgent
+    from financial_rag.agents.event_impact_agent import EventImpactAgent
+    from financial_rag.agents.scoring_agent import ScoringAgent
     from financial_rag.tools import create_financial_registry, ToolExecutor
 
-    # 创建能力注册中心 (含检索/计算/抽取/新闻/分析 全部工具)
+    # 创建能力注册中心 (含检索/计算/抽取/新闻/分析/事件影响/评分/调度 全部工具)
     registry = create_financial_registry(retriever=retriever, llm=llm)
     executor = ToolExecutor(registry)
 
     # 创建 Agent 并绑定工具能力
-    agents = [IngestionAgent(), ExtractionAgent(), ReportAgent()]
+    agents = [
+        CoordinatorAgent(),
+        IngestionAgent(),
+        ExtractionAgent(),
+        ReportAgent(),
+        KLineAgent(),
+        EventImpactAgent(),
+        ScoringAgent(),
+    ]
     for agent in agents:
         agent.bind_tools(registry, executor)
 
@@ -41,7 +66,13 @@ def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
             max_retries=2,
         )
     )
-    orch.register_all(*agents)
+    # 注册所有 Agent（不设置默认 pipeline，由 AgentRouter 动态决定）
+    for agent in agents:
+        orch.register(agent)
+
+    # 附加 AgentRouter 到 orchestrator（供 Pipeline 使用）
+    orch.agent_router = create_agent_router()
+
     return orch
 
 

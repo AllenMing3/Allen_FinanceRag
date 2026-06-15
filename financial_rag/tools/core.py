@@ -719,6 +719,37 @@ def create_financial_registry(retriever=None, llm=None) -> FunctionRegistry:
     from financial_rag.tools.kline_tools import KLINE_REPORT_TOOL
     registry.add(KLINE_REPORT_TOOL)
 
+    # ---- 事件影响分析工具（日期事件 → 利好/利空 + 影响因子）----
+    from financial_rag.tools.event_impact_tools import EVENT_IMPACT_TOOLS, inject_event_llm
+    if llm:
+        inject_event_llm(llm)
+    for tool_def in EVENT_IMPACT_TOOLS:
+        registry.add(tool_def)
+
+    # ---- K线技术分析工具 (供 KLineAgent 调用) ----
+    from financial_rag.tools.kline_tools import KLINE_ANALYSIS_TOOLS, inject_kline_llm
+    if llm:
+        inject_kline_llm(llm)
+    for tool_def in KLINE_ANALYSIS_TOOLS:
+        registry.add(tool_def)
+
+    # ---- 评分工具 (供 ScoringAgent 调用) ----
+    from financial_rag.tools.scoring_tools import SCORING_TOOLS
+    for tool_def in SCORING_TOOLS:
+        registry.add(tool_def)
+
+    # ---- 调度工具 (供 CoordinatorAgent 调用) ----
+    from financial_rag.tools.coordinator_tools import COORDINATOR_TOOLS
+    for tool_def in COORDINATOR_TOOLS:
+        registry.add(tool_def)
+
+    # ---- 报告合成工具 (供 ReportAgent 调用) ----
+    from financial_rag.tools.report_tools import REPORT_TOOLS, inject_report_llm
+    if llm:
+        inject_report_llm(llm)
+    for tool_def in REPORT_TOOLS:
+        registry.add(tool_def)
+
     return registry
 
 

@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from financial_rag.core.scorer import PipelineScoreCard
     from financial_rag.core.reflector import HallucinationGuard
     from financial_rag.retrievers import HybridRetriever
+    from financial_rag.core.agent_router import RoutingDecision
 
 logger = logging.getLogger(__name__)
 
@@ -280,19 +281,43 @@ class PipelineScheduler:
     # ==================== 阶段3: 加工 ====================
 
     def _phase_process(self, query: str, result: PipelineResult) -> PipelineResult:
-        """Multi-Agent 分析 + Function Calling 深度处理"""
+        """Multi-Agent 分析 + Function Calling 深度处理
+    
+        使用 AgentRouter 识别查询意图，动态选择 Agent 执行链:
+        - kline:        KLineAgent → ReportAgent
+        - event_impact: EventImpactAgent → ReportAgent
+        - report:       IngestionAgent → ExtractionAgent → ReportAgent
+        - news:         IngestionAgent → ReportAgent
+        - general:      IngestionAgent → ExtractionAgent → ReportAgent
+        """
         t0 = time.time()
-
+    
         if not self.config.enable_agent_analysis:
             if self.config.verbose:
                 print("[Pipeline] 阶段3: 加工 — 跳过 (未启用)")
             return result
-
+    
         if self.config.verbose:
             print("[Pipeline] 阶段3: 加工 — Multi-Agent 分析...")
-
+    
         try:
-            # 构建上下文传给 Agent
+            # ---- Agent 路由 ----
+            routing = self._route_query(query, result)
+    
+            if self.config.verbose:
+                print(f"  [路由] {routing}")
+    
+            # ---- 动态设置执行链 ----
+            orch = self.orchestrator
+            chain = routing.agent_chain
+            # 只使用已注册的 Agent
+            valid_chain = [n for n in chain if n in orch.agents]
+            if not valid_chain:
+                # 降级: 使用所有已注册 Agent
+                valid_chain = list(orch.pipeline) or list(orch.agents.keys())
+            orch.set_pipeline(valid_chain)
+    
+            # ---- 构建上下文 ----
             context_text = query
             agent_context = None
             if result.retrieved_items:
@@ -305,20 +330,31 @@ class PipelineScheduler:
                     context_text = (
                         f"查询: {query}\n\n参考数据:\n" + "\n---\n".join(chunks)
                     )
-                # 将结构化检索结果传入 AgentContext，让 Agent 能区分查询与检索数据
+                # 将结构化检索结果 + 路由元数据传入 AgentContext
                 agent_context = AgentContext(
                     raw_input=context_text,
                     metadata={
                         "retrieved_items": result.retrieved_items,
                         "fetched_data": result.fetched_data,
+                        "intent": routing.intent,
+                        **routing.metadata,
                     },
                 )
-
-            agent_result = self.orchestrator.execute(
+            else:
+                # 即使没有检索结果，也传路由元数据
+                agent_context = AgentContext(
+                    raw_input=query,
+                    metadata={
+                        "intent": routing.intent,
+                        **routing.metadata,
+                    },
+                )
+    
+            agent_result = orch.execute(
                 context_text, context=agent_context
             )
             result.agent_exec_result = agent_result
-
+    
             if self.config.verbose:
                 ok_count = sum(
                     1 for r in agent_result.agent_results if r.success
@@ -329,9 +365,30 @@ class PipelineScheduler:
         except Exception as e:
             self._logger.warning(f"阶段3 加工失败: {e}")
             result.errors.append(f"加工阶段: {e}")
-
+    
         result.process_elapsed_ms = (time.time() - t0) * 1000
         return result
+    
+    def _route_query(self, query: str, result: PipelineResult) -> "RoutingDecision":
+        """使用 AgentRouter 识别意图并返回路由决策"""
+        from financial_rag.core.agent_router import RoutingDecision, create_agent_router
+    
+        router = getattr(self.orchestrator, "agent_router", None)
+        if router is None:
+            router = create_agent_router()
+    
+        # 传递已有的 fetched_data 元数据辅助路由
+        context_meta = {}
+        if result.fetched_data:
+            # 检查是否有日期信息可辅助 event_impact 判断
+            for item in result.fetched_data[:3]:
+                pt = item.get("publish_time", "")
+                if pt:
+                    context_meta["fetched_date"] = pt[:10]
+                    break
+    
+        return router.route(query, context=context_meta)
+    
 
     # ==================== 阶段4: 输出 ====================
 

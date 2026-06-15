@@ -55,6 +55,38 @@ from financial_rag.tools.kline_tools import (
     fetch_etf_kline_report,
     KLINE_REPORT_TOOL,
 )
+from financial_rag.tools.event_impact_tools import (
+    fetch_date_events,
+    fetch_kline_context,
+    assess_event_impact,
+    inject_event_llm,
+    EVENT_IMPACT_TOOLS,
+)
+from financial_rag.tools.scoring_tools import (
+    evaluate_pipeline_quality,
+    check_hallucination,
+    generate_score_report,
+    SCORING_TOOLS,
+)
+from financial_rag.tools.coordinator_tools import (
+    classify_query_intent,
+    select_agent_chain,
+    COORDINATOR_TOOLS,
+)
+from financial_rag.tools.kline_tools import (
+    analyze_kline,
+    generate_kline_analysis,
+    inject_kline_llm,
+    KLINE_ANALYSIS_TOOLS,
+    STOCK_MAP,
+    KLINE_ANALYSIS_SYSTEM,
+    KLINE_ANALYSIS_PROMPT,
+)
+from financial_rag.tools.report_tools import (
+    synthesize_report,
+    inject_report_llm,
+    REPORT_TOOLS,
+)
 __all__ = [
     # core
     "FunctionDef",
@@ -85,4 +117,24 @@ __all__ = [
     # kline_tools
     "fetch_etf_kline_report",
     "KLINE_REPORT_TOOL",
+    "analyze_kline",
+    "generate_kline_analysis",
+    "inject_kline_llm",
+    "KLINE_ANALYSIS_TOOLS",
+    "STOCK_MAP",
+    "KLINE_ANALYSIS_SYSTEM",
+    "KLINE_ANALYSIS_PROMPT",
+    # report_tools
+    "synthesize_report",
+    "inject_report_llm",
+    "REPORT_TOOLS",
+    # scoring_tools
+    "evaluate_pipeline_quality",
+    "check_hallucination",
+    "generate_score_report",
+    "SCORING_TOOLS",
+    # coordinator_tools
+    "classify_query_intent",
+    "select_agent_chain",
+    "COORDINATOR_TOOLS",
 ]
