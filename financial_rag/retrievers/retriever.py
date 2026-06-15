@@ -6,15 +6,24 @@ Hybrid 混合检索器 — BM25 + Vector (阿里 Embedding) + Rerank 重排序
 - Vector: 阿里 text-embedding-v3 语义检索
 - Rerank: 阿里 qwen3-rerank 精排（替换 RRF 融合）
 
+附加能力:
+- TextChunker: 长文档自动切分，提升检索精度
+- Metadata Filter: 按元数据过滤（来源、时间、标签）
+- Persistence: 索引持久化，重启免重建
+
 所有参数可配置，与金融业务完全脱钩
 """
 from typing import Dict, Any, List, Optional, Union, Tuple
 from collections import defaultdict
 import hashlib
+import json
 import re
 import math
 import time
 import logging
+import os
+
+from financial_rag.retrievers.chunker import TextChunker
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +51,8 @@ class HybridRetriever:
         reranker: Any = None,            # DashScopeReranker 实例
         # ---- 分词器注入 ----
         tokenizer: Any = None,           # jieba / 自定义分词器
+        # ---- 切分器注入 ----
+        chunker: Any = None,             # TextChunker 实例（None=不切分）
     ):
         cfg = config or {}
         # RRF 参数（无 rerank 时使用）
@@ -56,6 +67,9 @@ class HybridRetriever:
         # 分词器
         self._tokenizer = tokenizer
 
+        # 切分器
+        self._chunker = chunker
+
         # 内部状态
         self.documents: List[Dict] = []
         self.doc_embeddings: Optional[List[List[float]]] = None   # 预计算的文档向量
@@ -66,14 +80,24 @@ class HybridRetriever:
 
     # ===================== 索引 =====================
 
-    def index(self, documents: List[Dict], precompute_embeddings: bool = True):
+    def index(
+        self,
+        documents: List[Dict],
+        precompute_embeddings: bool = True,
+        use_chunker: bool = True,
+    ):
         """
         索引文档
 
         Args:
             documents: [{"text": "...", "meta": ...}, ...]
             precompute_embeddings: 是否预计算文档向量（有 embedder 时默认开启）
+            use_chunker: 是否使用切分器（有 chunker 时默认开启）
         """
+        # 切分长文档
+        if use_chunker and self._chunker:
+            documents = self._chunker.split_documents(documents)
+
         self.documents = documents
         self._build_bm25_index()
 
@@ -99,8 +123,12 @@ class HybridRetriever:
             f"{' (含 rerank)' if self._has_rerank else ''}"
         )
 
-    def add(self, documents: List[Dict]):
+    def add(self, documents: List[Dict], use_chunker: bool = True):
         """增量添加文档"""
+        # 切分长文档
+        if use_chunker and self._chunker:
+            documents = self._chunker.split_documents(documents)
+
         start = len(self.documents)
         self.documents.extend(documents)
         for i, doc in enumerate(documents):
@@ -117,6 +145,7 @@ class HybridRetriever:
         top_k: int = 10,
         use_rerank: bool = True,
         scorecard = None,               # PipelineScoreCard 实例（可选）
+        filters: Optional[Dict] = None, # 元数据过滤条件
     ) -> List[Dict]:
         """
         混合检索入口
@@ -126,6 +155,11 @@ class HybridRetriever:
             top_k: 返回数量
             use_rerank: 是否启用 Rerank 精排（需要已注入 reranker）
             scorecard: PipelineScoreCard 实例，传入则自动记录每个子阶段的分数
+            filters: 元数据过滤条件，支持:
+                - {"source": "news"} — 精确匹配
+                - {"source": ["news", "rss"]} — 多值匹配
+                - {"publish_time": {"gte": "2024-01-01"}} — 范围过滤
+                - {"tag": "AI"} — 自定义标签过滤
 
         Returns:
             排序后的文档列表
@@ -221,6 +255,12 @@ class HybridRetriever:
                     high_count=high_count,
                     elapsed_ms=rerank_elapsed,
                 )
+
+        # 5. Metadata 过滤
+        if filters:
+            before_filter = len(candidates)
+            candidates = self._apply_filters(candidates, filters)
+            logger.info(f"Metadata 过滤: {before_filter} → {len(candidates)}")
 
         logger.info(
             f"Hybrid: BM25={len(bm25_results)}, "
@@ -471,6 +511,128 @@ class HybridRetriever:
         self.bm25_index.clear()
         self._doc_token_lens = []
         logger.info("HybridRetriever: 索引已清空")
+
+    # ===================== Metadata 过滤 =====================
+
+    def _apply_filters(self, candidates: List[Dict], filters: Dict) -> List[Dict]:
+        """
+        按元数据过滤候选文档
+
+        支持的过滤条件:
+        - {"key": "value"} — 精确匹配
+        - {"key": ["val1", "val2"]} — 多值匹配 (OR)
+        - {"key": {"gte": "...", "lte": "..."}} — 范围过滤
+
+        多个过滤条件之间是 AND 关系。
+        """
+        result = []
+        for item in candidates:
+            meta = item.get("meta", {})
+            if self._match_filters(meta, filters):
+                result.append(item)
+        return result
+
+    def _match_filters(self, meta: Dict, filters: Dict) -> bool:
+        """检查单条文档的 meta 是否满足所有过滤条件"""
+        for key, condition in filters.items():
+            value = meta.get(key)
+
+            if isinstance(condition, list):
+                # 多值匹配: value in [v1, v2, ...]
+                if value not in condition:
+                    return False
+            elif isinstance(condition, dict):
+                # 范围过滤: {"gte": ..., "lte": ...}
+                if "gte" in condition and value is not None:
+                    if value < condition["gte"]:
+                        return False
+                if "lte" in condition and value is not None:
+                    if value > condition["lte"]:
+                        return False
+                if "gt" in condition and value is not None:
+                    if value <= condition["gt"]:
+                        return False
+                if "lt" in condition and value is not None:
+                    if value >= condition["lt"]:
+                        return False
+                # 如果 value 是 None 但有范围条件，不匹配
+                if value is None and any(k in condition for k in ("gte", "lte", "gt", "lt")):
+                    return False
+            else:
+                # 精确匹配
+                if value != condition:
+                    return False
+
+        return True
+
+    # ===================== 索引持久化 =====================
+
+    def save_index(self, path: str):
+        """
+        将索引持久化到磁盘
+
+        保存内容:
+        - documents (文本 + 元数据)
+        - doc_embeddings (如果已预计算)
+        - bm25_index (倒排索引)
+        - _doc_token_lens (BM25 长度归一化)
+
+        Args:
+            path: 保存路径（.json 文件）
+        """
+        data = {
+            "version": 1,
+            "doc_count": len(self.documents),
+            "documents": self.documents,
+            "doc_embeddings": self.doc_embeddings,
+            "bm25_index": dict(self.bm25_index),
+            "doc_token_lens": self._doc_token_lens,
+            "config": {
+                "rrf_k": self.rrf_k,
+                "bm25_weight": self.bm25_weight,
+                "vector_weight": self.vector_weight,
+            },
+        }
+
+        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        size_mb = os.path.getsize(path) / (1024 * 1024)
+        logger.info(f"HybridRetriever: 索引已保存到 {path} ({size_mb:.2f} MB)")
+
+    def load_index(self, path: str):
+        """
+        从磁盘加载索引
+
+        Args:
+            path: 索引文件路径
+        """
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"索引文件不存在: {path}")
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if data.get("version") != 1:
+            raise ValueError(f"不支持的索引版本: {data.get('version')}")
+
+        self.documents = data["documents"]
+        self.doc_embeddings = data.get("doc_embeddings")
+        self.bm25_index = defaultdict(list, data["bm25_index"])
+        self._doc_token_lens = data.get("doc_token_lens", [])
+
+        # 恢复配置
+        cfg = data.get("config", {})
+        self.rrf_k = cfg.get("rrf_k", self.rrf_k)
+        self.bm25_weight = cfg.get("bm25_weight", self.bm25_weight)
+        self.vector_weight = cfg.get("vector_weight", self.vector_weight)
+
+        logger.info(
+            f"HybridRetriever: 已加载索引 {path}"
+            f" ({len(self.documents)} 篇文档"
+            f"{', 含 embeddings' if self.doc_embeddings else ''})"
+        )
 
 
 # ===================== jieba 分词器工厂 =====================
