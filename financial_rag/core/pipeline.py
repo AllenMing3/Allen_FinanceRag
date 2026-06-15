@@ -15,6 +15,7 @@ import time
 import logging
 
 from financial_rag.core.orchestrator import AgentOrchestrator, ExecutionResult
+from financial_rag.core.base import AgentContext
 
 if TYPE_CHECKING:
     from financial_rag.tools import FunctionRegistry, ToolCallSession, ToolExecutor
@@ -253,10 +254,15 @@ class PipelineScheduler:
                         docs.append({"text": text, "meta": meta})
 
                 if docs:
-                    self.retriever.index(docs)
+                    # 增量添加而非覆盖：保留已有 KB 文档
+                    if self.retriever.documents:
+                        self.retriever.add(docs)
+                    else:
+                        self.retriever.index(docs)
                     result.indexed_docs = len(docs)
                     if self.config.verbose:
-                        print(f"  [索引] 入库 {len(docs)} 篇文档")
+                        total = len(self.retriever.documents)
+                        print(f"  [索引] 新增 {len(docs)} 篇文档 (知识库共 {total} 篇)")
 
             # 检索
             if hasattr(self.retriever, "search"):
@@ -286,8 +292,9 @@ class PipelineScheduler:
             print("[Pipeline] 阶段3: 加工 — Multi-Agent 分析...")
 
         try:
-            # 将检索结果构建为上下文传给 Agent
+            # 构建上下文传给 Agent
             context_text = query
+            agent_context = None
             if result.retrieved_items:
                 chunks = []
                 for r in result.retrieved_items[:5]:
@@ -298,8 +305,18 @@ class PipelineScheduler:
                     context_text = (
                         f"查询: {query}\n\n参考数据:\n" + "\n---\n".join(chunks)
                     )
+                # 将结构化检索结果传入 AgentContext，让 Agent 能区分查询与检索数据
+                agent_context = AgentContext(
+                    raw_input=context_text,
+                    metadata={
+                        "retrieved_items": result.retrieved_items,
+                        "fetched_data": result.fetched_data,
+                    },
+                )
 
-            agent_result = self.orchestrator.execute(context_text)
+            agent_result = self.orchestrator.execute(
+                context_text, context=agent_context
+            )
             result.agent_exec_result = agent_result
 
             if self.config.verbose:
@@ -337,13 +354,26 @@ class PipelineScheduler:
 
             tmpl = template or QUICK_QA_TEMPLATE
 
-            # 构建上下文（检索结果 + 完整文章）
+            # 构建上下文（检索结果 + Agent 分析 + 完整文章）
             context_docs = []
+            # 优先使用 Agent 分析结果（Phase 3 产出）
+            if result.agent_exec_result:
+                for ar in result.agent_exec_result.agent_results:
+                    if ar.success and ar.data:
+                        agent_text = str(ar.data) if not isinstance(ar.data, str) else ar.data
+                        if agent_text.strip():
+                            context_docs.append(f"【{ar.agent_name}分析】\n{agent_text}")
+                if result.agent_exec_result.final_output:
+                    context_docs.append(
+                        f"【综合分析】\n{result.agent_exec_result.final_output}"
+                    )
+            # 检索结果
             if result.retrieved_items:
                 for r in result.retrieved_items:
                     text = r.get("text", "")
                     if text:
                         context_docs.append(text)
+            # 原始获取数据
             if result.fetched_data:
                 for item in result.fetched_data[:5]:
                     title = item.get("title", "")

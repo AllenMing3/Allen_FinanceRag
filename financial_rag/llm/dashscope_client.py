@@ -4,7 +4,7 @@
 封装三个核心能力:
 1. LLM Chat (Qwen 系列)
 2. Text Embedding (text-embedding-v3)
-3. Rerank (gte-rerank)
+3. Rerank (qwen3-rerank)
 
 文档: https://help.aliyun.com/document_detail/2712195.html
 """
@@ -298,7 +298,7 @@ class DashScopeEmbedding:
 class DashScopeReranker:
     """阿里百炼 Rerank 客户端
 
-    模型: gte-rerank
+    模型: qwen3-rerank
     对检索到的候选文档重排序，提升检索精度
     """
 
@@ -307,7 +307,7 @@ class DashScopeReranker:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gte-rerank",
+        model: str = "qwen3-rerank",
         top_n: int = 5,
         return_documents: bool = True,
     ):

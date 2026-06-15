@@ -253,7 +253,7 @@ class CommandRouter:
         r = self._retriever
         print(f"来源: {dir_path}")
         print(f"Embedding: {'text-embedding-v3' if self._has_key else '无 (纯本地)'}")
-        print(f"Rerank:     {'gte-rerank' if self._has_key else '无 (纯本地)'}\n")
+        print(f"Rerank:     {'qwen3-rerank' if self._has_key else '无 (纯本地)'}\n")
 
         r.index(self._sample_docs)
         print(f"已索引 {len(self._sample_docs)} 篇文档\n")

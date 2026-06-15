@@ -4,7 +4,7 @@
 模型清单:
 - LLM:      qwen-plus / qwen-max / qwen-turbo / qwen3-235b-a22b
 - Embedding: text-embedding-v3
-- Rerank:    gte-rerank
+- Rerank:    qwen3-rerank
 
 智能路由:
 - ModelRouter: 按任务复杂度自动选择模型

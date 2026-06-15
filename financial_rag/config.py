@@ -22,7 +22,7 @@ class LLMConfig:
     # 模型选择
     model: str = "qwen-plus"                                      # qwen-turbo / qwen-plus / qwen-max
     embedding_model: str = "text-embedding-v3"                    # 1024 维
-    rerank_model: str = "gte-rerank"                              # 重排序模型
+    rerank_model: str = "qwen3-rerank"                             # 重排序模型
 
     # 生成参数
     temperature: float = 0.0

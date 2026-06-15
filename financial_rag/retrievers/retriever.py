@@ -4,7 +4,7 @@ Hybrid 混合检索器 — BM25 + Vector (阿里 Embedding) + Rerank 重排序
 三个通道:
 - BM25: 关键词精准匹配（本地倒排索引）
 - Vector: 阿里 text-embedding-v3 语义检索
-- Rerank: 阿里 gte-rerank 精排（替换 RRF 融合）
+- Rerank: 阿里 qwen3-rerank 精排（替换 RRF 融合）
 
 所有参数可配置，与金融业务完全脱钩
 """
@@ -60,6 +60,7 @@ class HybridRetriever:
         self.documents: List[Dict] = []
         self.doc_embeddings: Optional[List[List[float]]] = None   # 预计算的文档向量
         self.bm25_index: Dict[str, List[int]] = defaultdict(list)
+        self._doc_token_lens: List[int] = []  # 每篇文档的 token 数（BM25 长度归一化用）
         self._has_embedding = embedder is not None
         self._has_rerank = reranker is not None
 
@@ -103,7 +104,9 @@ class HybridRetriever:
         start = len(self.documents)
         self.documents.extend(documents)
         for i, doc in enumerate(documents):
-            for word in self._tokenize(doc.get("text", "")):
+            tokens = self._tokenize(doc.get("text", ""))
+            self._doc_token_lens.append(len(tokens))
+            for word in set(tokens):
                 self.bm25_index[word].append(start + i)
 
     # ===================== 检索 =====================
@@ -237,14 +240,28 @@ class HybridRetriever:
                 return self._tokenizer(text)
             except Exception:
                 pass
-        # 回退: 中文按字符序列，英文按单词
-        tokens = re.findall(r'[a-zA-Z]+|[\u4e00-\u9fff]+|\d+(?:\.\d+)?[%％]?', text.lower())
+        # 回退: 中文按双字滑窗 + 英文按单词（单字信息量太低，双字兼顾匹配率和区分度）
+        raw = re.findall(r'[a-zA-Z]+|[\u4e00-\u9fff]+|\d+(?:\.\d+)?[%％]?', text.lower())
+        tokens = []
+        for seg in raw:
+            if re.match(r'^[\u4e00-\u9fff]+$', seg) and len(seg) > 1:
+                # 中文段: 生成 bigram 滑窗（"商汤科技" → ["商汤", "汤科", "科技"]）
+                for j in range(len(seg) - 1):
+                    tokens.append(seg[j:j+2])
+                # 同时保留完整段作为 token（兜底长匹配）
+                if len(seg) <= 6:
+                    tokens.append(seg)
+            else:
+                tokens.append(seg)
         return tokens
 
     def _build_bm25_index(self):
         self.bm25_index.clear()
+        self._doc_token_lens = []
         for doc_id, doc in enumerate(self.documents):
-            for word in set(self._tokenize(doc.get("text", ""))):
+            tokens = self._tokenize(doc.get("text", ""))
+            self._doc_token_lens.append(len(tokens))
+            for word in set(tokens):
                 self.bm25_index[word].append(doc_id)
 
     def _bm25_search(self, query: str, top_k: int, query_tokens: List[str] = None) -> List[Dict]:
@@ -255,7 +272,7 @@ class HybridRetriever:
             return []
 
         N = len(self.documents)
-        avg_dl = sum(len(d.get("text", "")) for d in self.documents) / max(N, 1)
+        avg_dl = sum(self._doc_token_lens) / max(N, 1) if self._doc_token_lens else 1
         k1, b = 1.2, 0.75
 
         scores: Dict[int, float] = {}
@@ -268,7 +285,7 @@ class HybridRetriever:
 
             for doc_id in doc_ids:
                 text = self.documents[doc_id].get("text", "")
-                dl = len(text)
+                dl = self._doc_token_lens[doc_id] if doc_id < len(self._doc_token_lens) else 1
                 tf = text.lower().count(term)
                 score = idf * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / max(avg_dl, 1)))
                 scores[doc_id] = scores.get(doc_id, 0) + score
@@ -392,11 +409,11 @@ class HybridRetriever:
             result.append(item)
         return result
 
-    # ===================== Rerank: 阿里 gte-rerank =====================
+    # ===================== Rerank: 阿里 qwen3-rerank =====================
 
     def _rerank(self, query: str, candidates: List[Dict], top_k: int) -> List[Dict]:
         """
-        使用阿里 gte-rerank 对候选文档精排
+        使用阿里 qwen3-rerank 对候选文档精排
 
         这是三大架构中 Indexer 的最后一环：
         BM25 + Embedding → RRF → Rerank → 最终 Top-K
@@ -452,6 +469,7 @@ class HybridRetriever:
         self.documents = []
         self.doc_embeddings = None
         self.bm25_index.clear()
+        self._doc_token_lens = []
         logger.info("HybridRetriever: 索引已清空")
 
 
