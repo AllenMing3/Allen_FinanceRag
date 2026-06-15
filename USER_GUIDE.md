@@ -1,6 +1,6 @@
 # Financial RAG 使用手册
 
-> 架构细节请看 `README.md`。
+> 架构概览请看 `README.md`，深入架构细节请看 `docs/ARCHITECTURE.md`。
 
 ---
 
@@ -12,9 +12,12 @@ myenv\Scripts\activate.bat
 ```
 
 编辑 `.env`：
-- `DASHSCOPE_API_KEY=sk-xxx` — LLM/Embedding/Rerank（必须）
-- `TUSHARE_TOKEN=xxx` — K线数据（可选）
-- `MOCK_MODE=true` — 开启 Mock 模式（可选，详见第 3 节）
+
+| 变量 | 必须 | 说明 |
+|------|------|------|
+| `DASHSCOPE_API_KEY=sk-xxx` | 是 | LLM / Embedding / Rerank（不设则走本地模式） |
+| `TUSHARE_TOKEN=xxx` | 否 | K线数据（120+ 积分才能用 daily 接口） |
+| `MOCK_MODE=true` | 否 | 开启 Mock 模式（详见第 3 节） |
 
 ---
 
@@ -28,16 +31,19 @@ python -m financial_rag.main web
 
 | 步骤 | 页面 | 操作 | 说明 |
 |------|------|------|------|
-| 1 | 导入数据 | 搜索新闻（如"AI人工智能"） | 收集元数据，辅助后续文件解析。新闻**不进知识库** |
+| 1 | 导入数据 | 搜索新闻（如 "AI人工智能"） | 收集元数据，辅助后续文件解析。新闻**不进知识库** |
 | 2 | 导入数据 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库 |
-| 3 | 构建知识库 | 构建索引 | BM25 + 向量双通道索引 |
-| 4 | RAG 查询 | 提问 | 检索知识库 + 匹配新闻 + LLM 回答（带引用和 RRF 分数明细） |
-| 5 | 智能分析 | 粘贴新闻 / 输入话题 | 抽取指标+实体+KB上下文 → 利好/利空/中性判断 |
-| 6 | 分析工具 | K线分析 | 输入"茅台"或"600519"，生成技术分析报告 |
+| 3 | 构建知识库 | 构建索引 | BM25 + 向量双通道索引（TextChunker 自动切分） |
+| 4 | RAG 查询 | 提问 | AgentRouter **自动路由** → 检索知识库 → LLM 回答（带引用和分数明细） |
+| 5 | 智能分析 | 粘贴新闻 / 输入话题 | 抽取指标 + 实体 + KB 上下文 → 利好/利空/中性判断 |
+| 6 | 分析工具 | K线分析 | 输入 "茅台" 或 "600519"，生成技术分析报告 |
+| 7 | 事件分析 | 事件影响分析 | 输入日期 + 股票，评估事件利好/利空 + 影响因子 |
+
+> **智能路由**：查询自动分类为 5 种意图（kline / event_impact / report / news / general），系统选择最优 Agent 执行链，无需手动指定。
 
 **数据来源：**
 - 文件放 `./data/financial` 目录
-- 新闻来自国内直连 API（同花顺/新浪财经/东方财富）
+- 新闻来自国内直连 API（同花顺 / 新浪财经 / 东方财富）
 - K线来自 Tushare Pro（需 120+ 积分）
 
 ---
@@ -56,28 +62,36 @@ set MOCK_MODE=true && python -m financial_rag.main web
 |--------|----------|
 | 新闻 | 25 条内置 AI 行业新闻 |
 | K线 | 8 只股票 + 7 只 ETF 的模拟行情（几何布朗运动） |
-| 话题调研 | 智能分析的话题调研使用 mock 新闻数据，不调用真实 API |
-| LLM/Embedding | **真实 DashScope API**（需 Key） |
+| 话题调研 | 使用 mock 新闻数据，不调用真实 API |
+| LLM / Embedding | **真实 DashScope API**（需 Key） |
+
+Web UI 开启 Mock 模式时会显示橙色提示条。
 
 ---
 
 ## 4. 测试
 
 ```cmd
-:: 全量（125 tests，无需 API Key）
+:: 全量（234 tests，无需 API Key）
 python -m pytest tests/ -v
-
-:: 只看 Agent 链
-python -m pytest tests/test_agents.py -v
-
-:: 只看智能分析
-python -m pytest tests/test_analysis.py -v
-
-:: 只看 Mock 数据
-python -m pytest tests/test_mock_data.py -v
 ```
 
-测试只 mock 数据源，LLM/Embedding/Rerank 保持真实。Agent 抽取工具走 regex fallback，无需 API Key。
+按需运行单个模块：
+
+| 模块 | 命令 | 覆盖内容 |
+|------|------|----------|
+| Agent 路由 | `pytest tests/test_agent_router.py -v` | 意图分类、链选择、元数据提取 |
+| 新 Agent | `pytest tests/test_new_agents.py -v` | Coordinator / KLine / EventImpact / Scoring / Report |
+| 新工具 | `pytest tests/test_new_tools.py -v` | scoring / coordinator / report / event_impact |
+| 工厂配线 | `pytest tests/test_factory.py -v` | 7 Agent 注册、链顺序、工具绑定 |
+| 数据合并 | `pytest tests/test_orchestrator_merge.py -v` | metadata merge、findings extend |
+| 原始 Agent | `pytest tests/test_agents.py -v` | Ingestion + Extraction + 完整链 |
+| 智能分析 | `pytest tests/test_analysis.py -v` | 新闻分析 + 话题调研 (mock) |
+| 抽取工具 | `pytest tests/test_extraction_tools.py -v` | 5 个抽取工具 + 长文章 |
+| 分析工具 | `pytest tests/test_analysis_tools.py -v` | 增长率、比率、对比、汇总 |
+| Mock 数据 | `pytest tests/test_mock_data.py -v` | K线、搜索、指标、新闻 |
+
+> 测试只 mock 数据源，LLM / Embedding / Rerank 保持真实。抽取工具走 regex fallback，无需 API Key。
 
 ---
 
@@ -86,7 +100,9 @@ python -m pytest tests/test_mock_data.py -v
 | 命令 | 用途 | 示例 |
 |------|------|------|
 | `web` | Web UI | `python -m financial_rag.main web` |
-| `pipeline` | 端到端分析 | `python -m financial_rag.main pipeline "商汤营收" -v` |
+| `pipeline` | 端到端分析（自动路由） | `python -m financial_rag.main pipeline "商汤营收" -v` |
+| `pipeline` | K线分析（自动识别） | `python -m financial_rag.main pipeline "茅台走势" -v` |
+| `pipeline` | 事件分析（自动识别） | `python -m financial_rag.main pipeline "2024-06-01 发生了什么" -v` |
 | `news` | 拉新闻 | `python -m financial_rag.main news "AI" -s` |
 | `kline` | K线分析 | `python -m financial_rag.main kline "商汤" --days 30` |
 | `toolcall` | Function Calling | `python -m financial_rag.main toolcall "商汤营收" -v` |
@@ -95,16 +111,37 @@ python -m pytest tests/test_mock_data.py -v
 | `build` | 构建知识库 | `python -m financial_rag.main build --dir ./data/financial` |
 | `query` | 交互查询 | `python -m financial_rag.main query -i` |
 
-Pipeline 模板：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`（新闻）/ `-t deep`（深度）
+Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`（新闻）/ `-t deep`（深度）
 
 ---
 
-## 6. 常见问题
+## 6. Agent 体系
 
-**Rerank 403** — `gte-rerank` 需在[阿里云百炼控制台](https://bailian.console.aliyun.com/)手动开通，不开通自动降级为 RRF 融合。
+| Agent | 职责 | 触发方式 |
+|-------|------|----------|
+| **CoordinatorAgent** | 意图分类 + Agent 链选择 | 手动调起（`call_tool(classify_query_intent)`） |
+| **IngestionAgent** | 数据摄取 + 元数据提取 | report / news / general 链 |
+| **ExtractionAgent** | AI 行业指标 + 实体抽取 | report / general 链 |
+| **ReportAgent** | LLM 综合分析报告 | 所有链末端 |
+| **KLineAgent** | K 线技术分析（MACD / RSI / KDJ / Bollinger） | intent = kline 或股票关键词 |
+| **EventImpactAgent** | 事件影响分析（利好/利空 + 影响因子） | intent = event_impact 或日期关键词 |
+| **ScoringAgent** | 全链路评分 + 防幻觉校验 | **所有链末端** |
+
+**核心设计原则：**
+- Agent 只做编排决策（`call_tool()`），不包含任何业务逻辑
+- 所有业务能力实现在 tools 层
+- 每条链都以 ScoringAgent 结尾，确保输出质量
+
+---
+
+## 7. 常见问题
+
+**Rerank 403** — `qwen3-rerank` 需在 [阿里云百炼控制台](https://bailian.console.aliyun.com/) 手动开通，未开通时自动降级为 RRF 融合。
 
 **新闻获取不到** — 关键词太偏或 API 频率限制，换热门主题重试。
 
 **中文乱码** — CMD 下执行 `set PYTHONUTF8=1`。
 
-**详细日志** — 大部分命令加 `-v`。
+**K线获取失败** — 检查 `.env` 中有 `TUSHARE_TOKEN` 且积分 >= 120。
+
+**详细日志** — 大部分命令加 `-v` 可输出详细过程。
