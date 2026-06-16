@@ -282,7 +282,7 @@ def api_directories():
 def api_ingest_files(req: IngestFilesRequest):
     """Load and optionally analyze documents from a directory into the KB.
 
-    analyze=True runs IngestionAgent + ExtractionAgent on each document
+    analyze=True runs IngestionAgent + AnalysisAgent on each document
     to extract structured features (metrics, entities) before KB entry.
     """
     _ensure_init()
@@ -335,10 +335,10 @@ def api_ingest_files(req: IngestFilesRequest):
     if req.analyze and raw_docs:
         from financial_rag.core.base import AgentContext
         from financial_rag.agents.ingestion_agent import IngestionAgent
-        from financial_rag.agents.extraction_agent import ExtractionAgent
+        from financial_rag.agents.analysis_agent import AnalysisAgent
 
         ingest_agent = IngestionAgent()
-        extract_agent = ExtractionAgent()
+        extract_agent = AnalysisAgent()
 
         # 绑定工具能力 (从全局注册中心)
         registry = _state.get("registry")
@@ -351,7 +351,7 @@ def api_ingest_files(req: IngestFilesRequest):
             try:
                 ctx = AgentContext(
                     raw_input=doc["text"][:500],
-                    metadata={"news_context": _state.get("meta_store", [])},
+                    metadata={"news_context": _state.get("meta_store", []), "intent": "general"},
                 )
                 ctx.parsed_data = [doc]
                 ir = ingest_agent.run(ctx)
@@ -813,12 +813,13 @@ def api_kline(req: KlineRequest):
     """K线技术分析 — 按需查询，不进知识库"""
     _ensure_init()
     from financial_rag.core.base import AgentContext
-    from financial_rag.agents.kline_agent import KLineAgent
+    from financial_rag.agents.analysis_agent import AnalysisAgent
 
-    agent = KLineAgent()
+    agent = AnalysisAgent()
     ctx = AgentContext(
         raw_input=req.query,
         metadata={
+            "intent": "kline",
             "ts_code": req.ts_code,
             "name": req.name,
             "days": req.days,

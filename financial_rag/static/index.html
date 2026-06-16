@@ -10,7 +10,7 @@
 
 <!-- Top bar -->
 <div class="topbar">
-  <div class="logo">Financial RAG <small>v2.0</small></div>
+  <div class="logo">Financial RAG <small>v2.1</small></div>
   <div class="kb-badge" id="kbBadge"><span class="dot dot-off"></span> <span id="kbStatus">未构建知识库</span></div>
   <div class="kb-badge" id="metaBadge" style="background:rgba(255,217,61,.1)"><span style="font-size:14px">📰</span> <span id="metaStatus">元数据: 0</span></div>
   <div class="mock-badge" id="mockBadge"><span class="mock-dot"></span> MOCK 模式 · 数据为模拟</div>
@@ -39,6 +39,15 @@
   <!-- ========== AGENT ARCHITECTURE ========== -->
   <div class="panel" id="panel-agents">
     <div class="agent-flow">
+      <!-- System overview -->
+      <div style="margin-bottom:16px;padding:12px 16px;background:rgba(78,205,196,.06);border:1px solid rgba(78,205,196,.15);border-radius:8px">
+        <h3 style="font-size:14px;color:var(--accent2);margin-bottom:6px">📐 架构概览 — 4 Agent + 3 保护层</h3>
+        <p style="font-size:12px;color:var(--text2);margin:0;line-height:1.7">
+          <strong>4 Agent:</strong> CoordinatorAgent (路由) · IngestionAgent (摄取) · AnalysisAgent (分析/抽取/报告/K线) · ScoringAgent (幻觉防护)<br>
+          <strong>3 保护层:</strong> DataOrchestrator (多池调度) · TextPreprocessor (清洗/切片/相关性) · LLMCaller (重试/缓存/JSON/约束)
+        </p>
+      </div>
+
       <!-- Ingest-phase agents -->
       <div>
         <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">INGEST PHASE — 数据摄取时运行</h3>
@@ -47,16 +56,16 @@
             <span class="agent-phase tag tag-ok">摄取时</span>
             <div class="agent-icon">📥</div>
             <div class="agent-name">IngestionAgent</div>
-            <div class="agent-role">数据清洗与标准化。将原始文件（财报、新闻、宏观数据）解析为统一文档格式，提取来源/时间等元数据。</div>
-            <div class="agent-io"><strong>输入:</strong> 原始文件 (JSONL/TXT/JSON)<br><strong>输出:</strong> 标准化文档 + 元数据</div>
+            <div class="agent-role">数据加载与预处理。将原始文件（JSONL/TXT/JSON/PDF）解析为统一文档格式，调用 TextPreprocessor 做清洗、切片、相关性过滤、文档类型分类。</div>
+            <div class="agent-io"><strong>输入:</strong> 原始文件<br><strong>输出:</strong> 标准化文档 + 元数据 + CleanStats</div>
           </div>
           <div class="agent-arrow">→</div>
           <div class="agent-card">
             <span class="agent-phase tag tag-ok">摄取时</span>
-            <div class="agent-icon">🔬</div>
-            <div class="agent-name">ExtractionAgent</div>
-            <div class="agent-role">关键财务指标抽取与实体识别。从文档中提取财务指标（营收、净利润、ROE）和实体（公司名、股票代码）。</div>
-            <div class="agent-io"><strong>输入:</strong> IngestionAgent 的输出<br><strong>输出:</strong> metrics + entities → 附加到文档 meta</div>
+            <div class="agent-icon">🗂️</div>
+            <div class="agent-name">DataOrchestrator</div>
+            <div class="agent-role">多池文本调度器。按文档类型自动路由到 KnowledgePool（financial_report / news / macro_data / general），支持跨池加权检索。</div>
+            <div class="agent-io"><strong>输入:</strong> 预处理后的文档<br><strong>输出:</strong> 分池索引 + IngestStats (含拒绝原因)</div>
           </div>
           <div class="agent-arrow">→</div>
           <div class="agent-card" style="border-color:var(--warn)">
@@ -75,18 +84,35 @@
         <div class="agent-row">
           <div class="agent-card">
             <span class="agent-phase tag tag-info">查询时</span>
+            <div class="agent-icon">🧭</div>
+            <div class="agent-name">CoordinatorAgent</div>
+            <div class="agent-role">查询路由与调度。解析用户意图（KB查询 / 新闻分析 / K线 / 报告），选择对应 Agent 链执行，管理 5 阶段流水线。</div>
+            <div class="agent-io"><strong>输入:</strong> 用户查询<br><strong>输出:</strong> 路由决策 → 调度 AnalysisAgent / ScoringAgent</div>
+          </div>
+          <div class="agent-arrow">→</div>
+          <div class="agent-card">
+            <span class="agent-phase tag tag-info">查询时</span>
             <div class="agent-icon">🔍</div>
             <div class="agent-name">HybridRetriever (Search)</div>
             <div class="agent-role">混合检索 + RRF 融合 + Rerank。同时执行 BM25 关键词匹配和向量语义检索，通过 RRF 融合排序返回 Top-K 结果。</div>
             <div class="agent-io"><strong>输入:</strong> 用户查询<br><strong>输出:</strong> Top-K 相关文档 + 分数</div>
           </div>
           <div class="agent-arrow">→</div>
-          <div class="agent-card">
-            <span class="agent-phase tag tag-info">查询时</span>
-            <div class="agent-icon">📊</div>
-            <div class="agent-name">SlotFiller + HallucinationGuard</div>
-            <div class="agent-role">结构化槽位填充生成回答。基于检索到的上下文文档，通过 LLM 填充模板槽位生成最终回答，并由 6 层幻觉防护校验。</div>
-            <div class="agent-io"><strong>输入:</strong> 查询 + Top-K 文档<br><strong>输出:</strong> 结构化回答 + 引用来源</div>
+          <div class="agent-card" style="border-color:#7c3aed">
+            <span class="agent-phase" style="background:rgba(124,58,237,.15);color:#7c3aed;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">核心</span>
+            <div class="agent-icon">🧠</div>
+            <div class="agent-name">AnalysisAgent</div>
+            <div class="agent-role">统一分析代理。整合了原 ExtractionAgent / KLineAgent / EventImpactAgent / ReportAgent 的全部能力，按意图路由：指标抽取、实体识别、事件评估、报告生成、K线技术分析。</div>
+            <div class="agent-io"><strong>输入:</strong> 路由后的任务 + 上下文<br><strong>输出:</strong> metrics / entities / report / kline_analysis</div>
+          </div>
+        </div>
+        <div class="agent-row" style="margin-top:8px">
+          <div class="agent-card" style="border-color:var(--danger)">
+            <span class="agent-phase" style="background:rgba(255,99,99,.12);color:var(--danger);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">校验</span>
+            <div class="agent-icon">🛡️</div>
+            <div class="agent-name">ScoringAgent</div>
+            <div class="agent-role">幻觉防护与质量评分。通过 HallucinationGuard (6 层校验) + SlotFiller 槽位填充，确保回答有来源支撑、数据准确。</div>
+            <div class="agent-io"><strong>输入:</strong> AnalysisAgent 的输出<br><strong>输出:</strong> 评分 + 引用验证 + 最终回答</div>
           </div>
         </div>
       </div>
@@ -99,48 +125,34 @@
             <span class="agent-phase" style="background:rgba(232,121,249,.15);color:#e879f9;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">分析时</span>
             <div class="agent-icon">📰</div>
             <div class="agent-name">News Analyzer</div>
-            <div class="agent-role">用户粘贴新闻 → 结构化抽取（ExtractionAgent 复用）→ KB 上下文检索 → LLM/规则研判，输出利好/利空/中性结论。</div>
+            <div class="agent-role">用户粘贴新闻 → AnalysisAgent 结构化抽取 → KB 上下文检索 → LLMCaller 研判，输出利好/利空/中性结论。</div>
             <div class="agent-io"><strong>输入:</strong> 新闻全文 + 可选补充说明<br><strong>输出:</strong> metrics + entities + assessment + KB sources</div>
           </div>
           <div class="agent-card" style="border-color:#e879f9">
             <span class="agent-phase" style="background:rgba(232,121,249,.15);color:#e879f9;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">分析时</span>
             <div class="agent-icon">🔍</div>
             <div class="agent-name">Topic Researcher</div>
-            <div class="agent-role">用户输入话题 → 自动抓取相关新闻（mock 可切换）→ KB 关联检索 → LLM 综合研判，给出投资方向判断。</div>
+            <div class="agent-role">用户输入话题 → 自动抓取相关新闻（mock 可切换）→ KB 关联检索 → LLMCaller 综合研判，给出投资方向判断。</div>
             <div class="agent-io"><strong>输入:</strong> 研究话题 + max_news<br><strong>输出:</strong> news + assessment + KB sources</div>
           </div>
         </div>
       </div>
 
-      <!-- Standalone agents -->
+      <!-- LLM Call Layer -->
       <div>
-        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">STANDALONE — 独立按需调用</h3>
+        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">LLM CALL LAYER — 所有 LLM 调用的保护层</h3>
         <div class="agent-row">
           <div class="agent-card" style="border-color:var(--accent2)">
-            <span class="agent-phase" style="background:rgba(78,205,196,.15);color:var(--accent2);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">按需</span>
-            <div class="agent-icon">📈</div>
-            <div class="agent-name">KLineAgent</div>
-            <div class="agent-role">K线技术分析代理。从 Tushare 拉取行情数据，计算 MA/MACD/RSI/KDJ/布林带等技术指标，LLM 生成自然语言分析。结果不进入知识库。</div>
-            <div class="agent-io"><strong>输入:</strong> 股票名称/代码 + 时间范围<br><strong>输出:</strong> 技术指标 + LLM 分析报告</div>
+            <div class="agent-icon">🔄</div>
+            <div class="agent-name">LLMCaller</div>
+            <div class="agent-role">智能调用层，封装所有 LLM 调用：① 重试机制 (指数退避) ② call_json() 结构化输出 (自动解析+重试) ③ 输入长度校验 ④ 响应缓存 (TTL) ⑤ 防幻觉约束。</div>
+            <div class="agent-io"><strong>替代:</strong> 原先各 tool 中的 llm.chat() + 手动 JSON 解析<br><strong>提供:</strong> call() / call_json() / call_with_tools()</div>
           </div>
-        </div>
-      </div>
-
-      <!-- Service layer -->
-      <div>
-        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">SERVICE LAYER — 纯函数业务逻辑（services/）</h3>
-        <div class="agent-row">
-          <div class="agent-card" style="border-color:var(--border)">
-            <div class="agent-icon">🧠</div>
-            <div class="agent-name">services/analysis.py</div>
-            <div class="agent-role">智能分析纯函数。不依赖 HTTP/FastAPI，接受依赖注入（llm, retriever），返回结构化 dict。支持 mock 模式切换。</div>
-            <div class="agent-io"><strong>函数:</strong> analyze_news_text(), analyze_topic_research()<br><strong>依赖:</strong> ExtractionAgent, HybridRetriever, News Collector</div>
-          </div>
-          <div class="agent-card" style="border-color:var(--border)">
-            <div class="agent-icon">💾</div>
-            <div class="agent-name">services/persistence.py</div>
-            <div class="agent-role">持久化层。KB 文档、元数据、新闻归档的 JSON 读写。web.py 作为 thin shell 调用，不直接操作文件。</div>
-            <div class="agent-io"><strong>函数:</strong> load_kb(), save_kb(), load_meta(), save_meta(), append_news_archive()<br><strong>存储:</strong> data/knowledge_base/</div>
+          <div class="agent-card" style="border-color:var(--accent2)">
+            <div class="agent-icon">🧭</div>
+            <div class="agent-name">ModelRouter</div>
+            <div class="agent-role">智能模型路由：按任务复杂度自动选择模型 (turbo → plus → max → 235b)，预算控制 + 失败回退 + 调用统计。</div>
+            <div class="agent-io"><strong>提供:</strong> get_llm() / get_caller() / get_caller_for_agent()</div>
           </div>
         </div>
       </div>
@@ -151,10 +163,10 @@
         <div class="dataflow-line">
           <span class="df-node df-data">文件</span><span class="df-arrow">→</span>
           <span class="df-node df-agent">IngestionAgent</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">ExtractionAgent</span><span class="df-arrow">→</span>
+          <span class="df-node df-agent">DataOrchestrator</span><span class="df-arrow">→</span>
           <span class="df-node df-store">Knowledge Base</span><span class="df-arrow">→</span>
           <span class="df-node df-agent">HybridRetriever</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">SlotFiller</span><span class="df-arrow">→</span>
+          <span class="df-node df-agent">AnalysisAgent</span><span class="df-arrow">→</span>
           <span class="df-node df-data">回答</span>
         </div>
         <div class="dataflow-line">
@@ -167,7 +179,7 @@
         <div class="dataflow-line">
           <span class="df-node df-data">粘贴新闻</span><span class="df-arrow">→</span>
           <span class="df-node df-agent">News Analyzer</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">ExtractionAgent</span><span class="df-arrow">→</span>
+          <span class="df-node df-agent">AnalysisAgent</span><span class="df-arrow">→</span>
           <span class="df-node df-store">KB Context</span><span class="df-arrow">→</span>
           <span class="df-node df-data" style="background:rgba(232,121,249,.15);color:#e879f9">利好/利空/中性</span>
         </div>
@@ -180,8 +192,15 @@
         </div>
         <div class="dataflow-line">
           <span class="df-node df-data">股票代码</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">KLineAgent</span><span class="df-arrow">→</span>
+          <span class="df-node df-agent">AnalysisAgent (K线)</span><span class="df-arrow">→</span>
           <span class="df-node df-data">技术分析 (不存储)</span>
+        </div>
+        <div class="dataflow-line" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+          <span style="font-size:11px;color:var(--text2)">所有 LLM 调用经</span>
+          <span class="df-node df-agent" style="font-size:11px">LLMCaller</span>
+          <span style="font-size:11px;color:var(--text2)">→ 重试 + 缓存 + JSON + 约束 +</span>
+          <span class="df-node df-agent" style="font-size:11px">ModelRouter</span>
+          <span style="font-size:11px;color:var(--text2)">→ 模型选择</span>
         </div>
       </div>
     </div>
@@ -194,7 +213,7 @@
         <h3 style="margin:0">📁 文件导入</h3>
         <span class="tag tag-ok" style="font-size:11px">→ 知识库</span>
       </div>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">导入的文件经 <strong style="color:var(--accent)">IngestionAgent + ExtractionAgent</strong> 分析后进入知识库，用于后续 RAG 检索</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">导入的文件经 <strong style="color:var(--accent)">IngestionAgent + TextPreprocessor + DataOrchestrator</strong> 分析后进入知识库，用于后续 RAG 检索</p>
       <div id="dirBrowser"><div style="text-align:center;color:var(--text2);padding:16px"><div class="spinner" style="margin:0 auto"></div></div></div>
       <details style="margin-top:12px">
         <summary style="font-size:12px;color:var(--text2);cursor:pointer">⚙️ 自定义目录路径</summary>
@@ -301,7 +320,7 @@
         <div id="tool-news-result" style="max-height:400px;overflow-y:auto"></div>
       </div>
       <div class="source-card">
-        <h3><span class="icon">📈</span> K线技术分析 <span class="tag tag-info" style="font-size:11px;margin-left:4px">KLineAgent</span></h3>
+        <h3><span class="icon">📈</span> K线技术分析 <span class="tag tag-info" style="font-size:11px;margin-left:4px">AnalysisAgent</span></h3>
         <div class="form-row">
           <input class="input" id="tool-kline-q" placeholder="股票名称或代码" />
           <select class="input" id="tool-kline-days" style="flex:none;width:80px">
