@@ -8,6 +8,9 @@
 
 智能路由:
 - ModelRouter: 按任务复杂度自动选择模型
+
+调用保护层:
+- LLMCaller: 重试 + 缓存 + 结构化 JSON + 输入校验 + 防幻觉约束
 """
 from .dashscope_client import (
     DashScopeLLM,
@@ -17,6 +20,13 @@ from .dashscope_client import (
     get_llm,
     get_embedding,
     get_reranker,
+)
+from .caller import (
+    LLMCaller,
+    get_caller,
+    parse_json_from_text,
+    parse_json_list_from_text,
+    DEFAULT_SYSTEM_CONSTRAINTS,
 )
 from .model_router import (
     ModelRouter,
@@ -37,6 +47,11 @@ __all__ = [
     "get_llm",
     "get_embedding",
     "get_reranker",
+    "LLMCaller",
+    "get_caller",
+    "parse_json_from_text",
+    "parse_json_list_from_text",
+    "DEFAULT_SYSTEM_CONSTRAINTS",
     "ModelRouter",
     "ModelTier",
     "TaskComplexity",

@@ -14,8 +14,16 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from financial_rag.tools.core import FunctionDef
+from financial_rag.llm.caller import LLMCaller
 
 logger = logging.getLogger(__name__)
+
+# 事件影响分析 system prompt（之前缺失，现补充）
+_EVENT_IMPACT_SYSTEM = (
+    "你是一位专业金融事件分析师。基于提供的新闻事件和可选的K线数据，"
+    "客观评估每个事件对目标股票或板块的影响方向、程度和逻辑。"
+    "不要编造数据，影响判断必须有逻辑依据。"
+)
 
 
 # ===================== 工具 1: 获取某日事件 =====================
@@ -254,12 +262,14 @@ def assess_event_impact(
 }}"""
 
     try:
-        resp = llm.chat(messages=prompt, max_tokens=800, temperature=0.1)
-        import json
-        content = resp.content.strip()
-        # 解析 JSON
-        if "{" in content:
-            parsed = json.loads(content[content.index("{"):content.rindex("}") + 1])
+        caller = LLMCaller(llm)
+        parsed = caller.call_json(
+            prompt,
+            system=_EVENT_IMPACT_SYSTEM,
+            max_tokens=800,
+            temperature=0.1,
+        )
+        if parsed:
             return parsed
     except Exception as e:
         logger.warning(f"LLM 事件评估失败: {e}")

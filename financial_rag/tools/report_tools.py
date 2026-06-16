@@ -5,11 +5,11 @@
 - synthesize_report: LLM 驱动的新闻综合分析报告生成
 """
 import json
-import re
 import logging
 from typing import Dict, Any, List, Optional
 
 from financial_rag.tools.core import FunctionDef
+from financial_rag.llm.caller import LLMCaller
 
 logger = logging.getLogger(__name__)
 
@@ -69,18 +69,22 @@ def synthesize_report(
     )
 
     try:
-        response = llm.chat(
-            messages=prompt,
+        caller = LLMCaller(llm)
+        report_json = caller.call_json(
+            prompt,
             system=NEWS_SYNTHESIS_SYSTEM,
             max_tokens=2048,
             temperature=0.1,
         )
-        content = response.content.strip()
-        json_match = re.search(r'\{[\s\S]*\}', content)
-        if json_match:
-            report_json = json.loads(json_match.group())
-        else:
-            report_json = {"summary": content, "key_findings": [], "title": query}
+        if not report_json:
+            # JSON 解析失败，用纯文本内容兑底
+            response = caller.call(
+                prompt,
+                system=NEWS_SYNTHESIS_SYSTEM,
+                max_tokens=2048,
+                temperature=0.1,
+            )
+            report_json = {"summary": response.content.strip(), "key_findings": [], "title": query}
 
         # HallucinationGuard 预检
         check_result = {}

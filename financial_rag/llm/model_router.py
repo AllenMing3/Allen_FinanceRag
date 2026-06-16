@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, List
 
 from .dashscope_client import DashScopeLLM
+from .caller import LLMCaller
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +311,35 @@ class ModelRouter:
         task_type = _AGENT_TO_TASK.get(agent_name, "standard")
 
         return self.get_llm(task_type=task_type)
+
+    def get_caller(
+        self,
+        task_type: str = "standard",
+        complexity: TaskComplexity = None,
+    ) -> LLMCaller:
+        """根据任务类型获取 LLMCaller（带重试/缓存/JSON 解析等保护层）。
+
+        Args:
+            task_type: 任务类型标识
+            complexity: 显式指定复杂度
+
+        Returns:
+            LLMCaller 实例
+        """
+        llm = self.get_llm(task_type=task_type, complexity=complexity)
+        return LLMCaller(llm)
+
+    def get_caller_for_agent(self, agent_name: str) -> LLMCaller:
+        """为特定 Agent 获取 LLMCaller。
+
+        Args:
+            agent_name: Agent 名称
+
+        Returns:
+            LLMCaller 实例
+        """
+        llm = self.get_llm_for_agent(agent_name)
+        return LLMCaller(llm)
 
     # ---- 覆盖管理 ----
 

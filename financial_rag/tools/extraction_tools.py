@@ -16,12 +16,16 @@ Extraction Tools — 信息抽取能力池
     - detect_document_type: 关键词判定文档类型 (年报/季报/公告/...)
     - generate_search_queries: 根据抽取结果生成多角度检索查询
 """
-import json
-import re
 import logging
+import re
 from typing import Dict, Any, List, Optional
 
 from financial_rag.tools.core import FunctionDef
+from financial_rag.llm.caller import (
+    LLMCaller,
+    parse_json_from_text as _parse_json_from_text,
+    parse_json_list_from_text as _parse_json_list_from_text,
+)
 from financial_rag.prompts import (
     FINANCIAL_METRICS_EXTRACTION_SYSTEM,
     FINANCIAL_METRICS_EXTRACTION_PROMPT,
@@ -50,47 +54,7 @@ def _get_llm():
 
 
 # ===================== 通用 JSON 解析 =====================
-
-def _parse_json_from_text(text: str) -> Optional[Dict]:
-    """从 LLM 响应中提取 JSON 对象 — 兼容裸 JSON 和 Markdown 代码块"""
-    # 尝试 Markdown 代码块
-    code_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', text)
-    if code_match:
-        try:
-            return json.loads(code_match.group(1).strip())
-        except json.JSONDecodeError:
-            pass
-
-    # 尝试直接 JSON
-    for pattern in [r'\{[\s\S]*\}', r'\{[^{}]*\}']:
-        match = re.search(pattern, text)
-        if match:
-            try:
-                return json.loads(match.group())
-            except json.JSONDecodeError:
-                continue
-
-    return None
-
-
-def _parse_json_list_from_text(text: str) -> Optional[List]:
-    """从 LLM 响应中提取 JSON 数组"""
-    code_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', text)
-    if code_match:
-        try:
-            result = json.loads(code_match.group(1).strip())
-            return result if isinstance(result, list) else [result]
-        except json.JSONDecodeError:
-            pass
-
-    match = re.search(r'\[[\s\S]*\]', text)
-    if match:
-        try:
-            return json.loads(match.group())
-        except json.JSONDecodeError:
-            pass
-
-    return None
+# 已移至 financial_rag.llm.caller，本模块通过 import 引用
 
 
 # ===================== Tool 1: 财务指标抽取 =====================
@@ -116,13 +80,13 @@ def extract_financial_metrics(text: str) -> Dict[str, Any]:
                 system_prompt += f"\n\n以下是一些示例供参考：\n{few_shot}"
 
             user_prompt = FINANCIAL_METRICS_EXTRACTION_PROMPT.format(text=prompt_text)
-            response = llm.chat(
-                messages=user_prompt,
+            caller = LLMCaller(llm)
+            result = caller.call_json(
+                user_prompt,
                 system=system_prompt,
                 max_tokens=1024,
                 temperature=0.0,
             )
-            result = _parse_json_from_text(response.content)
             if result:
                 normalized = _normalize_metric_keys(result)
                 normalized["_confidence"] = "high"
@@ -264,13 +228,13 @@ def extract_entities(text: str) -> Dict[str, Any]:
                 system_prompt += f"\n\n以下是一些示例供参考：\n{few_shot}"
 
             user_prompt = ENTITY_EXTRACTION_PROMPT.format(text=prompt_text)
-            response = llm.chat(
-                messages=user_prompt,
+            caller = LLMCaller(llm)
+            result = caller.call_json(
+                user_prompt,
                 system=system_prompt,
                 max_tokens=1024,
                 temperature=0.0,
             )
-            result = _parse_json_from_text(response.content)
             if result:
                 result["_confidence"] = "high"
                 result["_source"] = "llm"
@@ -338,13 +302,13 @@ def extract_document_metadata(text: str) -> Dict[str, str]:
                 system_prompt += f"\n\n以下是一些示例供参考：\n{few_shot}"
 
             user_prompt = METADATA_EXTRACTION_PROMPT.format(text=prompt_text)
-            response = llm.chat(
-                messages=user_prompt,
+            caller = LLMCaller(llm)
+            result = caller.call_json(
+                user_prompt,
                 system=system_prompt,
                 max_tokens=512,
                 temperature=0.0,
             )
-            result = _parse_json_from_text(response.content)
             if result:
                 result["_confidence"] = "high"
                 result["_source"] = "llm"
@@ -580,13 +544,13 @@ def generate_search_queries(
                 metrics_summary=metrics_summary,
                 entities_summary=entities_summary,
             )
-            response = llm.chat(
-                messages=user_prompt,
+            caller = LLMCaller(llm)
+            result = caller.call_json(
+                user_prompt,
                 system=_QUERY_GEN_SYSTEM,
                 max_tokens=512,
                 temperature=0.0,
             )
-            result = _parse_json_list_from_text(response.content)
             if result and isinstance(result, list):
                 queries = [str(q) for q in result if q]
                 if queries:

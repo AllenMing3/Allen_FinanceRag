@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 from financial_rag.tools.core import FunctionDef
+from financial_rag.llm.caller import LLMCaller
 
 logger = logging.getLogger(__name__)
 
@@ -257,20 +258,19 @@ def _extract_kline_params(llm, query: str, default_days: int = 30) -> tuple:
         return keyword, lookback_days
 
     try:
-        import json as _json
-        resp = llm.chat(
-            messages=(
-                f"从用户查询中提取两个信息，只输出 JSON：\n"
-                f"1. keyword: ETF主题关键词（如 人工智能、芯片、半导体、新能源，只输出一个词）\n"
-                f"2. days: 回溯天数数字（如 30、60、90，没有则默认30）\n\n"
-                f"用户查询: {query}\n\n"
-                f'输出格式: {{"keyword":"xx","days":30}}'
+        caller = LLMCaller(llm)
+        parsed = caller.call_json(
+            f"从用户查询中提取两个信息：\n"
+            f"1. keyword: ETF主题关键词（如 人工智能、芯片、半导体、新能源，只输出一个词）\n"
+            f"2. days: 回溯天数数字（如 30、60、90，没有则默认30）\n\n"
+            f"用户查询: {query}",
+            system=(
+                "你是参数提取助手。只输出合法 JSON，格式为 "
+                '{"keyword":"xx","days":30}。不要添加任何其他文字。'
             ),
             max_tokens=60,
         )
-        content = resp.content.strip()
-        if "{" in content:
-            parsed = _json.loads(content[content.index("{"):content.rindex("}") + 1])
+        if parsed:
             keyword = parsed.get("keyword", keyword)
             lookback_days = int(parsed.get("days", lookback_days))
     except Exception:
@@ -303,10 +303,13 @@ def _generate_analysis(llm, data: Dict) -> str:
             f"MA5: {stats.get('ma5')}, MA10: {stats.get('ma10')}\n"
             f"上涨天数: {stats.get('up_days')}, 下跌天数: {stats.get('down_days')}"
         )
-        resp = llm.chat(
-            messages=(
-                f"以下是该标的近期的 K 线数据统计，请用200字以内做简要技术分析，"
-                f"包括趋势判断、支撑/压力位、短期展望：\n\n{stats_str}"
+        caller = LLMCaller(llm)
+        resp = caller.call(
+            f"以下是该标的近期的 K 线数据统计，请用200字以内做简要技术分析，"
+            f"包括趋势判断、支撑/压力位、短期展望：\n\n{stats_str}",
+            system=(
+                "你是专业的金融技术分析师。基于提供的K线数据做客观技术分析，"
+                "不要编造数据，只做基于现有数据的判断。"
             ),
             max_tokens=300,
         )
@@ -555,7 +558,8 @@ def generate_kline_analysis(
     )
 
     try:
-        response = llm.chat(
+        caller = LLMCaller(llm)
+        response = caller.call(
             messages=prompt,
             system=KLINE_ANALYSIS_SYSTEM,
             max_tokens=800,
