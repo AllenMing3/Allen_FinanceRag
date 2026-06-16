@@ -14,8 +14,8 @@ Financial RAG — AI/科技行业智能分析 RAG 系统
 
 三个专业化 Agent:
   - IngestionAgent   AI 行业文档摄取 + 元数据提取 (via tool calling)
-  - ExtractionAgent  AI 行业指标抽取 + 实体识别 (via tool calling)
-  - ReportAgent      LLM 驱动的新闻综合分析 + 引用报告
+  - AnalysisAgent    统一分析 (指标抽取 + K线 + 事件 + 报告)
+  - ScoringAgent     全链路评分 + 防幻觉
 
 Function Calling 工具系统:
   - tools/extraction_tools.py — 5 个抽取工具 (LLM-first + regex fallback)
@@ -32,8 +32,8 @@ from financial_rag.core import (
     PipelineScoreCard, StageScore, ScoreGrade, create_scorecard,
 )
 from financial_rag.agents import (
-    IngestionAgent, ExtractionAgent,
-    ReportAgent, KLineAgent,
+    IngestionAgent, AnalysisAgent,
+    CoordinatorAgent, ScoringAgent,
 )
 from financial_rag.retrievers import HybridRetriever, jieba_tokenizer
 from financial_rag.templates import (
@@ -71,8 +71,8 @@ __all__ = [
     # Core - Scorer
     "PipelineScoreCard", "StageScore", "ScoreGrade", "create_scorecard",
     # Agents
-    "IngestionAgent", "ExtractionAgent",
-    "ReportAgent", "KLineAgent",
+    "IngestionAgent", "AnalysisAgent",
+    "CoordinatorAgent", "ScoringAgent",
     # Retrievers
     "HybridRetriever", "jieba_tokenizer",
     # Templates & Slot-Filling

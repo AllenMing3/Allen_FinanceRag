@@ -284,11 +284,11 @@ class PipelineScheduler:
         """Multi-Agent 分析 + Function Calling 深度处理
     
         使用 AgentRouter 识别查询意图，动态选择 Agent 执行链:
-        - kline:        KLineAgent → ReportAgent
-        - event_impact: EventImpactAgent → ReportAgent
-        - report:       IngestionAgent → ExtractionAgent → ReportAgent
-        - news:         IngestionAgent → ReportAgent
-        - general:      IngestionAgent → ExtractionAgent → ReportAgent
+        - kline:        AnalysisAgent → ScoringAgent
+        - event_impact: AnalysisAgent → ScoringAgent
+        - report:       IngestionAgent → AnalysisAgent → ScoringAgent
+        - news:         IngestionAgent → AnalysisAgent → ScoringAgent
+        - general:      IngestionAgent → AnalysisAgent → ScoringAgent
         """
         t0 = time.time()
     

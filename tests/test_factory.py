@@ -1,8 +1,7 @@
-"""
-Test Factory — create_orchestrator wiring verification
+"""Test Factory - create_orchestrator wiring verification
 
 Covers:
-- All 7 agents registered
+- All 4 agents registered
 - AgentRouter attached to orchestrator
 - Agent chains correct (no CoordinatorAgent in chains)
 - Tool binding for all agents
@@ -19,15 +18,12 @@ def orch():
 
 class TestFactoryWiring:
 
-    def test_seven_agents_registered(self, orch):
-        assert len(orch.agents) == 7
+    def test_four_agents_registered(self, orch):
+        assert len(orch.agents) == 4
         expected = [
             "CoordinatorAgent",
             "IngestionAgent",
-            "ExtractionAgent",
-            "ReportAgent",
-            "KLineAgent",
-            "EventImpactAgent",
+            "AnalysisAgent",
             "ScoringAgent",
         ]
         for name in expected:
@@ -58,19 +54,19 @@ class TestFactoryWiring:
     def test_kline_chain_order(self, orch):
         m = orch.agent_router.get_intent_map()
         chain = m["kline"]
-        assert chain.index("KLineAgent") < chain.index("ReportAgent")
-        assert chain.index("ReportAgent") < chain.index("ScoringAgent")
+        assert "AnalysisAgent" in chain
+        assert chain.index("AnalysisAgent") < chain.index("ScoringAgent")
 
     def test_event_chain_order(self, orch):
         m = orch.agent_router.get_intent_map()
         chain = m["event_impact"]
-        assert chain.index("EventImpactAgent") < chain.index("ReportAgent")
+        assert "AnalysisAgent" in chain
+        assert chain.index("AnalysisAgent") < chain.index("ScoringAgent")
 
     def test_report_chain_order(self, orch):
         m = orch.agent_router.get_intent_map()
         chain = m["report"]
-        assert chain.index("IngestionAgent") < chain.index("ExtractionAgent")
-        assert chain.index("ExtractionAgent") < chain.index("ReportAgent")
+        assert chain.index("IngestionAgent") < chain.index("AnalysisAgent")
 
     def test_agents_have_tools(self, orch):
         """All agents should have _registry bound"""
@@ -88,8 +84,8 @@ class TestFactoryNoLLM:
 
     def test_create_without_llm(self):
         orch = create_orchestrator(retriever=None, llm=None)
-        assert len(orch.agents) == 7
+        assert len(orch.agents) == 4
 
     def test_create_without_retriever(self):
         orch = create_orchestrator(retriever=None)
-        assert len(orch.agents) == 7
+        assert len(orch.agents) == 4

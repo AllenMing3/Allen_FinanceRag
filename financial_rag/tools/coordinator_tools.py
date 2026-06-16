@@ -45,11 +45,11 @@ def select_agent_chain(intent: str, confidence: float = 0.5) -> Dict:
     """根据意图选择 Agent 执行链。
 
     链由 AgentRouter 动态定义，典型链:
-    - kline → [KLineAgent, ReportAgent, ScoringAgent]
-    - event_impact → [EventImpactAgent, ReportAgent, ScoringAgent]
-    - report → [IngestionAgent, ExtractionAgent, ReportAgent, ScoringAgent]
-    - news → [IngestionAgent, ReportAgent, ScoringAgent]
-    - general → [IngestionAgent, ExtractionAgent, ReportAgent, ScoringAgent]
+    - kline → [AnalysisAgent, ScoringAgent]
+    - event_impact → [AnalysisAgent, ScoringAgent]
+    - report → [IngestionAgent, AnalysisAgent, ScoringAgent]
+    - news → [IngestionAgent, AnalysisAgent, ScoringAgent]
+    - general → [IngestionAgent, AnalysisAgent, ScoringAgent]
 
     Args:
         intent: 意图类型 (来自 classify_query_intent)

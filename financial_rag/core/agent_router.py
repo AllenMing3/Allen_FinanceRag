@@ -65,7 +65,7 @@ _INTENT_PATTERNS: List[Dict[str, Any]] = [
             r"(\d{6})\s*(的)?(走势|行情|K线|技术)",
             r"(茅台|五粮液|宁德时代|比亚迪|招商银行|中国平安|腾讯|阿里巴巴|沪深300|中证500|创业板)\s*(的)?(走势|行情|K线|技术|趋势|涨|跌)",
         ],
-        "chain": ["KLineAgent", "ReportAgent", "ScoringAgent"],
+        "chain": ["AnalysisAgent", "ScoringAgent"],
     },
     {
         "name": "event_impact",
@@ -80,7 +80,7 @@ _INTENT_PATTERNS: List[Dict[str, Any]] = [
             r"(发生|出了|有什么)\s*(了)?(什么)?(大事|事件|新闻|情况)",
             r"(利好|利空)\s*(消息|消息面|影响)",
         ],
-        "chain": ["EventImpactAgent", "ReportAgent", "ScoringAgent"],
+        "chain": ["AnalysisAgent", "ScoringAgent"],
     },
     {
         "name": "report",
@@ -93,7 +93,7 @@ _INTENT_PATTERNS: List[Dict[str, Any]] = [
             r"(财报|年报|季报|半年报)",
             r"(营收|利润|毛利|净利)\s*(多少|增长|下降|变化)",
         ],
-        "chain": ["IngestionAgent", "ExtractionAgent", "ReportAgent", "ScoringAgent"],
+        "chain": ["IngestionAgent", "AnalysisAgent", "ScoringAgent"],
     },
     {
         "name": "news",
@@ -104,12 +104,12 @@ _INTENT_PATTERNS: List[Dict[str, Any]] = [
         "patterns": [
             r"(最新|今天|本周|本月)\s*(的)?(新闻|消息|动态|资讯|要闻)",
         ],
-        "chain": ["IngestionAgent", "ReportAgent", "ScoringAgent"],
+        "chain": ["IngestionAgent", "AnalysisAgent", "ScoringAgent"],
     },
 ]
 
 # 通用查询默认链
-_DEFAULT_CHAIN = ["IngestionAgent", "ExtractionAgent", "ReportAgent", "ScoringAgent"]
+_DEFAULT_CHAIN = ["IngestionAgent", "AnalysisAgent", "ScoringAgent"]
 
 
 # ===================== AgentRouter =====================

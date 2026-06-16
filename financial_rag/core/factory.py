@@ -15,15 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
-    """创建 7-Agent 全量编排器 + AgentRouter
+    """创建 4-Agent 编排器 + AgentRouter
 
-    注册所有 7 个 Agent:
+    注册 4 个 Agent:
     - CoordinatorAgent: 智能调度 (意图分类 + Agent 链选择)
     - IngestionAgent:   数据摄取 (财报/新闻)
-    - ExtractionAgent:  指标抽取 (AI/科技行业)
-    - ReportAgent:      报告生成 (LLM 综合分析)
-    - KLineAgent:       K 线技术分析
-    - EventImpactAgent: 事件影响分析
+    - AnalysisAgent:    统一分析 (指标抽取 + K线 + 事件 + 报告)
     - ScoringAgent:     全链路评分 + 防幻觉
 
     AgentRouter 决定每次查询走哪条 Agent 链，
@@ -35,10 +32,7 @@ def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
     """
     from financial_rag.agents.coordinator_agent import CoordinatorAgent
     from financial_rag.agents.ingestion_agent import IngestionAgent
-    from financial_rag.agents.extraction_agent import ExtractionAgent
-    from financial_rag.agents.report_agent import ReportAgent
-    from financial_rag.agents.kline_agent import KLineAgent
-    from financial_rag.agents.event_impact_agent import EventImpactAgent
+    from financial_rag.agents.analysis_agent import AnalysisAgent
     from financial_rag.agents.scoring_agent import ScoringAgent
     from financial_rag.tools import create_financial_registry, ToolExecutor
 
@@ -50,10 +44,7 @@ def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
     agents = [
         CoordinatorAgent(),
         IngestionAgent(),
-        ExtractionAgent(),
-        ReportAgent(),
-        KLineAgent(),
-        EventImpactAgent(),
+        AnalysisAgent(),
         ScoringAgent(),
     ]
     for agent in agents:

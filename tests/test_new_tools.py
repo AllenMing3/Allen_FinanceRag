@@ -126,13 +126,13 @@ class TestSelectAgentChain:
     def test_kline_chain(self):
         from financial_rag.tools.coordinator_tools import select_agent_chain
         result = select_agent_chain(intent="kline")
-        assert "KLineAgent" in result["agent_chain"]
+        assert "AnalysisAgent" in result["agent_chain"]
         assert "ScoringAgent" in result["agent_chain"]
 
     def test_event_chain(self):
         from financial_rag.tools.coordinator_tools import select_agent_chain
         result = select_agent_chain(intent="event_impact")
-        assert "EventImpactAgent" in result["agent_chain"]
+        assert "AnalysisAgent" in result["agent_chain"]
 
     def test_low_confidence_adds_ingestion(self):
         from financial_rag.tools.coordinator_tools import select_agent_chain
@@ -143,7 +143,7 @@ class TestSelectAgentChain:
         from financial_rag.tools.coordinator_tools import select_agent_chain
         result = select_agent_chain(intent="unknown_type")
         assert len(result["agent_chain"]) > 0
-        assert "ReportAgent" in result["agent_chain"]
+        assert "AnalysisAgent" in result["agent_chain"]
 
 
 # ===================== Report Tools =====================
@@ -214,8 +214,8 @@ class TestStockMap:
         assert STOCK_MAP["茅台"] == ("600519.SH", "贵州茅台")
 
     def test_stock_map_reexported_from_agent(self):
-        """Backward compat: kline_agent re-exports STOCK_MAP"""
-        from financial_rag.agents.kline_agent import STOCK_MAP
+        """Backward compat: analysis_agent has STOCK_MAP"""
+        from financial_rag.agents.analysis_agent import STOCK_MAP
         assert "茅台" in STOCK_MAP
 
     def test_stock_map_in_tools_init(self):

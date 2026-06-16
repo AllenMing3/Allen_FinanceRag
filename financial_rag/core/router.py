@@ -303,7 +303,7 @@ class CommandRouter:
                         meta.get("metadata_fields_found", 0),
                         meta.get("metadata_fields_expected", 7),
                         elapsed_ms=r.execution_time * 1000)
-                elif r.agent_name == "ExtractionAgent":
+                elif r.agent_name == "AnalysisAgent":
                     data = r.data or {}
                     agent_score = data.get("_scores", {}).get("extraction", 0.5)
                     card.record_keyword_extract(agent_score,

@@ -152,26 +152,23 @@ class TestChainSelection:
 
     def test_kline_chain(self, router):
         d = router.route("茅台K线走势")
-        assert "KLineAgent" in d.agent_chain
-        assert "ReportAgent" in d.agent_chain
+        assert "AnalysisAgent" in d.agent_chain
         assert "ScoringAgent" in d.agent_chain
 
     def test_event_impact_chain(self, router):
         d = router.route("2024年6月1日发生了什么大事")
-        assert "EventImpactAgent" in d.agent_chain
+        assert "AnalysisAgent" in d.agent_chain
         assert "ScoringAgent" in d.agent_chain
 
     def test_report_chain(self, router):
         d = router.route("商汤科技2024年营收多少")
         assert "IngestionAgent" in d.agent_chain
-        assert "ExtractionAgent" in d.agent_chain
-        assert "ReportAgent" in d.agent_chain
+        assert "AnalysisAgent" in d.agent_chain
 
     def test_general_chain(self, router):
         d = router.route("随便聊聊")
         assert "IngestionAgent" in d.agent_chain
-        assert "ExtractionAgent" in d.agent_chain
-        assert "ReportAgent" in d.agent_chain
+        assert "AnalysisAgent" in d.agent_chain
         assert "ScoringAgent" in d.agent_chain
 
     def test_no_coordinator_in_chain(self, router):
