@@ -72,7 +72,7 @@ Web UI 开启 Mock 模式时会显示橙色提示条。
 ## 4. 测试
 
 ```cmd
-:: 全量（234 tests，无需 API Key）
+:: 全量（322 tests，无需 API Key）
 python -m pytest tests/ -v
 ```
 
@@ -81,15 +81,18 @@ python -m pytest tests/ -v
 | 模块 | 命令 | 覆盖内容 |
 |------|------|----------|
 | Agent 路由 | `pytest tests/test_agent_router.py -v` | 意图分类、链选择、元数据提取 |
-| 新 Agent | `pytest tests/test_new_agents.py -v` | Coordinator / KLine / EventImpact / Scoring / Report |
+| Agent | `pytest tests/test_new_agents.py -v` | Coordinator / Analysis / Scoring |
 | 新工具 | `pytest tests/test_new_tools.py -v` | scoring / coordinator / report / event_impact |
-| 工厂配线 | `pytest tests/test_factory.py -v` | 7 Agent 注册、链顺序、工具绑定 |
+| 工厂配线 | `pytest tests/test_factory.py -v` | 4 Agent 注册、链顺序、工具绑定 |
 | 数据合并 | `pytest tests/test_orchestrator_merge.py -v` | metadata merge、findings extend |
-| 原始 Agent | `pytest tests/test_agents.py -v` | Ingestion + Extraction + 完整链 |
+| 原始 Agent | `pytest tests/test_agents.py -v` | Ingestion + Analysis + 完整链 |
 | 智能分析 | `pytest tests/test_analysis.py -v` | 新闻分析 + 话题调研 (mock) |
 | 抽取工具 | `pytest tests/test_extraction_tools.py -v` | 5 个抽取工具 + 长文章 |
 | 分析工具 | `pytest tests/test_analysis_tools.py -v` | 增长率、比率、对比、汇总 |
 | Mock 数据 | `pytest tests/test_mock_data.py -v` | K线、搜索、指标、新闻 |
+| LLM 调用层 | `pytest tests/test_llm_caller.py -v` | LLMCaller 重试、JSON、缓存、约束 |
+| 数据编排器 | `pytest tests/test_data_orchestrator.py -v` | 多池摄入/搜索/跨池检索 |
+| 查询解析器 | `pytest tests/test_query_parser.py -v` | 意图、实体、日期提取 |
 
 > 测试只 mock 数据源，LLM / Embedding / Rerank 保持真实。抽取工具走 regex fallback，无需 API Key。
 
@@ -121,16 +124,22 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 |-------|------|----------|
 | **CoordinatorAgent** | 意图分类 + Agent 链选择 | 手动调起（`call_tool(classify_query_intent)`） |
 | **IngestionAgent** | 数据摄取 + 元数据提取 | report / news / general 链 |
-| **ExtractionAgent** | AI 行业指标 + 实体抽取 | report / general 链 |
-| **ReportAgent** | LLM 综合分析报告 | 所有链末端 |
-| **KLineAgent** | K 线技术分析（MACD / RSI / KDJ / Bollinger） | intent = kline 或股票关键词 |
-| **EventImpactAgent** | 事件影响分析（利好/利空 + 影响因子） | intent = event_impact 或日期关键词 |
+| **AnalysisAgent** | 统一分析引擎（指标抽取 + K线分析 + 事件影响 + 报告生成） | 所有链，通过 `intent` 元数据选择工具链 |
 | **ScoringAgent** | 全链路评分 + 防幻觉校验 | **所有链末端** |
+
+**AnalysisAgent 意图路由：**
+
+| intent | 工具链 |
+|--------|-------|
+| `kline` | fetch_kline_report → analyze_kline → generate_kline_analysis |
+| `event_impact` | fetch_date_events → assess_event_impact |
+| `general` | extract_financial_metrics → extract_entities → synthesize_report |
 
 **核心设计原则：**
 - Agent 只做编排决策（`call_tool()`），不包含任何业务逻辑
 - 所有业务能力实现在 tools 层
 - 每条链都以 ScoringAgent 结尾，确保输出质量
+- 所有 LLM 调用经过 LLMCaller 保护层（重试 + JSON 解析 + 缓存 + 防幻觉约束）
 
 ---
 

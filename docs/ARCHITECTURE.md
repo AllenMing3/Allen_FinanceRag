@@ -8,6 +8,7 @@
 |--------|------|----------------|
 | **Route** | `core/agent_router.py` | Intent classification (5 domains), agent chain selection, metadata extraction (date/stock) |
 | **Coordinate** | `core/orchestrator.py` | Register agents, decide execution order, pass context. Metadata merge (not replace), list extend |
+| **Data Orchestrate** | `core/data_orchestrator.py` | Multi-pool text management: TextPreprocessor → DocTypeClassifier → KnowledgePool routing, cross-pool search |
 | **Schedule** | `core/pipeline.py` | 5-phase pipeline: Fetch → Index → Process (AgentRouter) → Output → Evolve |
 | **Indexer** | `core/indexer.py` | 4-stage retrieval: Clean → Extract → Retrieve → Verify. BM25 + Vector + RRF fusion |
 | **Reflect** | `core/reflector.py` | ReAct loop (Think → Act → Observe → Judge) + 6-layer anti-hallucination guard |
@@ -87,11 +88,11 @@ Every chain ends with `ScoringAgent` for quality assurance. `CoordinatorAgent` i
 
 | Intent | Chain |
 |--------|-------|
-| `kline` | KLineAgent → ReportAgent → ScoringAgent |
-| `event_impact` | EventImpactAgent → ReportAgent → ScoringAgent |
-| `report` | IngestionAgent → ExtractionAgent → ReportAgent → ScoringAgent |
-| `news` | IngestionAgent → ReportAgent → ScoringAgent |
-| `general` | IngestionAgent → ExtractionAgent → ReportAgent → ScoringAgent |
+| `kline` | AnalysisAgent (intent=kline) → ScoringAgent |
+| `event_impact` | AnalysisAgent (intent=event_impact) → ScoringAgent |
+| `report` | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
+| `news` | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
+| `general` | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
 
 **Low-confidence override:** When intent confidence < 0.5, `IngestionAgent` is prepended to ensure context gathering before downstream agents.
 
@@ -107,9 +108,9 @@ Alongside intent classification, `AgentRouter` extracts structured metadata:
 
 ## Agent Chain (Phase 3 Detail)
 
-Agents are **lightweight orchestrators** — all business logic delegated to registered tools via Function Calling.
+Agents are **lightweight orchestrators** — all business logic delegated to registered tools via Function Calling. `AnalysisAgent` consolidates 5 former agents (Extraction, KLine, EventImpact, Report) and selects its tool chain based on `context.metadata["intent"]`.
 
-### Core Extraction Chain (report / general)
+### Report / General Chain
 
 ```
 IngestionAgent
@@ -117,13 +118,10 @@ IngestionAgent
   → call_tool(detect_document_type)
   → context →
 
-ExtractionAgent
+AnalysisAgent (intent=general)
   → call_tool(extract_financial_metrics)
   → call_tool(extract_entities)
   → call_tool(generate_search_queries)
-  → context →
-
-ReportAgent
   → call_tool(synthesize_report)
   → context →
 
@@ -136,27 +134,27 @@ ScoringAgent
 ### K-Line Chain
 
 ```
-KLineAgent
+AnalysisAgent (intent=kline)
   → call_tool(fetch_kline_report)     # STOCK_MAP resolve + Tushare fetch
   → call_tool(analyze_kline)          # MACD / RSI / Bollinger / KDJ
   → call_tool(generate_kline_analysis) # LLM interpretation
   → context →
 
-ReportAgent → ScoringAgent
+ScoringAgent
 ```
 
 ### Event Impact Chain
 
 ```
-EventImpactAgent
+AnalysisAgent (intent=event_impact)
   → call_tool(fetch_date_events)       # Date-based event retrieval
   → call_tool(assess_event_impact)     # Bullish / bearish + impact factor
   → context →
 
-ReportAgent → ScoringAgent
+ScoringAgent
 ```
 
-### AI Industry Metrics (ExtractionAgent)
+### AI Industry Metrics (AnalysisAgent, intent=general)
 
 | Category | Metrics |
 |----------|---------|
@@ -169,13 +167,39 @@ ReportAgent → ScoringAgent
 
 ---
 
+## LLM Call Layer
+
+All LLM calls in tools are wrapped by `LLMCaller` for robustness — no bare `llm.chat()` calls remain.
+
+| Capability | Description |
+|------------|-------------|
+| **Retry** | Exponential backoff (0.5s → 1s → 2s) on transient errors |
+| **Structured JSON** | `call_json()` auto-retries on parse failure, appends JSON output hint |
+| **Caching** | Hash-based response cache with configurable TTL |
+| **Input Validation** | Max-length check before sending to API |
+| **Anti-Hallucination** | Default system constraints: no fabricated data, no speculation |
+
+```python
+from financial_rag.llm import LLMCaller, get_caller
+
+# Direct wrapping
+caller = LLMCaller(llm)
+result = caller.call_json("Extract metrics from this report", system="...")
+
+# Via ModelRouter
+caller = router.get_caller_for_agent("analysis")
+text = caller.call("Generate summary", temperature=0.3)
+```
+
+---
+
 ## Orchestrator Metadata Merge
 
 `orchestrator._apply_updates()` uses **merge semantics** — not wholesale replacement — to prevent downstream agents from wiping upstream data:
 
 | Update Type | Behavior | Example |
 |-------------|----------|---------|
-| **Dict attribute** (e.g. `metadata`) | `current.update(v)` — merge, not replace | KLineAgent adds `ts_code`, ReportAgent adds `report_type` → both preserved |
+| **Dict attribute** (e.g. `metadata`) | `current.update(v)` — merge, not replace | AnalysisAgent adds `ts_code`, ScoringAgent adds `report_type` → both preserved |
 | **List attribute** (e.g. `intermediate_findings`) | `current.extend(v)` — append, not replace | Each agent's findings accumulate across the chain |
 | **Scalar attribute** (e.g. `final_answer`) | `setattr(self.context, k, v)` — direct replace | Last agent's answer wins |
 | **Unknown key** | Written to `context.metadata` | Custom fields from any agent land in metadata |
@@ -237,24 +261,22 @@ ReportAgent → ScoringAgent
 | `base.py` | Abstract foundations | `BaseAgent`, `AgentContext`, `AgentResult`, `ExecutionMode` |
 | `agent_router.py` | Query-time routing: intent classification, chain selection, metadata extraction | `AgentRouter`, `RoutingDecision` |
 | `orchestrator.py` | Multi-agent scheduling engine — dict merge, list extend, scalar replace | `AgentOrchestrator` |
+| `data_orchestrator.py` | Multi-pool text management: TextPreprocessor + DocTypeClassifier + KnowledgePool routing | `DataOrchestrator`, `KnowledgePool` |
 | `pipeline.py` | 5-phase PipelineScheduler (Fetch → Index → Process → Output → Evolve) | `PipelineScheduler`, `PipelineResult` |
 | `router.py` | CLI command dispatch + handlers | `CommandRouter` |
-| `factory.py` | Factory: creates and wires 7 agents + AgentRouter | `create_orchestrator`, `setup_environment` |
+| `factory.py` | Factory: creates and wires 4 agents + AgentRouter | `create_orchestrator`, `setup_environment` |
 | `indexer.py` | Hybrid retrieval pipeline orchestration | `PipelineOrchestrator` |
 | `reflector.py` | ReAct loop + HallucinationGuard | `ReflectionLoop`, `HallucinationGuard` |
 | `scorer.py` | Full-pipeline scorecard | `PipelineScoreCard`, `ScoreGrade` |
 | `protocol.py` | Agent messaging infrastructure | `AgentMessage`, `MessageBus` |
 
-### `financial_rag/agents/` — 7 Agents
+### `financial_rag/agents/` — 4 Agents
 
 | File | Role |
 |------|------|
 | `coordinator_agent.py` | Intent classification + chain selection via `call_tool(classify_query_intent, select_agent_chain)` |
 | `ingestion_agent.py` | Data ingestion → `call_tool(extract_document_metadata, detect_document_type)` |
-| `extraction_agent.py` | Feature extraction → `call_tool(extract_financial_metrics, extract_entities, generate_search_queries)` |
-| `report_agent.py` | LLM synthesis → `call_tool(synthesize_report)` — converts findings to structured documents |
-| `kline_agent.py` | K-line analysis → `call_tool(fetch_kline_report, analyze_kline, generate_kline_analysis)` |
-| `event_impact_agent.py` | Event impact → `call_tool(fetch_date_events, assess_event_impact)` |
+| `analysis_agent.py` | Unified analysis: routes by `context.metadata["intent"]` — extraction, K-line, event impact, report generation |
 | `scoring_agent.py` | Quality scoring → `call_tool(evaluate_pipeline_quality, check_hallucination, generate_score_report)` |
 | `utils.py` | Shared: `build_news_context()` |
 
@@ -272,19 +294,28 @@ ReportAgent → ScoringAgent
 | `report_tools.py` | 1 | Synthesize report (LLM-driven or heuristic fallback) |
 | `__init__.py` | — | `create_financial_registry()` — registers all 26 tools; re-exports `STOCK_MAP` |
 
-### `financial_rag/retrievers/` — Hybrid Retrieval
+### `financial_rag/retrievers/` — Modular Retrieval Stack
 
 | File | Role |
 |------|------|
-| `retriever.py` | `HybridRetriever`: BM25 + Vector + RRF fusion + metadata filtering |
+| `retriever.py` | `HybridRetriever`: orchestrates BM25 + Vector + RRF fusion + metadata filtering |
+| `bm25_engine.py` | `BM25Engine`: standalone BM25 scoring with jieba tokenization |
+| `vector_engine.py` | `VectorEngine`: cosine similarity over embedding vectors |
+| `fusion.py` | `rrf_fusion()`, `hybrid_fusion()`: RRF and weighted score fusion |
+| `filters.py` | `apply_filters()`: metadata-based filtering (source, date, doc_type) |
 | `chunker.py` | `TextChunker`: document splitting with overlap + metadata tagging |
+| `preprocessor.py` | `TextPreprocessor` (cleaning), `RelevanceGate` (relevance filtering), `DocTypeClassifier` (fast classification) |
+| `query_parser.py` | `QueryParser`: intent detection, entity extraction, date parsing from queries |
+| `dictionaries.py` | Externalized keyword dictionaries: `STOCK_MAP`, `FINANCIAL_TERMS`, `INDUSTRY_TERMS`, etc. |
+| `persistence.py` | `save_index()`, `load_index()`: index serialization |
 
 ### `financial_rag/llm/` — LLM Layer
 
 | File | Role |
 |------|------|
 | `dashscope_client.py` | DashScope API: LLM + Embedding + Rerank |
-| `model_router.py` | Auto-select model by task complexity + budget control (4 tiers) |
+| `model_router.py` | Auto-select model by task complexity + budget control (4 tiers), `get_caller()` / `get_caller_for_agent()` |
+| `caller.py` | `LLMCaller`: retry + JSON parsing + response cache + input validation + anti-hallucination constraints |
 
 ### `financial_rag/services/` — Business Logic Layer
 
@@ -385,7 +416,7 @@ from financial_rag.core.agent_router import AgentRouter
 router = AgentRouter()
 decision = router.route("茅台走势")
 print(decision.intent)   # "kline"
-print(decision.chain)    # ["KLineAgent", "ReportAgent", "ScoringAgent"]
+print(decision.chain)    # ["AnalysisAgent", "ScoringAgent"]
 
 # Function Calling
 from financial_rag.tools import create_financial_registry, create_tool_session
