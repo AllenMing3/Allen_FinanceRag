@@ -43,6 +43,10 @@ def synthesize_report(
     metrics = metrics or {}
     entities = entities or []
 
+    # 归一化 entities: extract_entities 返回 dict，function-calling 可能返回 list
+    if isinstance(entities, dict):
+        entities = [{"type": k, "data": v} for k, v in entities.items() if not str(k).startswith("_")]
+
     llm = _report_llm_ref["llm"]
 
     if not sources and not metrics:

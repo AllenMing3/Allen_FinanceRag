@@ -27,7 +27,7 @@ function showLoading(id) { document.getElementById(id).classList.add('show'); }
 function hideLoading(id) { document.getElementById(id).classList.remove('show'); }
 function scoreColor(s) { return s >= 0.8 ? 'var(--ok)' : s >= 0.6 ? 'var(--warn)' : 'var(--danger)'; }
 function rankClass(s) { return s >= 0.7 ? 'rank-high' : s >= 0.4 ? 'rank-mid' : 'rank-low'; }
-function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHtml(s) { return (typeof s === 'string' ? s : String(s ?? '')).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function updateKBStatus(count) {
   const badge = document.getElementById('kbBadge');
@@ -363,7 +363,7 @@ async function analyzeNews() {
       h += '<div class="stats">';
       if (d.doc_type) h += `<div class="stat">文档类型 <strong>${escHtml(d.doc_type)}</strong></div>`;
       const ent = d.entities || {}, met = d.metrics || {};
-      if (ent.companies && ent.companies.length) h += `<div class="stat">公司 <strong>${ent.companies.map(c=>escHtml(c)).join(', ')}</strong></div>`;
+      if (ent.companies && ent.companies.length) h += `<div class="stat">公司 <strong>${ent.companies.map(c=>escHtml(typeof c === 'string' ? c : c.name || c)).join(', ')}</strong></div>`;
       if (met.revenue) h += `<div class="stat">营收 <strong>${escHtml(String(met.revenue))}</strong></div>`;
       if (met.net_profit) h += `<div class="stat">净利润 <strong>${escHtml(String(met.net_profit))}</strong></div>`;
       h += '</div>';
