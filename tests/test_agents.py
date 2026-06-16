@@ -28,7 +28,7 @@ class TestIngestionAgent:
         assert result.data is not None
         assert len(result.data) >= 1
         assert "text" in result.data[0]
-        assert "metadata" in result.data[0]
+        assert "meta" in result.data[0]
 
     def test_metadata_extraction(self, registry, executor, ai_financial_text):
         agent = self._make_agent(registry, executor)

@@ -91,15 +91,24 @@ class PipelineStage:
 class CleanerStage(PipelineStage):
     """
     阶段一: 文本清洗
-    - 去噪、去重、标准化
-    - 保留高信息量文本
+    - 委托给 TextPreprocessor
     """
     def __init__(self):
         super().__init__("Cleaner")
+        from financial_rag.retrievers.preprocessor import TextPreprocessor
+        self._preprocessor = TextPreprocessor()
 
     def process(self, text: str, context: Dict) -> Dict:
-        """子类实现具体清洗逻辑"""
-        return {"text": text, "stats": {}}
+        cleaned = self._preprocessor.process(text, collect_stats=True)
+        stats = self._preprocessor.get_last_stats()
+        return {
+            "text": cleaned,
+            "stats": {
+                "original_len": stats.original_len,
+                "cleaned_len": stats.cleaned_len,
+                "retention": stats.retention,
+            }
+        }
 
 
 class ExtractorStage(PipelineStage):

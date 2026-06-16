@@ -1,36 +1,30 @@
 """
-Hybrid 混合检索器 — BM25 + Vector (阿里 Embedding) + Rerank 重排序
+Hybrid 混合检索器 — 调度层
 
-三个通道:
-- BM25: 关键词精准匹配（本地倒排索引）
-- Vector: 阿里 text-embedding-v3 语义检索
-- Rerank: 阿里 qwen3-rerank 精排（替换 RRF 融合）
-
-附加能力:
-- TextChunker: 长文档自动切分，提升检索精度
-- Metadata Filter: 按元数据过滤（来源、时间、标签）
-- Persistence: 索引持久化，重启免重建
-
-所有参数可配置，与金融业务完全脱钩
+职责: 编排 BM25 + Vector + RRF + Rerank + Filter 的检索流程。
+不包含具体实现，全部委托给子模块:
+- BM25Engine: 关键词检索
+- VectorEngine: 语义检索
+- rrf_fusion: 多通道融合
+- apply_filters: 元数据过滤
+- save/load_index: 持久化
 """
-from typing import Dict, Any, List, Optional, Union, Tuple
-from collections import defaultdict
-import hashlib
-import json
-import re
-import math
-import time
+from typing import Dict, Any, List, Optional, Tuple
 import logging
-import os
+import time
 
-from financial_rag.retrievers.chunker import TextChunker
+from financial_rag.retrievers.bm25_engine import BM25Engine
+from financial_rag.retrievers.vector_engine import VectorEngine
+from financial_rag.retrievers.fusion import rrf_fusion
+from financial_rag.retrievers.filters import apply_filters
+from financial_rag.retrievers import persistence
 
 logger = logging.getLogger(__name__)
 
 
 class HybridRetriever:
     """
-    BM25 + Embedding + Rerank 混合检索引擎
+    BM25 + Embedding + Rerank 混合检索引擎 — 调度层
 
     可选三种模式:
     1. 纯本地 (无 API): BM25 + Jaccard → RRF 融合
@@ -46,72 +40,51 @@ class HybridRetriever:
     def __init__(
         self,
         config: Optional[Dict] = None,
-        # ---- 阿里 API 注入 ----
-        embedder: Any = None,            # DashScopeEmbedding 实例
-        reranker: Any = None,            # DashScopeReranker 实例
-        # ---- 分词器注入 ----
-        tokenizer: Any = None,           # jieba / 自定义分词器
-        # ---- 切分器注入 ----
-        chunker: Any = None,             # TextChunker 实例（None=不切分）
+        embedder: Any = None,
+        reranker: Any = None,
+        tokenizer: Any = None,
+        chunker: Any = None,
+        parser: Any = None,
     ):
         cfg = config or {}
-        # RRF 参数（无 rerank 时使用）
         self.rrf_k = cfg.get("rrf_k", 60)
         self.bm25_weight = cfg.get("bm25_weight", 0.3)
         self.vector_weight = cfg.get("vector_weight", 0.7)
 
-        # 阿里 API 客户端
         self.embedder = embedder
         self.reranker = reranker
-
-        # 分词器
-        self._tokenizer = tokenizer
-
-        # 切分器
         self._chunker = chunker
+        self._parser = parser
+
+        # 子引擎
+        self._bm25 = BM25Engine(tokenizer=tokenizer)
+        self._vector = VectorEngine(embedder=embedder, tokenizer=tokenizer)
 
         # 内部状态
         self.documents: List[Dict] = []
-        self.doc_embeddings: Optional[List[List[float]]] = None   # 预计算的文档向量
-        self.bm25_index: Dict[str, List[int]] = defaultdict(list)
-        self._doc_token_lens: List[int] = []  # 每篇文档的 token 数（BM25 长度归一化用）
-        self._has_embedding = embedder is not None
-        self._has_rerank = reranker is not None
+        self.doc_embeddings: Optional[List[List[float]]] = None
 
     # ===================== 索引 =====================
 
-    def index(
-        self,
-        documents: List[Dict],
-        precompute_embeddings: bool = True,
-        use_chunker: bool = True,
-    ):
-        """
-        索引文档
-
-        Args:
-            documents: [{"text": "...", "meta": ...}, ...]
-            precompute_embeddings: 是否预计算文档向量（有 embedder 时默认开启）
-            use_chunker: 是否使用切分器（有 chunker 时默认开启）
-        """
-        # 切分长文档
+    def index(self, documents: List[Dict],
+              precompute_embeddings: bool = True,
+              use_chunker: bool = True):
+        """索引文档"""
         if use_chunker and self._chunker:
             documents = self._chunker.split_documents(documents)
 
         self.documents = documents
-        self._build_bm25_index()
+        self._bm25.build(documents)
 
-        # 预计算文档向量
-        if precompute_embeddings and self._has_embedding:
+        # 预计算 embedding
+        if precompute_embeddings and self._vector.has_embedding:
             texts = [d.get("text", "") for d in documents]
             logger.info(f"预计算 {len(texts)} 个文档的 embedding...")
-            # DashScope batch limit: 10 per request
             all_embeddings = []
-            batch_size = 10
-            for i in range(0, len(texts), batch_size):
-                batch = texts[i:i + batch_size]
-                resp = self.embedder.embed_documents(batch)
-                all_embeddings.extend(resp)
+            for i in range(0, len(texts), 10):
+                all_embeddings.extend(
+                    self.embedder.embed_documents(texts[i:i + 10])
+                )
             self.doc_embeddings = all_embeddings
             logger.info(f"Embedding 预计算完成，维度: {len(all_embeddings[0]) if all_embeddings else 0}")
         else:
@@ -120,92 +93,100 @@ class HybridRetriever:
         logger.info(
             f"HybridRetriever: 已索引 {len(documents)} 篇文档"
             f"{' (含 embedding)' if self.doc_embeddings else ''}"
-            f"{' (含 rerank)' if self._has_rerank else ''}"
+            f"{' (含 rerank)' if self.reranker else ''}"
         )
 
     def add(self, documents: List[Dict], use_chunker: bool = True):
         """增量添加文档"""
-        # 切分长文档
         if use_chunker and self._chunker:
             documents = self._chunker.split_documents(documents)
 
-        start = len(self.documents)
         self.documents.extend(documents)
-        for i, doc in enumerate(documents):
-            tokens = self._tokenize(doc.get("text", ""))
-            self._doc_token_lens.append(len(tokens))
-            for word in set(tokens):
-                self.bm25_index[word].append(start + i)
+        self._bm25.build(self.documents)
+
+        # Bug fix: 增量添加时也计算新文档的 embeddings
+        if self.embedder and self.doc_embeddings is not None:
+            texts = [d.get("text", "") for d in documents]
+            new_embeddings = []
+            for i in range(0, len(texts), 10):
+                new_embeddings.extend(
+                    self.embedder.embed_documents(texts[i:i + 10])
+                )
+            self.doc_embeddings.extend(new_embeddings)
+            logger.info(f"增量 embedding: +{len(new_embeddings)} 篇")
 
     # ===================== 检索 =====================
 
-    def search(
-        self,
-        query: str,
-        top_k: int = 10,
-        use_rerank: bool = True,
-        scorecard = None,               # PipelineScoreCard 实例（可选）
-        filters: Optional[Dict] = None, # 元数据过滤条件
-    ) -> List[Dict]:
-        """
-        混合检索入口
-
-        Args:
-            query: 查询文本
-            top_k: 返回数量
-            use_rerank: 是否启用 Rerank 精排（需要已注入 reranker）
-            scorecard: PipelineScoreCard 实例，传入则自动记录每个子阶段的分数
-            filters: 元数据过滤条件，支持:
-                - {"source": "news"} — 精确匹配
-                - {"source": ["news", "rss"]} — 多值匹配
-                - {"publish_time": {"gte": "2024-01-01"}} — 范围过滤
-                - {"tag": "AI"} — 自定义标签过滤
-
-        Returns:
-            排序后的文档列表
-        """
+    def search(self, query: str, top_k: int = 10,
+               use_rerank: bool = True, scorecard=None,
+               filters: Optional[Dict] = None) -> List[Dict]:
+        """混合检索入口"""
         t0 = time.time()
+        soft_filter_keys = set()
 
-        # ---- 0. 分词阶段 ----
-        t_tok = time.time()
-        query_tokens = self._tokenize(query)
-        tok_elapsed = (time.time() - t_tok) * 1000
-        if scorecard:
-            # 分词评分: 基于分词数量 & 唯一性 & 平均长度
-            avg_len = sum(len(t) for t in query_tokens) / max(len(query_tokens), 1)
-            token_score = min(1.0, len(query_tokens) / 10) * 0.4 \
-                        + min(1.0, len(set(query_tokens)) / max(len(query_tokens), 1)) * 0.3 \
-                        + min(1.0, avg_len / 3) * 0.3
-            scorecard.record_tokenization(
-                score=token_score,
-                token_count=len(query_tokens),
-                unique_tokens=len(set(query_tokens)),
-                avg_token_len=avg_len,
-                elapsed_ms=tok_elapsed,
+        # 0. 查询解析
+        parsed = None
+        if self._parser:
+            parsed = self._parser.parse(query)
+            parsed_filters = parsed.get_filters()
+            if parsed_filters:
+                filters = {**parsed_filters, **(filters or {})}
+                soft_filter_keys = set(parsed_filters.keys())
+            logger.info(
+                f"QueryParser: stock={parsed.stock_code or '-'} "
+                f"date={parsed.date or parsed.date_range or '-'} "
+                f"type={parsed.query_type} "
+                f"keywords={[(t, w) for t, w in parsed.keywords[:5]]}"
             )
 
-        # 1. BM25 关键词检索
-        bm25_results = self._bm25_search(query, top_k * 2, query_tokens=query_tokens)
+        # 1. 分词
+        if parsed and parsed.keywords:
+            query_tokens = parsed.get_weighted_terms()
+        else:
+            query_tokens = self._bm25.tokenize(query)
+
+        if scorecard:
+            avg_len = sum(len(t) for t in query_tokens) / max(len(query_tokens), 1)
+            token_score = (min(1.0, len(query_tokens) / 10) * 0.4
+                           + min(1.0, len(set(query_tokens)) / max(len(query_tokens), 1)) * 0.3
+                           + min(1.0, avg_len / 3) * 0.3)
+            scorecard.record_tokenization(
+                score=token_score, token_count=len(query_tokens),
+                unique_tokens=len(set(query_tokens)), avg_token_len=avg_len,
+                elapsed_ms=(time.time() - t0) * 1000,
+            )
+
+        # 2. BM25 检索
+        bm25_results = self._bm25.search(self.documents, query, top_k * 2,
+                                          query_tokens=query_tokens)
         if scorecard and bm25_results:
             bm25_scores = [r["score"] for r in bm25_results]
             scorecard.record_bm25(
-                result_count=len(bm25_results),
-                top_score=bm25_scores[0],
+                result_count=len(bm25_results), top_score=bm25_scores[0],
                 avg_score=sum(bm25_scores) / len(bm25_scores),
                 query_terms=len(query_tokens),
-                matched_terms=len(set(t for r in bm25_results for t in self._tokenize(r.get("text", "")) if t in query_tokens)),
-                elapsed_ms=(time.time() - t0) * 1000 - tok_elapsed,
+                matched_terms=len(set(t for r in bm25_results
+                                      for t in self._bm25.tokenize(r.get("text", ""))
+                                      if t in query_tokens)),
+                elapsed_ms=(time.time() - t0) * 1000,
             )
         elif scorecard:
             scorecard.record_bm25(0, 0.0, 0.0, len(query_tokens), 0,
-                                  elapsed_ms=(time.time() - t0) * 1000 - tok_elapsed)
+                                  elapsed_ms=(time.time() - t0) * 1000)
 
-        # 2. Vector 语义检索
+        # 3. Vector 检索
         t_vec = time.time()
-        if self._has_embedding:
-            vector_results = self._vector_search_real(query, top_k * 2)
+        if self._vector.has_embedding:
+            vector_results = self._vector.search_embedding(
+                self.documents, query, top_k * 2,
+                doc_embeddings=self.doc_embeddings,
+                cache_callback=lambda embs: setattr(self, 'doc_embeddings', embs),
+            )
         else:
-            vector_results = self._vector_search_simple(query, top_k * 2)
+            vector_results = self._vector.search_jaccard(
+                self.documents, query, top_k * 2,
+                tokenize_fn=self._bm25.tokenize,
+            )
         vec_elapsed = (time.time() - t_vec) * 1000
 
         if scorecard:
@@ -215,269 +196,76 @@ class HybridRetriever:
                     result_count=len(vector_results),
                     top_similarity=vec_scores[0],
                     avg_similarity=sum(vec_scores) / len(vec_scores),
-                    embedding_dim=getattr(self.embedder, 'dimensions', 0) if self._has_embedding else 0,
+                    embedding_dim=getattr(self.embedder, 'dimensions', 0)
+                    if self.embedder else 0,
                     elapsed_ms=vec_elapsed,
                 )
             else:
                 scorecard.record_vector(0, 0.0, 0.0, elapsed_ms=vec_elapsed)
 
-        # 3. RRF 融合 → 候选集
-        t_rrf = time.time()
-        candidates = self._rrf_fusion(bm25_results, vector_results, top_k * 2)
-        rrf_elapsed = (time.time() - t_rrf) * 1000
+        # 4. RRF 融合
+        candidates, fusion_stats = rrf_fusion(
+            [(bm25_results, self.bm25_weight, "bm25"),
+             (vector_results, self.vector_weight, "vector")],
+            top_k=top_k * 2,
+            rrf_k=self.rrf_k,
+        )
 
         if scorecard:
-            # 计算共识：在两个检索器中都出现的文档数
-            bm25_texts = set(r.get("text", "") for r in bm25_results)
-            vec_texts = set(r.get("text", "") for r in vector_results)
-            consensus = len(bm25_texts & vec_texts)
             scorecard.record_rrf(
                 fused_count=len(candidates),
                 bm25_count=len(bm25_results),
                 vector_count=len(vector_results),
-                consensus_count=consensus,
-                elapsed_ms=rrf_elapsed,
+                consensus_count=fusion_stats.consensus_count,
+                elapsed_ms=0,
             )
 
-        # 4. Rerank 精排（如果开启了）
-        if use_rerank and self._has_rerank and candidates:
-            t_rerank = time.time()
+        # 5. Rerank 精排
+        if use_rerank and self.reranker and candidates:
             candidates = self._rerank(query, candidates, top_k)
-            rerank_elapsed = (time.time() - t_rerank) * 1000
-
             if scorecard:
-                high_count = sum(1 for c in candidates if c.get("relevance_level") == "high")
                 rerank_scores = [c.get("score", 0) for c in candidates]
+                high_count = sum(1 for c in candidates
+                                 if c.get("relevance_level") == "high")
                 scorecard.record_rerank(
                     result_count=len(candidates),
                     top_rerank_score=rerank_scores[0] if rerank_scores else 0.0,
-                    avg_rerank_score=sum(rerank_scores) / len(rerank_scores) if rerank_scores else 0.0,
-                    high_count=high_count,
-                    elapsed_ms=rerank_elapsed,
+                    avg_rerank_score=(sum(rerank_scores) / len(rerank_scores)
+                                      if rerank_scores else 0.0),
+                    high_count=high_count, elapsed_ms=0,
                 )
 
-        # 5. Metadata 过滤
+        # 6. Metadata 过滤 (soft keys for auto-injected filters)
         if filters:
-            before_filter = len(candidates)
-            candidates = self._apply_filters(candidates, filters)
-            logger.info(f"Metadata 过滤: {before_filter} → {len(candidates)}")
+            before = len(candidates)
+            candidates = apply_filters(candidates, filters,
+                                       soft_keys=soft_filter_keys)
+            logger.info(f"Metadata 过滤: {before} → {len(candidates)}")
 
         logger.info(
             f"Hybrid: BM25={len(bm25_results)}, "
             f"Vector={len(vector_results)}, "
             f"Fused={len(candidates)}, "
-            f"Rerank={'ON' if (use_rerank and self._has_rerank) else 'OFF'}"
+            f"Rerank={'ON' if (use_rerank and self.reranker) else 'OFF'}"
         )
-
         return candidates[:top_k]
 
-    # ===================== BM25 (本地，无需 API) =====================
-
-    def _tokenize(self, text: str) -> List[str]:
-        """分词 — 优先用注入的分词器 (jieba)，否则回退到正则"""
-        if self._tokenizer is not None:
-            try:
-                return self._tokenizer(text)
-            except Exception:
-                pass
-        # 回退: 中文按双字滑窗 + 英文按单词（单字信息量太低，双字兼顾匹配率和区分度）
-        raw = re.findall(r'[a-zA-Z]+|[\u4e00-\u9fff]+|\d+(?:\.\d+)?[%％]?', text.lower())
-        tokens = []
-        for seg in raw:
-            if re.match(r'^[\u4e00-\u9fff]+$', seg) and len(seg) > 1:
-                # 中文段: 生成 bigram 滑窗（"商汤科技" → ["商汤", "汤科", "科技"]）
-                for j in range(len(seg) - 1):
-                    tokens.append(seg[j:j+2])
-                # 同时保留完整段作为 token（兜底长匹配）
-                if len(seg) <= 6:
-                    tokens.append(seg)
-            else:
-                tokens.append(seg)
-        return tokens
-
-    def _build_bm25_index(self):
-        self.bm25_index.clear()
-        self._doc_token_lens = []
-        for doc_id, doc in enumerate(self.documents):
-            tokens = self._tokenize(doc.get("text", ""))
-            self._doc_token_lens.append(len(tokens))
-            for word in set(tokens):
-                self.bm25_index[word].append(doc_id)
-
-    def _bm25_search(self, query: str, top_k: int, query_tokens: List[str] = None) -> List[Dict]:
-        if not self.documents:
-            return []
-        query_terms = query_tokens if query_tokens is not None else self._tokenize(query)
-        if not query_terms:
-            return []
-
-        N = len(self.documents)
-        avg_dl = sum(self._doc_token_lens) / max(N, 1) if self._doc_token_lens else 1
-        k1, b = 1.2, 0.75
-
-        scores: Dict[int, float] = {}
-        for term in query_terms:
-            if term not in self.bm25_index:
-                continue
-            doc_ids = self.bm25_index[term]
-            df = len(doc_ids)
-            idf = math.log1p((N - df + 0.5) / (df + 0.5))
-
-            for doc_id in doc_ids:
-                text = self.documents[doc_id].get("text", "")
-                dl = self._doc_token_lens[doc_id] if doc_id < len(self._doc_token_lens) else 1
-                tf = text.lower().count(term)
-                score = idf * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / max(avg_dl, 1)))
-                scores[doc_id] = scores.get(doc_id, 0) + score
-
-        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
-        return [
-            {**self.documents[doc_id], "score": score, "retriever": "bm25", "rank": i + 1}
-            for i, (doc_id, score) in enumerate(ranked)
-        ]
-
-    # ===================== Vector: 真实 Embedding (阿里 API) =====================
-
-    def _vector_search_real(self, query: str, top_k: int) -> List[Dict]:
-        """使用阿里 text-embedding-v3 做真实语义检索"""
-        if not self.documents:
-            return []
-
-        # 获取 query embedding
-        query_vec = self.embedder.embed_query(query)
-
-        # 如果没有预计算的文档向量，实时计算
-        doc_vecs = self.doc_embeddings
-        if not doc_vecs:
-            texts = [d.get("text", "") for d in self.documents]
-            resp = self.embedder.embed_documents(texts)
-            doc_vecs = resp
-
-        # 余弦相似度
-        scores = {}
-        for i, dv in enumerate(doc_vecs):
-            scores[i] = self._cosine(query_vec, dv)
-
-        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
-        return [
-            {**self.documents[doc_id], "score": score, "retriever": "vector", "rank": i + 1}
-            for i, (doc_id, score) in enumerate(ranked)
-        ]
-
-    # ===================== Vector: 简易 Jaccard (无 API fallback) =====================
-
-    def _vector_search_simple(self, query: str, top_k: int) -> List[Dict]:
-        """无 API 时的简易 Jaccard 语义匹配"""
-        if not self.documents:
-            return []
-        q_words = set(self._tokenize(query))
-        if not q_words:
-            return []
-
-        scores = {}
-        for doc_id, doc in enumerate(self.documents):
-            text = doc.get("text", "")
-            dw = set(self._tokenize(text))
-            if not dw:
-                continue
-            intersection = q_words & dw
-            union = q_words | dw
-            jaccard = len(intersection) / len(union) if union else 0
-            length_penalty = min(1.0, 200 / max(len(dw), 1))
-            scores[doc_id] = jaccard * 0.7 + length_penalty * 0.3
-
-        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
-        return [
-            {**self.documents[doc_id], "score": score, "retriever": "vector_jaccard", "rank": i + 1}
-            for i, (doc_id, score) in enumerate(ranked)
-        ]
-
-    @staticmethod
-    def _cosine(a: List[float], b: List[float]) -> float:
-        """余弦相似度"""
-        dot = sum(x * y for x, y in zip(a, b))
-        norm_a = math.sqrt(sum(x * x for x in a))
-        norm_b = math.sqrt(sum(y * y for y in b))
-        if norm_a == 0 or norm_b == 0:
-            return 0.0
-        return dot / (norm_a * norm_b)
-
-    # ===================== RRF 融合 =====================
-
-    def _rrf_fusion(
-        self,
-        bm25_results: List[Dict],
-        vector_results: List[Dict],
-        top_k: int,
-    ) -> List[Dict]:
-        """RRF 融合排序 — 作为 Rerank 前的候选集"""
-        rrf_scores: Dict[str, float] = {}
-        doc_map: Dict[str, Dict] = {}
-        # Track per-retriever ranks for score breakdown
-        bm25_ranks: Dict[str, int] = {}
-        vec_ranks: Dict[str, int] = {}
-        bm25_scores: Dict[str, float] = {}
-        vec_scores: Dict[str, float] = {}
-
-        for results, weight, rank_store, score_store in [
-            (bm25_results, self.bm25_weight, bm25_ranks, bm25_scores),
-            (vector_results, self.vector_weight, vec_ranks, vec_scores),
-        ]:
-            for r in results:
-                text = r.get("text", "")
-                doc_id = hashlib.md5(text.encode()).hexdigest()[:16]
-                rank = r.get("rank", 1)
-                rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + weight / (self.rrf_k + rank)
-                rank_store[doc_id] = rank
-                score_store[doc_id] = r.get("score", 0)
-                doc_map[doc_id] = r
-
-        ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
-        result = []
-        for rank_i, (doc_id, rrf_score) in enumerate(ranked):
-            item = dict(doc_map[doc_id])
-            # Primary score = RRF fused score (what determines ranking)
-            item["score"] = rrf_score
-            item["rrf_score"] = rrf_score
-            item["retriever"] = "hybrid"
-            item["rank"] = rank_i + 1
-            # Breakdown: per-retriever detail
-            item["bm25_rank"] = bm25_ranks.get(doc_id)
-            item["bm25_score"] = bm25_scores.get(doc_id)
-            item["vector_rank"] = vec_ranks.get(doc_id)
-            item["vector_score"] = vec_scores.get(doc_id)
-            result.append(item)
-        return result
-
-    # ===================== Rerank: 阿里 qwen3-rerank =====================
+    # ===================== Rerank =====================
 
     def _rerank(self, query: str, candidates: List[Dict], top_k: int) -> List[Dict]:
-        """
-        使用阿里 qwen3-rerank 对候选文档精排
-
-        这是三大架构中 Indexer 的最后一环：
-        BM25 + Embedding → RRF → Rerank → 最终 Top-K
-
-        如果 Rerank API 不可用（403/401 等），自动降级为 RRF 融合结果。
-        """
+        """qwen3-rerank 精排，失败则降级"""
         if not candidates:
             return []
-
-        # 提取文档文本列表
         doc_texts = [c.get("text", "") for c in candidates]
-
         try:
-            # 调用阿里 Rerank API
             rerank_results = self.reranker.rerank(
-                query=query,
-                documents=doc_texts,
+                query=query, documents=doc_texts,
                 top_n=min(top_k, len(candidates)),
             )
         except Exception as e:
-            logger.warning(f"Rerank 不可用，降级为 RRF 融合结果: {e}")
+            logger.warning(f"Rerank 不可用，降级: {e}")
             return candidates[:top_k]
 
-        # 重新组装结果，注入 rerank 分数
         result = []
         for i, rr in enumerate(rerank_results):
             if rr.index < len(candidates):
@@ -485,20 +273,16 @@ class HybridRetriever:
                 item["score"] = rr.score
                 item["rerank_score"] = rr.score
                 item["relevance_level"] = rr.relevance_level
-                item["retriever"] = f"hybrid_rerank"
+                item["retriever"] = "hybrid_rerank"
                 item["rank"] = i + 1
                 result.append(item)
-
         return result
 
-    def search_with_scores(self, query: str, top_k: int = 10,
-                           use_rerank: bool = True) -> Tuple[List[Dict], "PipelineScoreCard"]:
-        """
-        带全链路打分的检索 — 自动创建打分卡并返回
+    # ===================== 辅助方法 =====================
 
-        Returns:
-            (检索结果, PipelineScoreCard 打分卡)
-        """
+    def search_with_scores(self, query: str, top_k: int = 10,
+                           use_rerank: bool = True) -> Tuple[List[Dict], Any]:
+        """带全链路打分的检索"""
         from financial_rag.core.scorer import PipelineScoreCard
         card = PipelineScoreCard(query=query)
         results = self.search(query, top_k=top_k, use_rerank=use_rerank, scorecard=card)
@@ -508,131 +292,27 @@ class HybridRetriever:
         """清空索引"""
         self.documents = []
         self.doc_embeddings = None
-        self.bm25_index.clear()
-        self._doc_token_lens = []
+        self._bm25.clear()
         logger.info("HybridRetriever: 索引已清空")
 
-    # ===================== Metadata 过滤 =====================
-
-    def _apply_filters(self, candidates: List[Dict], filters: Dict) -> List[Dict]:
-        """
-        按元数据过滤候选文档
-
-        支持的过滤条件:
-        - {"key": "value"} — 精确匹配
-        - {"key": ["val1", "val2"]} — 多值匹配 (OR)
-        - {"key": {"gte": "...", "lte": "..."}} — 范围过滤
-
-        多个过滤条件之间是 AND 关系。
-        """
-        result = []
-        for item in candidates:
-            meta = item.get("meta", {})
-            if self._match_filters(meta, filters):
-                result.append(item)
-        return result
-
-    def _match_filters(self, meta: Dict, filters: Dict) -> bool:
-        """检查单条文档的 meta 是否满足所有过滤条件"""
-        for key, condition in filters.items():
-            value = meta.get(key)
-
-            if isinstance(condition, list):
-                # 多值匹配: value in [v1, v2, ...]
-                if value not in condition:
-                    return False
-            elif isinstance(condition, dict):
-                # 范围过滤: {"gte": ..., "lte": ...}
-                if "gte" in condition and value is not None:
-                    if value < condition["gte"]:
-                        return False
-                if "lte" in condition and value is not None:
-                    if value > condition["lte"]:
-                        return False
-                if "gt" in condition and value is not None:
-                    if value <= condition["gt"]:
-                        return False
-                if "lt" in condition and value is not None:
-                    if value >= condition["lt"]:
-                        return False
-                # 如果 value 是 None 但有范围条件，不匹配
-                if value is None and any(k in condition for k in ("gte", "lte", "gt", "lt")):
-                    return False
-            else:
-                # 精确匹配
-                if value != condition:
-                    return False
-
-        return True
-
-    # ===================== 索引持久化 =====================
-
     def save_index(self, path: str):
-        """
-        将索引持久化到磁盘
-
-        保存内容:
-        - documents (文本 + 元数据)
-        - doc_embeddings (如果已预计算)
-        - bm25_index (倒排索引)
-        - _doc_token_lens (BM25 长度归一化)
-
-        Args:
-            path: 保存路径（.json 文件）
-        """
-        data = {
-            "version": 1,
-            "doc_count": len(self.documents),
-            "documents": self.documents,
-            "doc_embeddings": self.doc_embeddings,
-            "bm25_index": dict(self.bm25_index),
-            "doc_token_lens": self._doc_token_lens,
-            "config": {
-                "rrf_k": self.rrf_k,
-                "bm25_weight": self.bm25_weight,
-                "vector_weight": self.vector_weight,
-            },
-        }
-
-        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-        size_mb = os.path.getsize(path) / (1024 * 1024)
-        logger.info(f"HybridRetriever: 索引已保存到 {path} ({size_mb:.2f} MB)")
+        """持久化索引"""
+        persistence.save_index(
+            path, self.documents, self.doc_embeddings,
+            config={"rrf_k": self.rrf_k, "bm25_weight": self.bm25_weight,
+                     "vector_weight": self.vector_weight},
+        )
 
     def load_index(self, path: str):
-        """
-        从磁盘加载索引
-
-        Args:
-            path: 索引文件路径
-        """
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"索引文件不存在: {path}")
-
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        if data.get("version") != 1:
-            raise ValueError(f"不支持的索引版本: {data.get('version')}")
-
+        """加载索引"""
+        data = persistence.load_index(path)
         self.documents = data["documents"]
         self.doc_embeddings = data.get("doc_embeddings")
-        self.bm25_index = defaultdict(list, data["bm25_index"])
-        self._doc_token_lens = data.get("doc_token_lens", [])
-
-        # 恢复配置
         cfg = data.get("config", {})
         self.rrf_k = cfg.get("rrf_k", self.rrf_k)
         self.bm25_weight = cfg.get("bm25_weight", self.bm25_weight)
         self.vector_weight = cfg.get("vector_weight", self.vector_weight)
-
-        logger.info(
-            f"HybridRetriever: 已加载索引 {path}"
-            f" ({len(self.documents)} 篇文档"
-            f"{', 含 embeddings' if self.doc_embeddings else ''})"
-        )
+        self._bm25.build(self.documents)
 
 
 # ===================== jieba 分词器工厂 =====================
@@ -646,41 +326,21 @@ except ImportError:
 
 
 def jieba_tokenizer() -> callable:
-    """
-    创建 jieba 分词函数
-
-    第一次调用自动加载默认词典 + 金融词典
-    返回: callable(text) -> List[str]
-    """
+    """创建 jieba 分词函数（自动加载金融词典）"""
     if not _has_jieba:
         raise ImportError("请安装 jieba: pip install jieba")
 
-    jieba.setLogLevel(20)  # 抑制 jieba 日志
+    from financial_rag.retrievers.dictionaries import JIEBA_FINANCE_WORDS
 
-    # 添加常见金融术语到词典
-    finance_words = [
-        "营业收入", "净利润", "毛利率", "净资产收益率", "每股收益",
-        "经营活动现金流", "总资产", "总负债", "资产负债率",
-        "同比增长", "环比增长", "基本每股收益", "加权平均",
-        "归母净利润", "扣非净利润", "流动资产", "非流动资产",
-        "流动负债", "非流动负债", "所有者权益", "少数股东权益",
-        "应收账款", "存货", "固定资产", "无形资产", "商誉",
-        "短期借款", "长期借款", "应付票据", "应付账款",
-        "销售费用", "管理费用", "财务费用", "研发费用",
-        "投资收益", "公允价值变动", "信用减值损失",
-        "经营活动", "投资活动", "筹资活动", "汇率变动",
-        "贵州茅台", "五粮液", "宁德时代", "比亚迪",
-        "央行", "降准", "降息", "LPR", "MLF", "逆回购",
-        "上证指数", "深证成指", "创业板指", "科创板",
-    ]
-    for w in finance_words:
+    jieba.setLogLevel(20)
+    for w in JIEBA_FINANCE_WORDS:
         jieba.add_word(w)
 
     def _tokenize(text: str) -> List[str]:
         if not text:
             return []
         words = jieba.lcut(text.lower())
-        # 过滤纯标点和空字符串
-        return [w.strip() for w in words if w.strip() and not all(c in '，。！？、；：""''（）…—·《》' for c in w)]
+        return [w.strip() for w in words
+                if w.strip() and not all(c in '，。！？、；：""''（）…—·《》' for c in w)]
 
     return _tokenize

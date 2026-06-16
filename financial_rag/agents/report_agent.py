@@ -141,7 +141,7 @@ class ReportAgent(BaseAgent):
                     f"MACD信号: {indicators.get('macd', {}).get('signal', 'N/A')}\n"
                     f"RSI: {indicators.get('rsi', {}).get('value', 'N/A')}"
                 )
-                documents.append({"text": text, "metadata": {"source": "KLineAgent", "stage": "kline"}})
+                documents.append({"text": text, "meta": {"source": "KLineAgent", "stage": "kline"}})
             elif stage == "event_impact":
                 event_count = f.get("event_count", 0)
                 assessment = f.get("assessment", {})
@@ -152,14 +152,14 @@ class ReportAgent(BaseAgent):
                 )
                 if assessment.get("summary"):
                     text += f"\n摘要: {assessment['summary']}"
-                documents.append({"text": text, "metadata": {"source": "EventImpactAgent", "stage": "event_impact"}})
+                documents.append({"text": text, "meta": {"source": "EventImpactAgent", "stage": "event_impact"}})
             elif stage == "coordination":
                 pass  # 调度信息不生成报告 source
             else:
                 text = f"分析结果 ({stage}): " + ", ".join(
                     f"{k}={v}" for k, v in f.items() if k != "stage"
                 )
-                documents.append({"text": text, "metadata": {"source": stage}})
+                documents.append({"text": text, "meta": {"source": stage}})
 
         if final_answer and final_answer.strip():
             documents.append({
@@ -173,7 +173,7 @@ class ReportAgent(BaseAgent):
         sources = []
         for i, doc in enumerate(documents, 1):
             text = doc.get("text", "")
-            meta = doc.get("metadata", doc.get("meta", {}))
+            meta = doc.get("meta", {})
             sources.append({
                 "id": i,
                 "text": text,

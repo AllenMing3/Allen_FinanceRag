@@ -54,7 +54,7 @@ class IngestionAgent(BaseAgent):
         elif source_type == "directory":
             documents = self._ingest_directory(raw_input)
         else:
-            documents = [{"text": raw_input, "metadata": {"source": "direct_input"}}]
+            documents = [{"text": raw_input, "meta": {"source": "direct_input"}}]
 
         # 评估 metadata 解析质量
         metadata_score, fields_found, fields_meta = self._evaluate_metadata(documents)
@@ -89,7 +89,7 @@ class IngestionAgent(BaseAgent):
             return 0.0, 0, {}
 
         first_doc = documents[0]
-        meta = first_doc.get("metadata", {}) if isinstance(first_doc, dict) else {}
+        meta = first_doc.get("meta", {}) if isinstance(first_doc, dict) else {}
 
         all_fields = {}
         for field_name in self.EXPECTED_METADATA_FIELDS:
@@ -144,7 +144,7 @@ class IngestionAgent(BaseAgent):
                 documents = self._ingest_text(text)
             except Exception as e:
                 documents = [{"text": f"[PDF未解析] {os.path.basename(path)}",
-                              "metadata": {"source": path, "doc_type": "PDF文件", "error": str(e)}}]
+                              "meta": {"source": path, "doc_type": "PDF文件", "error": str(e)}}]
         else:
             try:
                 with open(path, "r", encoding="utf-8") as f:
@@ -152,7 +152,7 @@ class IngestionAgent(BaseAgent):
                 documents = self._ingest_text(text)
             except UnicodeDecodeError:
                 documents = [{"text": f"[二进制文件] {os.path.basename(path)}",
-                              "metadata": {"source": path, "doc_type": "未知格式"}}]
+                              "meta": {"source": path, "doc_type": "未知格式"}}]
 
         return documents
 
@@ -168,12 +168,12 @@ class IngestionAgent(BaseAgent):
                     doc = json.loads(line)
                     if "text" not in doc:
                         continue
-                    if "metadata" not in doc:
-                        doc["metadata"] = {
+                    if "meta" not in doc:
+                        doc["meta"] = {
                             k: v for k, v in doc.items()
                             if k in self.EXPECTED_METADATA_FIELDS
                         }
-                    doc["metadata"]["text_length"] = len(doc.get("text", ""))
+                    doc["meta"]["text_length"] = len(doc.get("text", ""))
                     documents.append(doc)
                 except json.JSONDecodeError as e:
                     print(f"[IngestionAgent] JSONL 第{line_num}行解析失败: {e}")
@@ -199,9 +199,11 @@ class IngestionAgent(BaseAgent):
         从纯文本摄取。
 
         处理流程：
-        1. 清洗文本
-        2. 调用 extract_document_metadata 工具提取元数据
-        3. 调用 detect_document_type 工具补充文档类型
+        1. 清洗文本 (TextPreprocessor)
+        2. 相关性门控 (RelevanceGate)
+        3. 文档分类 (DocTypeClassifier)
+        4. 调用 extract_document_metadata 工具补充元数据
+        5. LLM 补充 doc_type (仅当分类器置信度低时)
         """
         if not text or not text.strip():
             return []
@@ -209,7 +211,23 @@ class IngestionAgent(BaseAgent):
         # 1. 清洗文本
         text = self._clean_text(text)
 
-        # 2. 调用工具提取元数据
+        # 2. 相关性门控
+        from financial_rag.retrievers.preprocessor import RelevanceGate, DocTypeClassifier
+        gate = RelevanceGate()
+        passed, reason, kw_count = gate.check(text)
+        if not passed:
+            return [{"text": text, "meta": {
+                "_rejected": True, "_reject_reason": reason,
+                "_keyword_count": kw_count,
+            }}]
+
+        # 3. 文档分类 (快速，无 LLM)
+        classifier = DocTypeClassifier()
+        classify_result = classifier.classify(text)
+        doc_type = classify_result["doc_type"]
+        doc_type_confidence = classify_result["confidence"]
+
+        # 4. 调用工具提取元数据
         metadata = {}
         try:
             metadata = self.call_tool("extract_document_metadata", text=text)
@@ -217,26 +235,29 @@ class IngestionAgent(BaseAgent):
             print(f"[IngestionAgent] 元数据抽取失败: {e}")
             metadata = {"_confidence": "none"}
 
-        # 3. 补充文档类型
+        # 5. 补充 doc_type (分类器结果优先，LLM 仅当兑底)
         if not metadata.get("doc_type"):
-            try:
-                doc_type = self.call_tool("detect_document_type", text=text)
+            if doc_type != "other" and doc_type_confidence >= 0.5:
                 metadata["doc_type"] = doc_type
-            except RuntimeError:
-                metadata["doc_type"] = "其他"
+            else:
+                try:
+                    llm_type = self.call_tool("detect_document_type", text=text)
+                    metadata["doc_type"] = llm_type
+                except RuntimeError:
+                    metadata["doc_type"] = doc_type  # 分类器结果兑底
 
-        # 4. 补充 text_length
+        # 补充分类信息
         metadata["text_length"] = len(text)
+        metadata["_classify"] = classify_result
+        metadata["_relevance_keywords"] = kw_count
 
-        return [{"text": text, "metadata": metadata}]
+        return [{"text": text, "meta": metadata}]
 
     def _clean_text(self, text: str) -> str:
-        """清洗文本：去重空白、统一换行、移除控制字符"""
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        text = re.sub(r'[ \t]{2,}', ' ', text)
-        text = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff]', '', text)
-        text = text.strip()
-        return text
+        """清洗文本：委托给 TextPreprocessor"""
+        from financial_rag.retrievers.preprocessor import TextPreprocessor
+        preprocessor = TextPreprocessor()
+        return preprocessor.process(text)
 
     # ===================== 目录批量摄取 =====================
 
