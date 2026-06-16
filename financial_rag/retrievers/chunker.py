@@ -66,6 +66,7 @@ class TextChunker:
             [{"text": "...", "meta": {..., "chunk_id": 0, "source_id": "..."}, ...]
         """
         if not text or not text.strip():
+            logger.warning(f"TextChunker.split: empty text from source_id={source_id or 'unknown'}")
             return []
 
         meta = meta or {}
@@ -88,18 +89,33 @@ class TextChunker:
 
         # 构建结果
         results = []
+        empty_dropped = 0
         for i, chunk_text in enumerate(overlapped):
             chunk_text = chunk_text.strip()
             if not chunk_text:
+                empty_dropped += 1
                 continue
+            # 查找 chunk 在原文中的位置
+            search_anchor = chunk_text[:20] if len(chunk_text) > 20 else chunk_text
+            pos = text.find(search_anchor)
             chunk_meta = {
                 **meta,
                 "chunk_id": i,
                 "chunk_count": len(overlapped),
                 "source_id": source_id,
-                "chunk_start": text.find(chunk_text[:20]) if len(chunk_text) > 20 else 0,
+                "chunk_start": pos if pos >= 0 else -1,
             }
+            if pos < 0:
+                logger.debug(
+                    f"TextChunker: chunk_start not found in source_id={source_id}, "
+                    f"chunk_id={i} (overlap may have shifted position)"
+                )
             results.append({"text": chunk_text, "meta": chunk_meta})
+
+        if empty_dropped > 0:
+            logger.warning(
+                f"TextChunker: dropped {empty_dropped} empty chunks from source_id={source_id}"
+            )
 
         return results
 
@@ -114,12 +130,25 @@ class TextChunker:
             切分后的 chunk 列表
         """
         all_chunks = []
+        empty_docs = 0
         for doc_id, doc in enumerate(documents):
             text = doc.get("text", "")
             meta = doc.get("meta", {})
             source_id = meta.get("url") or meta.get("title") or f"doc_{doc_id}"
+            if not text or not text.strip():
+                empty_docs += 1
+                logger.warning(
+                    f"TextChunker.split_documents: doc_{doc_id} has empty text, "
+                    f"skipping (source={source_id})"
+                )
+                continue
             chunks = self.split(text, meta=meta, source_id=source_id)
             all_chunks.extend(chunks)
+
+        if empty_docs > 0:
+            logger.warning(
+                f"TextChunker: {empty_docs}/{len(documents)} documents had empty text"
+            )
 
         logger.info(
             f"TextChunker: {len(documents)} 篇文档 → {len(all_chunks)} 个 chunks"

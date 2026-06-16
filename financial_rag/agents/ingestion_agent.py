@@ -13,7 +13,10 @@ Agent 负责数据加载和编排，抽取逻辑委托给 tools:
 import os
 import re
 import json
+import logging
 from typing import Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 from financial_rag.core.base import BaseAgent, AgentContext, AgentResult
 
@@ -143,6 +146,7 @@ class IngestionAgent(BaseAgent):
                 text = self._parse_pdf(path)
                 documents = self._ingest_text(text)
             except Exception as e:
+                logger.error(f"[IngestionAgent] PDF parse failed: {path} — {e}")
                 documents = [{"text": f"[PDF未解析] {os.path.basename(path)}",
                               "meta": {"source": path, "doc_type": "PDF文件", "error": str(e)}}]
         else:
@@ -150,7 +154,8 @@ class IngestionAgent(BaseAgent):
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
                 documents = self._ingest_text(text)
-            except UnicodeDecodeError:
+            except UnicodeDecodeError as e:
+                logger.warning(f"[IngestionAgent] binary file skipped: {path} — {e}")
                 documents = [{"text": f"[二进制文件] {os.path.basename(path)}",
                               "meta": {"source": path, "doc_type": "未知格式"}}]
 
@@ -159,6 +164,8 @@ class IngestionAgent(BaseAgent):
     def _load_jsonl(self, path: str) -> List[Dict]:
         """加载 JSONL 文件，每行一个 JSON 对象"""
         documents = []
+        skipped_lines = 0
+        no_text_lines = 0
         with open(path, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
@@ -167,6 +174,7 @@ class IngestionAgent(BaseAgent):
                 try:
                     doc = json.loads(line)
                     if "text" not in doc:
+                        no_text_lines += 1
                         continue
                     if "meta" not in doc:
                         doc["meta"] = {
@@ -176,7 +184,14 @@ class IngestionAgent(BaseAgent):
                     doc["meta"]["text_length"] = len(doc.get("text", ""))
                     documents.append(doc)
                 except json.JSONDecodeError as e:
-                    print(f"[IngestionAgent] JSONL 第{line_num}行解析失败: {e}")
+                    skipped_lines += 1
+                    logger.warning(f"[IngestionAgent] JSONL {path}:{line_num} parse error: {e}")
+
+        if skipped_lines > 0:
+            logger.warning(f"[IngestionAgent] JSONL {path}: {skipped_lines} lines skipped (JSON errors)")
+        if no_text_lines > 0:
+            logger.warning(f"[IngestionAgent] JSONL {path}: {no_text_lines} lines missing 'text' field")
+        logger.info(f"[IngestionAgent] Loaded {len(documents)} docs from {path}")
         return documents
 
     def _parse_pdf(self, path: str) -> str:
@@ -232,8 +247,8 @@ class IngestionAgent(BaseAgent):
         try:
             metadata = self.call_tool("extract_document_metadata", text=text)
         except RuntimeError as e:
-            print(f"[IngestionAgent] 元数据抽取失败: {e}")
-            metadata = {"_confidence": "none"}
+            logger.warning(f"[IngestionAgent] metadata extraction failed: {e}")
+            metadata = {"_confidence": "none", "_extraction_error": str(e)}
 
         # 5. 补充 doc_type (分类器结果优先，LLM 仅当兑底)
         if not metadata.get("doc_type"):
@@ -265,6 +280,7 @@ class IngestionAgent(BaseAgent):
         """从目录批量摄取 — 遍历文件，按公司/季度归类"""
         documents = []
         supported_exts = {".jsonl", ".txt", ".pdf"}
+        failed_files = 0
 
         for root, dirs, files in os.walk(dir_path):
             for filename in files:
@@ -275,6 +291,12 @@ class IngestionAgent(BaseAgent):
                         docs = self._ingest_file(filepath)
                         documents.extend(docs)
                     except Exception as e:
-                        print(f"[IngestionAgent] 文件读取失败: {filepath} — {e}")
+                        failed_files += 1
+                        logger.error(f"[IngestionAgent] file read failed: {filepath} — {e}")
 
+        if failed_files > 0:
+            logger.warning(
+                f"[IngestionAgent] directory {dir_path}: {failed_files} files failed to read"
+            )
+        logger.info(f"[IngestionAgent] directory {dir_path}: {len(documents)} docs loaded")
         return documents

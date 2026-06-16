@@ -7,9 +7,12 @@ BM25 检索引擎 — BM25Okapi 封装
 - 分词回退（无 jieba 时）
 """
 import re
+import logging
 from typing import Dict, List, Optional
 
 from rank_bm25 import BM25Okapi
+
+logger = logging.getLogger(__name__)
 
 
 class BM25Engine:
@@ -68,8 +71,8 @@ class BM25Engine:
         if self._tokenizer is not None:
             try:
                 return self._tokenizer(text)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"BM25Engine: tokenizer failed, falling back to regex: {e}")
         return self._fallback_tokenize(text)
 
     def clear(self):

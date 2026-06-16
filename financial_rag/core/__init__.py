@@ -21,6 +21,7 @@ from .indexer import PipelineOrchestrator, PipelineConfig, PipelineResult, Pipel
 from .reflector import ReflectionLoop, ReflectionConfig, ThoughtStep, ActionType, ReflectionState, HallucinationGuard
 from .scorer import PipelineScoreCard, StageScore, ScoreGrade, StageGroup, create_scorecard
 from .protocol import AgentMessage, MessageBus, MessageAdapter
+from .data_orchestrator import DataOrchestrator, KnowledgePool, DataRouter, IngestStats
 
 __all__ = [
     # Base
@@ -44,4 +45,6 @@ __all__ = [
     "PipelineScoreCard", "StageScore", "ScoreGrade", "StageGroup", "create_scorecard",
     # Protocol
     "AgentMessage", "MessageBus", "MessageAdapter",
+    # Data Orchestrator
+    "DataOrchestrator", "KnowledgePool", "DataRouter", "IngestStats",
 ]

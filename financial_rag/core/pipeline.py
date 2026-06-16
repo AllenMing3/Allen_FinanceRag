@@ -99,6 +99,7 @@ class PipelineScheduler:
         llm: Any = None,  # DashScopeLLM
         filler: Any = None,  # SlotFiller
         config: Optional[PipelineConfig] = None,
+        data_orchestrator: Any = None,  # DataOrchestrator (多 Pool 模式)
     ):
         self.orchestrator = orchestrator
         self.retriever = retriever
@@ -107,6 +108,7 @@ class PipelineScheduler:
         self.llm = llm
         self.filler = filler
         self.config = config or PipelineConfig()
+        self.data_orchestrator = data_orchestrator
         self._logger = logging.getLogger(f"{__name__}.PipelineScheduler")
 
     def run(
@@ -227,21 +229,28 @@ class PipelineScheduler:
     def _phase_index(
         self, query: str, result: PipelineResult, max_retrieve: int
     ) -> PipelineResult:
-        """将获取到的数据入 RAG 索引，并检索相关内容"""
+        """将获取到的数据入 RAG 索引，并检索相关内容
+        
+        支持两种模式:
+        - 单 Retriever 模式 (默认): 所有文档入同一个 Retriever
+        - 多 Pool 模式 (data_orchestrator): 按文档类型路由到不同 Pool
+        """
         t0 = time.time()
 
-        if not self.config.enable_index or not self.retriever:
+        has_indexer = self.retriever or self.data_orchestrator
+        if not self.config.enable_index or not has_indexer:
             if self.config.verbose:
                 print("[Pipeline] 阶段2: 索引 — 跳过 (未启用)")
             return result
 
         if self.config.verbose:
-            print("[Pipeline] 阶段2: 索引 — 数据入RAG库 + 混合检索...")
+            mode = "多Pool" if self.data_orchestrator else "单Retriever"
+            print(f"[Pipeline] 阶段2: 索引 — 数据入RAG库 + 混合检索 ({mode})...")
 
         try:
-            # 将阶段1获取的数据转为文档并索引
+            # 将阶段1获取的数据转为文档
+            docs = []
             if result.fetched_data:
-                docs = []
                 for item in result.fetched_data:
                     title = item.get("title", "")
                     content = item.get("content", "")
@@ -254,8 +263,16 @@ class PipelineScheduler:
                     if text.strip():
                         docs.append({"text": text, "meta": meta})
 
+            # 索引: 多 Pool 模式 vs 单 Retriever 模式
+            if self.data_orchestrator:
                 if docs:
-                    # 增量添加而非覆盖：保留已有 KB 文档
+                    ingest_stats = self.data_orchestrator.ingest(docs)
+                    result.indexed_docs = ingest_stats.total_docs - ingest_stats.rejected
+                    if self.config.verbose:
+                        print(f"  [索引] {ingest_stats.summary()}")
+                items = self.data_orchestrator.search(query, top_k=max_retrieve)
+            else:
+                if docs:
                     if self.retriever.documents:
                         self.retriever.add(docs)
                     else:
@@ -264,13 +281,11 @@ class PipelineScheduler:
                     if self.config.verbose:
                         total = len(self.retriever.documents)
                         print(f"  [索引] 新增 {len(docs)} 篇文档 (知识库共 {total} 篇)")
+                items = self.retriever.search(query, top_k=max_retrieve) if self.retriever else []
 
-            # 检索
-            if hasattr(self.retriever, "search"):
-                items = self.retriever.search(query, top_k=max_retrieve)
-                result.retrieved_items = items
-                if self.config.verbose:
-                    print(f"  [检索] 命中 {len(items)} 条")
+            result.retrieved_items = items
+            if self.config.verbose:
+                print(f"  [检索] 命中 {len(items)} 条")
         except Exception as e:
             self._logger.warning(f"阶段2 索引失败: {e}")
             result.errors.append(f"索引阶段: {e}")
@@ -549,6 +564,7 @@ def create_pipeline_scheduler(
     llm: Any = None,
     filler: Any = None,
     config: Optional[PipelineConfig] = None,
+    data_orchestrator: Any = None,
 ) -> PipelineScheduler:
     """快速创建 Pipeline 调度器"""
     return PipelineScheduler(
@@ -559,4 +575,5 @@ def create_pipeline_scheduler(
         llm=llm,
         filler=filler,
         config=config,
+        data_orchestrator=data_orchestrator,
     )

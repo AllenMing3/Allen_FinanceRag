@@ -17,9 +17,12 @@
     result = classifier.classify(text)
 """
 import re
+import logging
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Callable, Tuple
+
+logger = logging.getLogger(__name__)
 
 from .dictionaries import (
     FINANCIAL_TERMS, INDUSTRY_TERMS, STOCK_MAP,
@@ -58,6 +61,7 @@ class CleanStats:
     control_removed: int = 0
     paragraphs_deduped: int = 0
     boilerplate_removed: int = 0
+    warnings: List[str] = field(default_factory=list)
 
     @property
     def retention(self) -> float:
@@ -68,6 +72,10 @@ class CleanStats:
     @property
     def is_over_cleaned(self) -> bool:
         return 0 < self.retention < 0.3
+
+    @property
+    def is_empty_result(self) -> bool:
+        return self.cleaned_len == 0 and self.original_len > 0
 
 
 # ===================== TextPreprocessor =====================
@@ -116,14 +124,33 @@ class TextPreprocessor:
             self._steps.append(self._step_strip)
 
     def process(self, text: str, collect_stats: bool = False) -> str:
-        """清洗单条文本"""
+        """清洗单条文本
+        
+        Warnings:
+            - Empty input returned as-is
+            - Over-cleaned text (retention < 30%)
+            - Cleaning produced empty output
+        """
         if not text:
+            logger.debug("TextPreprocessor: empty/None input, returning as-is")
             return text
 
         stats = CleanStats(original_len=len(text))
         for step in self._steps:
             text = step(text, stats)
         stats.cleaned_len = len(text)
+
+        # Over-cleaning detection
+        if stats.is_over_cleaned:
+            msg = f"over_cleaned: retention={stats.retention:.2f} ({stats.original_len}→{stats.cleaned_len})"
+            stats.warnings.append(msg)
+            logger.warning(f"TextPreprocessor: {msg}")
+
+        # Empty result detection
+        if stats.is_empty_result:
+            msg = f"cleaning_emptied_text: was {stats.original_len} chars"
+            stats.warnings.append(msg)
+            logger.warning(f"TextPreprocessor: {msg}")
 
         if collect_stats:
             self._last_stats = stats
@@ -241,11 +268,14 @@ class RelevanceGate:
         self.min_chinese_ratio = min_chinese_ratio
         self.min_keywords = min_keywords
 
-        # 合并所有领域关键词
+        # 合并所有领域关键词 (包括 DOC_TYPE_KEYWORDS 中的所有分类词)
         self._all_keywords: set = set()
         self._all_keywords.update(FINANCIAL_TERMS)
         self._all_keywords.update(INDUSTRY_TERMS)
         self._all_keywords.update(STOCK_MAP.keys())
+        # DOC_TYPE_KEYWORDS 包含 macro_data/news 等分类词 (央行/降准/记者等)
+        for keywords in DOC_TYPE_KEYWORDS.values():
+            self._all_keywords.update(keywords)
 
     def check(self, text: str) -> Tuple[bool, str, int]:
         """
@@ -255,22 +285,29 @@ class RelevanceGate:
             (passed, reason, keyword_count)
         """
         if not text:
+            logger.debug("RelevanceGate: empty text rejected")
             return False, "empty_text", 0
 
         # 1. 长度检查
         if len(text) < self.min_length:
-            return False, f"too_short({len(text)}<{self.min_length})", 0
+            reason = f"too_short({len(text)}<{self.min_length})"
+            logger.info(f"RelevanceGate: {reason}")
+            return False, reason, 0
 
         # 2. 中文字符占比
         chinese_count = len(_CHINESE_CHAR.findall(text))
         ratio = chinese_count / max(len(text), 1)
         if ratio < self.min_chinese_ratio:
-            return False, f"low_chinese_ratio({ratio:.2f}<{self.min_chinese_ratio})", 0
+            reason = f"low_chinese_ratio({ratio:.2f}<{self.min_chinese_ratio})"
+            logger.info(f"RelevanceGate: {reason}")
+            return False, reason, 0
 
         # 3. 领域关键词命中
         keyword_count = sum(1 for kw in self._all_keywords if kw in text)
         if keyword_count < self.min_keywords:
-            return False, f"no_domain_keywords({keyword_count}<{self.min_keywords})", keyword_count
+            reason = f"no_domain_keywords({keyword_count}<{self.min_keywords})"
+            logger.info(f"RelevanceGate: {reason}")
+            return False, reason, keyword_count
 
         return True, "pass", keyword_count
 
@@ -319,6 +356,7 @@ class DocTypeClassifier:
                 break
 
         if not scores:
+            logger.debug(f"DocTypeClassifier: no keywords matched, classifying as 'other' (text_len={len(text)})")
             return {"doc_type": "other", "confidence": 0.3, "matched_keywords": []}
 
         # 3. 选择得分最高的类型
