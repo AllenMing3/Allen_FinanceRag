@@ -43,8 +43,13 @@ def synthesize_report(
     metrics = metrics or {}
     entities = entities or []
 
+    logger.info(f"[synthesize_report] 入口: query={query!r}, sources={len(sources)}, "
+                f"metrics_keys={list(metrics.keys()) if isinstance(metrics, dict) else type(metrics).__name__}, "
+                f"entities_type={type(entities).__name__}, entities_len={len(entities)}")
+
     # 归一化 entities: extract_entities 返回 dict，function-calling 可能返回 list
     if isinstance(entities, dict):
+        logger.info(f"[synthesize_report] entities 归一化: dict→list ({len(entities)} keys)")
         entities = [{"type": k, "data": v} for k, v in entities.items() if not str(k).startswith("_")]
 
     llm = _report_llm_ref["llm"]

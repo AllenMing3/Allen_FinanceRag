@@ -220,7 +220,7 @@ async function buildKB() {
 async function clearKB() {
   try { await fetch('/api/kb/clear', {method:'POST'}); await fetch('/api/metadata/clear', {method:'POST'}); } catch(e) {}
   kbDocs = []; kbBuilt = false;
-  updateKBStatus(0); updateMetaStatus(0); renderDocList([]);
+  updateKBStatus(0); updateMetaStatus(0); renderDocList([]); refreshKBManager();
   document.getElementById('buildCount').textContent = '0';
   document.getElementById('build-result').innerHTML = '';
   document.getElementById('query-result').innerHTML = '';
@@ -408,6 +408,45 @@ async function analyzeTopic() {
   hideLoading('analyze-topic-loading');
 }
 
+// ===== KB Manager =====
+async function refreshKBManager() {
+  const container = document.getElementById('kbSourceList');
+  try {
+    const d = await fetch('/api/kb/status').then(r => r.json());
+    const sources = d.sources || {};
+    const keys = Object.keys(sources);
+    if (!keys.length) {
+      container.innerHTML = '<div class="empty-state" style="padding:12px"><p style="margin:0">知识库为空</p></div>';
+      return;
+    }
+    let h = `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">📚 ${d.doc_count} 篇文档 · ${d.file_size_kb} KB · ${d.analyzed_count} 已分析</div>`;
+    h += '<div style="display:flex;flex-direction:column;gap:6px">';
+    keys.sort((a, b) => sources[b] - sources[a]);
+    for (const src of keys) {
+      const count = sources[src];
+      h += `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg2);border-radius:6px;font-size:13px">`;
+      h += `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(src)}">${escHtml(src)}</span>`;
+      h += `<span class="tag tag-info" style="margin:0 8px;font-size:11px">${count} 篇</span>`;
+      h += `<button class="btn btn-sm" style="padding:2px 8px;font-size:11px;color:var(--danger)" onclick="removeKBSource('${escHtml(src)}')">删除</button>`;
+      h += `</div>`;
+    }
+    h += '</div>';
+    container.innerHTML = h;
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--danger);font-size:12px">加载失败: ${escHtml(e.message)}</div>`;
+  }
+}
+
+async function removeKBSource(source) {
+  if (!confirm(`确认删除来源「${source}」的所有文档？`)) return;
+  try {
+    const resp = await fetch(`/api/kb/source/${encodeURIComponent(source)}`, { method: 'DELETE' });
+    const d = await resp.json();
+    refreshKBManager();
+    refreshKBStatus();
+  } catch(e) { alert('删除失败: ' + e.message); }
+}
+
 // ===== Init =====
 async function refreshKBStatus() {
   try {
@@ -422,5 +461,6 @@ fetch('/api/config').then(r=>r.json()).then(d => {
   if (d.mock_mode) document.getElementById('mockBadge').classList.add('active');
   if (d.has_api_key) { document.getElementById('kbBadge').querySelector('.dot').className = 'dot dot-ok'; document.getElementById('kbStatus').textContent = 'API 已连接'; }
   refreshKBStatus();
+  refreshKBManager();
   loadDirBrowser();
 }).catch(() => {});

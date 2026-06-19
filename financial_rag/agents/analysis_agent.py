@@ -51,6 +51,9 @@ class AnalysisAgent(BaseAgent):
         """按 intent 分发到对应工具链，最终统一生成报告"""
         intent = context.metadata.get("intent", "general")
         query = context.raw_input or ""
+        logger.info(f"[AnalysisAgent] 入口: intent={intent}, query={query[:80]!r}, "
+                    f"parsed_docs={len(context.parsed_data or [])}, "
+                    f"findings={len(context.intermediate_findings or [])}")
 
         # 按 intent 执行对应工具链
         if intent == "kline":
@@ -59,6 +62,9 @@ class AnalysisAgent(BaseAgent):
             findings = self._run_event_chain(context)
         else:
             findings = self._run_extraction_chain(context)
+
+        logger.info(f"[AnalysisAgent] 工具链完成: stage={findings.get('stage')}, "
+                    f"has_error={'error' in findings}, keys={list(findings.keys())}")
 
         # 统一报告生成
         return self._generate_report(query, findings, context)
@@ -269,6 +275,8 @@ class AnalysisAgent(BaseAgent):
         sources = self._build_sources(documents)
 
         # LLM 报告生成
+        logger.info(f"[AnalysisAgent._generate_report] sources={len(sources)}, "
+                    f"metrics_type={type(metrics).__name__}, entities_type={type(entities).__name__}")
         try:
             report_result = self.call_tool(
                 "synthesize_report", query=query, sources=sources,

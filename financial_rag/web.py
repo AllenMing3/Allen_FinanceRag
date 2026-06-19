@@ -113,6 +113,18 @@ def _ensure_init():
                 logger.warning(f"KB auto-build failed: {e}")
         _state["kb_path"] = _KB_PATH
         _state["meta_store"] = _load_meta()
+
+        # KB 状态摘要日志
+        kb_docs = _state["kb_docs"]
+        source_counts = {}
+        for d in kb_docs:
+            src = d.get("meta", {}).get("source", "unknown")
+            source_counts[src] = source_counts.get(src, 0) + 1
+        kb_file_size = os.path.getsize(_KB_PATH) / 1024 if os.path.exists(_KB_PATH) else 0
+        logger.info(f"[KB] 启动状态: {len(kb_docs)} 篇文档 ({kb_file_size:.1f} KB), "
+                    f"{len(_state['meta_store'])} 条新闻元数据, "
+                    f"来源分布: {source_counts}")
+
         _state["ready"] = True
 
 
@@ -292,11 +304,17 @@ def api_ingest_files(req: IngestFilesRequest):
     if not os.path.isdir(dir_path):
         raise HTTPException(400, f"目录不存在: {dir_path}")
 
+    logger.info(f"[API] /ingest/files: dir={dir_path!r}, analyze={req.analyze}")
+    t_total = time.time()
+
     raw_docs = []
+    file_stats = []  # per-file stats for logging
     for fname in os.listdir(dir_path):
         fpath = os.path.join(dir_path, fname)
         if not os.path.isfile(fpath):
             continue
+        fsize = os.path.getsize(fpath)
+        doc_count_before = len(raw_docs)
         try:
             if fname.endswith(".jsonl"):
                 with open(fpath, "r", encoding="utf-8") as f:
@@ -329,6 +347,12 @@ def api_ingest_files(req: IngestFilesRequest):
                             raw_docs.append({"text": text, "meta": {"source": fname}})
         except Exception as e:
             logger.warning(f"Skip {fname}: {e}")
+            continue
+        doc_count = len(raw_docs) - doc_count_before
+        file_stats.append((fname, fsize, doc_count))
+        logger.info(f"[Ingest] 读取文件: {fname} ({fsize/1024:.1f} KB) → {doc_count} 篇文档")
+
+    logger.info(f"[Ingest] 文件读取完成: {len(file_stats)} 个文件, {len(raw_docs)} 篇文档")
 
     # Optional: run agent analysis on loaded documents
     analyzed_count = 0
@@ -347,7 +371,9 @@ def api_ingest_files(req: IngestFilesRequest):
             ingest_agent.bind_tools(registry, executor)
             extract_agent.bind_tools(registry, executor)
 
-        for doc in raw_docs:
+        logger.info(f"[Ingest] 开始分析 {len(raw_docs)} 篇文档...")
+        for i, doc in enumerate(raw_docs, 1):
+            t_doc = time.time()
             try:
                 ctx = AgentContext(
                     raw_input=doc["text"][:500],
@@ -365,8 +391,13 @@ def api_ingest_files(req: IngestFilesRequest):
                     doc["meta"]["metrics"] = features.get("metrics", {})
                     doc["meta"]["entities"] = features.get("entities", [])
                     analyzed_count += 1
+                elapsed_doc = (time.time() - t_doc) * 1000
+                src = doc["meta"].get("source", "?")
+                logger.info(f"[Ingest] [{i}/{len(raw_docs)}] {src}: {elapsed_doc:.0f}ms, "
+                            f"analyzed={doc['meta'].get('analyzed', False)}")
             except Exception as e:
-                logger.warning(f"Analysis failed for doc: {e}")
+                elapsed_doc = (time.time() - t_doc) * 1000
+                logger.warning(f"[Ingest] [{i}/{len(raw_docs)}] 分析失败 ({elapsed_doc:.0f}ms): {e}")
                 doc["meta"]["analyzed"] = False
 
     # Store in KB (thread-safe) — replace samples with real data
@@ -379,6 +410,10 @@ def api_ingest_files(req: IngestFilesRequest):
         else:
             _state["kb_docs"] = _state.get("kb_docs", []) + raw_docs
         _save_kb(_state["kb_docs"])
+
+    elapsed_total = (time.time() - t_total) * 1000
+    logger.info(f"[Ingest] 完成: {len(raw_docs)} 篇文档, 分析 {analyzed_count}/{len(raw_docs)}, "
+                f"总耗时 {elapsed_total:.0f}ms, KB 现有 {len(_state['kb_docs'])} 篇")
     return {
         "loaded": len(raw_docs),
         "analyzed": analyzed_count,
@@ -394,12 +429,14 @@ def api_ingest_news(req: IngestNewsRequest):
     _ensure_init()
     from financial_rag.tools.news_tools import run_news_pipeline
 
+    logger.info(f"[API] /ingest/news: query={req.query!r}, max_news={req.max_news}")
     data = run_news_pipeline(
         llm=_state["llm"] if _state["has_key"] else None,
         query=req.query,
         summarize=True,
         max_news=req.max_news,
     )
+    logger.info(f"[API] /ingest/news: {len(data.get('items', []))} items fetched")
 
     # Store as metadata only — news has no nutritional value for KB
     from datetime import datetime
@@ -451,12 +488,14 @@ def api_build_kb(req: BuildRequest):
     if not documents:
         raise HTTPException(400, "没有文档可索引，请先摄取数据")
 
+    logger.info(f"[API] /build: {len(documents)} documents")
     r = _state["retriever"]
     r.clear()
 
     t0 = time.time()
     r.index(documents, precompute_embeddings=True)
     elapsed = (time.time() - t0) * 1000
+    logger.info(f"[API] /build: indexed {len(documents)} docs in {elapsed:.0f}ms")
 
     with _state_lock:
         _state["kb_built"] = True
@@ -498,6 +537,35 @@ def api_kb_clear():
     return {"ok": True, "kb_path": _KB_PATH}
 
 
+@app.delete("/api/kb/source/{source_name}")
+def api_kb_remove_source(source_name: str):
+    """Remove all KB docs matching a given source name"""
+    _ensure_init()
+    with _state_lock:
+        before = len(_state["kb_docs"])
+        _state["kb_docs"] = [
+            d for d in _state["kb_docs"]
+            if d.get("meta", {}).get("source", "unknown") != source_name
+        ]
+        removed = before - len(_state["kb_docs"])
+        if removed > 0:
+            _save_kb(_state["kb_docs"])
+            # Rebuild index if it was built
+            if _state.get("kb_built") and _state["kb_docs"]:
+                try:
+                    _state["retriever"].clear()
+                    _state["retriever"].index(_state["kb_docs"], precompute_embeddings=True)
+                    logger.info(f"[KB] 索引已重建 (删除 {source_name} 后, {len(_state['kb_docs'])} 篇)")
+                except Exception as e:
+                    _state["kb_built"] = False
+                    logger.warning(f"[KB] 索引重建失败: {e}")
+            elif not _state["kb_docs"]:
+                _state["retriever"].clear()
+                _state["kb_built"] = False
+    logger.info(f"[API] KB 删除来源: {source_name!r}, 移除 {removed} 篇, 剩余 {len(_state['kb_docs'])} 篇")
+    return {"removed": removed, "remaining": len(_state["kb_docs"])}
+
+
 # ===================== Intelligent Analysis (User-Facing) =====================
 
 @app.post("/api/analyze/news")
@@ -510,13 +578,19 @@ def api_analyze_news(req: AnalyzeNewsRequest):
     if not text:
         raise HTTPException(400, "请输入新闻内容")
 
-    return analyze_news_text(
+    logger.info(f"[API] /analyze/news: text={len(text)}字, query={req.query!r}, kb_built={_state.get('kb_built', False)}")
+    result = analyze_news_text(
         text,
         query=req.query,
         llm=_state["llm"] if _state.get("has_key") else None,
         retriever=_state.get("retriever"),
         kb_built=_state.get("kb_built", False),
     )
+    logger.info(f"[API] /analyze/news: assessment={result.get('assessment')}, "
+                f"analysis_type={type(result.get('analysis')).__name__}, "
+                f"entities_keys={list(result.get('entities', {}).keys())}, "
+                f"metrics_keys={list(result.get('metrics', {}).keys())}")
+    return result
 
 
 @app.post("/api/analyze/topic")
@@ -529,6 +603,7 @@ def api_analyze_topic(req: AnalyzeTopicRequest):
     if not topic:
         raise HTTPException(400, "请输入研究话题")
 
+    logger.info(f"[API] /analyze/topic: topic={topic!r}, max_news={req.max_news}, kb_built={_state.get('kb_built', False)}")
     result = analyze_topic_research(
         topic,
         max_news=req.max_news,
@@ -536,6 +611,8 @@ def api_analyze_topic(req: AnalyzeTopicRequest):
         retriever=_state.get("retriever"),
         kb_built=_state.get("kb_built", False),
     )
+    logger.info(f"[API] /analyze/topic: assessment={result.get('assessment')}, "
+                f"news_count={result.get('news_count')}, kb_sources={len(result.get('kb_sources', []))}")
 
     # Store fetched news as metadata
     from datetime import datetime
@@ -609,6 +686,7 @@ def api_kb_status():
 def api_kb_query(req: QueryRequest):
     """Query against the built KB with full source citation"""
     _ensure_init()
+    logger.info(f"[API] /kb-query: query={req.query!r}, top_k={req.top_k}")
     from financial_rag.core.scorer import PipelineScoreCard, ScoreGrade
     from financial_rag.core.reflector import HallucinationGuard
 
@@ -700,6 +778,7 @@ def api_kb_query(req: QueryRequest):
 @app.post("/api/pipeline")
 def api_pipeline(req: QueryRequest):
     _ensure_init()
+    logger.info(f"[API] /pipeline: query={req.query!r}, template={req.template}, verbose={req.verbose}")
     if not _state["has_key"]:
         raise HTTPException(400, "Pipeline 需要 DASHSCOPE_API_KEY")
 

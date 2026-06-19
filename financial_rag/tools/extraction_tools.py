@@ -68,6 +68,8 @@ def extract_financial_metrics(text: str) -> Dict[str, Any]:
     if not text or not text.strip():
         return {"_confidence": "none", "_error": "empty input"}
 
+    logger.info(f"[extract_financial_metrics] 入口: text={len(text)}字, llm={'yes' if _get_llm() else 'no'}")
+
     prompt_text = text[:8000]
     llm = _get_llm()
 
@@ -91,6 +93,7 @@ def extract_financial_metrics(text: str) -> Dict[str, Any]:
                 normalized = _normalize_metric_keys(result)
                 normalized["_confidence"] = "high"
                 normalized["_source"] = "llm"
+                logger.info(f"[extract_financial_metrics] LLM 返回: {len(normalized)} keys")
                 return normalized
         except Exception as e:
             logger.warning(f"[extract_financial_metrics] LLM 失败: {e}")
@@ -216,6 +219,8 @@ def extract_entities(text: str) -> Dict[str, Any]:
     if not text or not text.strip():
         return {"_confidence": "none", "_error": "empty input"}
 
+    logger.info(f"[extract_entities] 入口: text={len(text)}字, llm={'yes' if _get_llm() else 'no'}")
+
     prompt_text = text[:8000]
     llm = _get_llm()
 
@@ -238,11 +243,13 @@ def extract_entities(text: str) -> Dict[str, Any]:
             if result:
                 result["_confidence"] = "high"
                 result["_source"] = "llm"
+                logger.info(f"[extract_entities] LLM 返回: {len(result)} keys ({list(result.keys())})")
                 return result
         except Exception as e:
             logger.warning(f"[extract_entities] LLM 失败: {e}")
 
     # --- 兜底: 仅公司名 + 金额 (最可靠的两个 pattern) ---
+    logger.info("[extract_entities] 走 regex 兆底")
     return _regex_fallback_entities(text)
 
 

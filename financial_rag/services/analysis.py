@@ -42,16 +42,21 @@ def analyze_news_text(
         extract_financial_metrics, extract_entities, detect_document_type,
     )
 
+    logger.info(f"[analyze_news] 开始: text={len(text)}字, query={query!r}, kb_built={kb_built}, llm={'yes' if llm else 'no'}")
+
     # 1. Structured extraction
     doc_type = detect_document_type(text)
     metrics = extract_financial_metrics(text=text)
     entities = extract_entities(text=text)
+    logger.info(f"[analyze_news] 抽取完成: doc_type={doc_type}, "
+                f"metrics_keys={list(metrics.keys())}, entities_keys={list(entities.keys())}")
 
     metrics_clean = {k: v for k, v in metrics.items() if not k.startswith("_")}
     entities_clean = {k: v for k, v in entities.items() if not k.startswith("_")}
 
     # 2. KB context retrieval
     kb_sources = _search_kb(retriever, query or text[:200], kb_built)
+    logger.info(f"[analyze_news] KB 检索: {len(kb_sources)} sources")
 
     # 3. LLM assessment or rule-based fallback
     if llm:
@@ -59,6 +64,7 @@ def analyze_news_text(
     else:
         assessment, analysis = _heuristic_assessment(doc_type, metrics_clean, entities_clean)
 
+    logger.info(f"[analyze_news] 完成: assessment={assessment}, analysis_type={type(analysis).__name__}, analysis_len={len(str(analysis))}")
     return {
         "assessment": assessment,
         "analysis": analysis,
@@ -94,6 +100,7 @@ def analyze_topic_research(
         dict with assessment, analysis, topic, news_count, news, kb_sources
     """
     # 1. Fetch news (mock-aware)
+    logger.info(f"[analyze_topic] 开始: topic={topic!r}, max_news={max_news}, kb_built={kb_built}, llm={'yes' if llm else 'no'}")
     from financial_rag.config import is_mock_enabled
     if is_mock_enabled():
         from financial_rag.mock_data import mock_search_news
@@ -121,6 +128,7 @@ def analyze_topic_research(
         except Exception:
             pass
     kb_sources = _search_kb(retriever, search_query, kb_built)
+    logger.info(f"[analyze_topic] 新闻 {len(items)} 条, KB {len(kb_sources)} sources")
 
     # 4. LLM assessment or fallback
     if llm:
@@ -129,6 +137,7 @@ def analyze_topic_research(
         assessment = "neutral"
         analysis = f"话题: {topic}\n获取新闻: {len(items)} 条\n\n配置 DASHSCOPE_API_KEY 可获得 LLM 智能研判。"
 
+    logger.info(f"[analyze_topic] 完成: assessment={assessment}, news_count={len(items)}")
     return {
         "assessment": assessment,
         "analysis": analysis,

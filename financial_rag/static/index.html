@@ -261,6 +261,14 @@
       <div id="build-result"></div>
     </div>
     <div class="card" id="kbStorageCard" style="display:none"><h3>💾 知识库存储</h3><div class="stats" id="kbStorageStats"></div></div>
+    <div class="card" id="kbManageCard">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <h3 style="margin:0">🗂️ 知识库管理</h3>
+        <button class="btn btn-secondary btn-sm" onclick="refreshKBManager()">刷新</button>
+      </div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:12px">按来源分组查看和删除知识库文档</p>
+      <div id="kbSourceList"><div class="empty-state" style="padding:12px"><p style="margin:0">加载中...</p></div></div>
+    </div>
     <div class="card">
       <h3>📚 知识库内容 <span class="tag tag-info" id="kbDocCount">0 篇文档</span></h3>
       <div class="doc-list" id="docList"><div class="empty-state"><div class="icon">📭</div><p>知识库为空</p><div class="hint">先在「数据摄取」步骤导入数据</div></div></div>
