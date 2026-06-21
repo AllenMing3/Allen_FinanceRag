@@ -60,14 +60,16 @@ def analyze_news_text(
 
     # 3. LLM assessment or rule-based fallback
     if llm:
-        assessment, analysis = _llm_news_assessment(llm, text, doc_type, metrics_clean, entities_clean, kb_sources)
+        assessment, analysis, confidence = _llm_news_assessment(llm, text, doc_type, metrics_clean, entities_clean, kb_sources)
     else:
         assessment, analysis = _heuristic_assessment(doc_type, metrics_clean, entities_clean)
+        confidence = ""
 
-    logger.info(f"[analyze_news] 完成: assessment={assessment}, analysis_type={type(analysis).__name__}, analysis_len={len(str(analysis))}")
+    logger.info(f"[analyze_news] 完成: assessment={assessment}, confidence={confidence}, analysis_len={len(str(analysis))}")
     return {
         "assessment": assessment,
         "analysis": analysis,
+        "confidence": confidence,
         "metrics": metrics_clean,
         "entities": entities_clean,
         "doc_type": doc_type,
@@ -140,16 +142,18 @@ def analyze_topic_research(
     logger.info(f"[analyze_topic] 步骤 3/4: LLM 研判...")
     t2 = _time.time()
     if llm:
-        assessment, analysis = _llm_topic_assessment(llm, topic, items, combined_text, kb_sources)
+        assessment, analysis, confidence = _llm_topic_assessment(llm, topic, items, combined_text, kb_sources)
     else:
         assessment = "neutral"
         analysis = f"话题: {topic}\n获取新闻: {len(items)} 条\n\n配置 DASHSCOPE_API_KEY 可获得 LLM 智能研判。"
+        confidence = ""
 
-    logger.info(f"[analyze_topic] 步骤 3/4 完成: assessment={assessment} ({(_time.time()-t2)*1000:.0f}ms)")
+    logger.info(f"[analyze_topic] 步骤 3/4 完成: assessment={assessment}, confidence={confidence} ({(_time.time()-t2)*1000:.0f}ms)")
     logger.info(f"[analyze_topic] 完成: assessment={assessment}, news_count={len(items)}, 总耗时 {(_time.time()-t0)*1000:.0f}ms")
     return {
         "assessment": assessment,
         "analysis": analysis,
+        "confidence": confidence,
         "topic": topic,
         "news_count": len(items),
         "news": [
@@ -197,12 +201,26 @@ def _search_kb(retriever, query: str, kb_built: bool, min_score: float = 0.4) ->
 
 
 def _parse_verdict(text: str) -> str:
-    """Extract bullish/bearish/neutral from LLM response text."""
-    if "利好" in text:
-        return "bullish"
-    elif "利空" in text:
+    """Extract bullish/bearish/neutral from LLM response text.
+
+    Handles: 利好, 偏利好, 轻微利好, 利空, 偏利空, etc.
+    """
+    if "利空" in text:
         return "bearish"
+    elif "利好" in text:
+        return "bullish"
     return "neutral"
+
+
+def _extract_confidence(text: str) -> str:
+    """Extract confidence level from LLM response."""
+    if "置信度】高" in text or "置信度: 高" in text:
+        return "high"
+    elif "置信度】低" in text or "置信度: 低" in text:
+        return "low"
+    elif "置信度】中" in text or "置信度: 中" in text:
+        return "medium"
+    return ""
 
 
 def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities: dict, kb_sources: list) -> tuple:
@@ -248,10 +266,12 @@ def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities:
     try:
         caller = LLMCaller(llm)
         resp = caller.call(user, system=system, max_tokens=800)
-        return _parse_verdict(resp.content), resp.content
+        verdict = _parse_verdict(resp.content)
+        confidence = _extract_confidence(resp.content)
+        return verdict, resp.content, confidence
     except Exception as e:
         logger.warning(f"LLM news analysis failed: {e}")
-        return "unknown", f"LLM 分析失败: {e}"
+        return "unknown", f"LLM 分析失败: {e}", ""
 
 
 def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_sources: list) -> tuple:
@@ -301,10 +321,12 @@ def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_s
     try:
         caller = LLMCaller(llm)
         resp = caller.call(user, system=system, max_tokens=1000)
-        return _parse_verdict(resp.content), resp.content
+        verdict = _parse_verdict(resp.content)
+        confidence = _extract_confidence(resp.content)
+        return verdict, resp.content, confidence
     except Exception as e:
         logger.warning(f"LLM topic analysis failed: {e}")
-        return "unknown", f"LLM 分析失败: {e}"
+        return "unknown", f"LLM 分析失败: {e}", ""
 
 
 def _heuristic_assessment(doc_type: str, metrics: dict, entities: dict) -> tuple:

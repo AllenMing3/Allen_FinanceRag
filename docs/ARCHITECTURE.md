@@ -64,6 +64,19 @@
 | `data/knowledge_base/news_archive.jsonl` | Cumulative raw news archive — each search appends with full metadata |
 | `output/*.md` | Markdown reports (news summaries, K-line analysis reports) |
 
+### KB Management APIs
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/kb/status` | GET | KB doc count + source breakdown |
+| `/api/kb/sources` | GET | List all sources with doc counts |
+| `/api/kb/search` | GET | Search KB docs by keyword (`?keyword=xxx`) |
+| `/api/kb/keyword/{kw}` | DELETE | Delete all docs matching a keyword |
+| `/api/kb/source/{name}` | DELETE | Delete all docs from a source |
+| `/api/kb/clear` | POST | Wipe all docs + reset ingestion progress |
+| `/api/kb/history` | GET | List analysis conclusions (learning history) |
+| `/api/ingest/progress` | GET | Poll background ingestion progress |
+
 ---
 
 ## Agent Routing
@@ -252,7 +265,7 @@ text = caller.call("Generate summary", temperature=0.3)
 | `rss_fetcher.py` | Financial news via domestic APIs (10jqka / Sina / EastMoney) + rate limiting | `search_news`, `fetch_all_news` |
 | `tushare_client.py` | K-line & financial indicators via Tushare Pro | `fetch_stock_kline`, `compute_technical_indicators` |
 | `mock_data.py` | 25 AI-sector mock news + 3 long-form articles | Mock data for offline dev |
-| `web.py` | FastAPI Web UI server — thin shell, delegates to `services/` | FastAPI app, `/api/*` endpoints |
+| `web.py` | FastAPI Web UI server — thin shell, delegates to `services/` | FastAPI app, `/api/*` endpoints, background ingestion, signal-based shutdown |
 
 ### `financial_rag/core/` — Architecture Layer
 
@@ -321,16 +334,16 @@ text = caller.call("Generate summary", temperature=0.3)
 
 | File | Role | Key exports |
 |------|------|-------------|
-| `analysis.py` | Pure analysis functions (no HTTP deps, DI via kwargs) | `analyze_news_text()`, `analyze_topic_research()` |
+| `analysis.py` | Pure analysis functions (no HTTP deps, DI via kwargs) | `analyze_news_text()`, `analyze_topic_research()`, `_extract_confidence()`, `_parse_verdict()` |
 | `persistence.py` | KB / Meta / Archive JSON read / write | `load_kb()`, `save_kb()`, `load_meta()`, `save_meta()`, `append_news_archive()` |
 
 ### `financial_rag/static/` — Frontend
 
 | File | Role |
 |------|------|
-| `index.html` | Web UI structure (344 lines) |
+| `index.html` | Web UI structure (376 lines) |
 | `styles.css` | Dark theme styling (175 lines) |
-| `app.js` | Frontend logic + API interaction (426 lines) |
+| `app.js` | Frontend logic + API interaction (584 lines) |
 
 ---
 

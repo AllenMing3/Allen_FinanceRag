@@ -200,18 +200,6 @@ async function ingestNews() {
   }
 }
 
-async function loadSampleData() {
-  try {
-    const d = await api('/api/ingest/sample', {});
-    const total = d.total || 0;
-    updateKBStatus(total);
-    document.getElementById('sample-load-result').innerHTML = `<span class="tag tag-ok">OK</span> 已加载 ${d.loaded} 篇 (共 ${total} 篇) — 💾 ${escHtml(d.kb_path)}`;
-    refreshKBStatus(); refreshKBManager();
-  } catch(e) {
-    document.getElementById('sample-load-result').innerHTML = `<span class="tag tag-fail">Error</span> ${escHtml(e.message)}`;
-  }
-}
-
 // ===== STEP 2: Build =====
 async function buildKB() {
   showLoading('build-loading');
@@ -368,9 +356,20 @@ async function runScoreTool() {
 
 // ===== STEP 5: Smart Analysis =====
 function verdictBadge(v) {
-  const map = { bullish: ['利好','var(--ok)'], bearish: ['利空','var(--danger)'], neutral: ['中性','var(--text2)'] };
+  const map = {
+    bullish: ['利好','var(--ok)'], bearish: ['利空','var(--danger)'],
+    neutral: ['中性','var(--text2)'], unknown: ['分析失败','#f59e0b'],
+  };
   const [label, color] = map[v] || map.neutral;
   return `<span style="display:inline-block;padding:4px 14px;border-radius:20px;font-size:14px;font-weight:700;background:${color}22;color:${color};border:1px solid ${color}44">${label}</span>`;
+}
+
+function confidenceBadge(c) {
+  if (!c) return '';
+  const map = { high: ['高置信','var(--ok)'], medium: ['中置信','#f59e0b'], low: ['低置信','var(--danger)'] };
+  const [label, color] = map[c] || [];
+  if (!label) return '';
+  return ` <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;background:${color}22;color:${color};border:1px solid ${color}44;margin-left:6px">${label}</span>`;
 }
 
 async function analyzeNews() {
@@ -382,7 +381,7 @@ async function analyzeNews() {
   try {
     const d = await api('/api/analyze/news', { text, query });
     let h = '<div style="margin-top:12px">';
-    h += `<div style="margin-bottom:14px;text-align:center">${verdictBadge(d.assessment)}</div>`;
+    h += `<div style="margin-bottom:14px;text-align:center">${verdictBadge(d.assessment)}${confidenceBadge(d.confidence)}</div>`;
     if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:8px">💾 分析结论已存入知识库</div>`;
     if (d.analysis) h += `<div class="answer-section" style="margin-bottom:12px"><h3>💡 分析结论</h3><div class="answer-text">${escHtml(d.analysis)}</div></div>`;
     if (d.doc_type || d.entities || d.metrics) {
@@ -390,6 +389,9 @@ async function analyzeNews() {
       if (d.doc_type) h += `<div class="stat">文档类型 <strong>${escHtml(d.doc_type)}</strong></div>`;
       const ent = d.entities || {}, met = d.metrics || {};
       if (ent.companies && ent.companies.length) h += `<div class="stat">公司 <strong>${ent.companies.map(c=>escHtml(typeof c === 'string' ? c : c.name || c)).join(', ')}</strong></div>`;
+      if (ent.persons && ent.persons.length) h += `<div class="stat">人物 <strong>${ent.persons.map(p=>escHtml(typeof p === 'string' ? p : p.name || p)).slice(0,3).join(', ')}</strong></div>`;
+      if (ent.ai_models && ent.ai_models.length) h += `<div class="stat">AI模型 <strong>${ent.ai_models.map(m=>escHtml(typeof m === 'string' ? m : m.name || m)).slice(0,3).join(', ')}</strong></div>`;
+      if (ent.tech_terms && ent.tech_terms.length) h += `<div class="stat">技术 <strong>${ent.tech_terms.map(t=>escHtml(typeof t === 'string' ? t : t)).slice(0,3).join(', ')}</strong></div>`;
       if (met.revenue) h += `<div class="stat">营收 <strong>${escHtml(String(met.revenue))}</strong></div>`;
       if (met.net_profit) h += `<div class="stat">净利润 <strong>${escHtml(String(met.net_profit))}</strong></div>`;
       h += '</div>';
@@ -413,10 +415,15 @@ async function analyzeTopic() {
   const maxNews = parseInt(document.getElementById('analyze-topic-count').value);
   showLoading('analyze-topic-loading');
   document.getElementById('analyze-topic-result').innerHTML = '';
+  // Cycling progress text
+  const steps = ['① 提取关键词...', '② 抓取新闻...', '③ 查询知识库...', '④ LLM 综合研判...'];
+  let stepIdx = 0;
+  const loadingEl = document.querySelector('#analyze-topic-loading p');
+  const progressTimer = setInterval(() => { stepIdx = Math.min(stepIdx + 1, steps.length - 1); if (loadingEl) loadingEl.textContent = steps[stepIdx]; }, 5000);
   try {
     const d = await api('/api/analyze/topic', { topic, max_news: maxNews });
     let h = '<div style="margin-top:12px">';
-    h += `<div style="margin-bottom:14px;text-align:center">${verdictBadge(d.assessment)}</div>`;
+    h += `<div style="margin-bottom:14px;text-align:center">${verdictBadge(d.assessment)}${confidenceBadge(d.confidence)}</div>`;
     if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:8px">💾 研判结论已存入知识库</div>`;
     if (d.analysis) h += `<div class="answer-section" style="margin-bottom:12px"><h3>💡 综合研判</h3><div class="answer-text">${escHtml(d.analysis)}</div></div>`;
     h += `<div class="stats"><div class="stat">话题 <strong>${escHtml(d.topic)}</strong></div><div class="stat">新闻 <strong>${d.news_count}</strong></div></div>`;
@@ -427,13 +434,14 @@ async function analyzeTopic() {
     if (d.kb_sources && d.kb_sources.length) {
       h += `<div style="margin-top:10px;font-size:13px;color:var(--text2)">📚 KB (${d.kb_sources.length})</div>`;
       d.kb_sources.slice(0, 3).forEach((s, i) => {
-        h += `<div class="source-result" style="margin-top:6px"><div class="source-rank rank-high">${i+1}</div><div class="source-body"><div class="text">${escHtml((s.text||'').slice(0,150))}</div><div class="meta"><span>${(s.score||0).toFixed(3)}</span></div></div></div>`;
+        h += `<div class="source-result" style="margin-top:6px"><div class="source-rank rank-high">${i+1}</div><div class="source-body"><div class="text">${escHtml((s.text||'').slice(0,150))}</div><div class="meta"><span>相关度: <strong style="color:${scoreColor(s.score)}">${(s.score||0).toFixed(3)}</strong></span></div></div></div>`;
       });
     }
     h += '</div>';
     document.getElementById('analyze-topic-result').innerHTML = h;
     if (d.saved_to_kb) refreshLearningHistory();
   } catch(e) { document.getElementById('analyze-topic-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`; }
+  clearInterval(progressTimer);
   hideLoading('analyze-topic-loading');
 }
 

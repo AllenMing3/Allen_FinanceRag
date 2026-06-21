@@ -90,26 +90,8 @@ def _ensure_init():
             filler=_state["filler"],
             config=PipelineConfig(verbose=False),
         )
-        _state["sample_docs"] = [
-            {"text": "商汤科技2024年营收50.3亿元，同比增长36%，生成式AI业务收入占比达60%", "meta": {"source": "sensetime_2024"}},
-            {"text": "日日新大模型API日均调用量突破2000万次，同比增长400%，企业客户数达5800家", "meta": {"source": "sensetime_2024"}},
-            {"text": "训练集群规模达4万卡A100，算力利用率提升至85%，推理成本降至0.5元/百万token", "meta": {"source": "sensetime_2024"}},
-            {"text": "英伟达发布Blackwell B200 GPU，单卡AI训练性能较H100提升4倍", "meta": {"source": "nvidia_2025"}},
-            {"text": "智谱AI完成B+轮融资，估值超200亿元，GLM-5系列模型Q2发布", "meta": {"source": "zhipu_2025"}},
-            {"text": "微软Azure部署10万张B200用于训练GPT-5，OpenAI表示推理成本将显著降低", "meta": {"source": "microsoft_2025"}},
-            {"text": "谷歌宣布TPU v6将于Q4量产，直接对标Blackwell架构", "meta": {"source": "google_2025"}},
-        ]
-        # Load persisted KB from disk
         _state["kb_docs"] = _load_kb()
         _state["kb_built"] = False
-        _state["has_samples"] = False
-
-        # Auto-load sample data if KB is empty
-        if not _state["kb_docs"]:
-            _state["kb_docs"] = list(_state["sample_docs"])
-            _state["has_samples"] = True
-            _save_kb(_state["kb_docs"])
-            logger.info(f"KB auto-loaded with {len(_state['kb_docs'])} sample docs")
 
         # Auto-build index for existing docs
         if _state["kb_docs"]:
@@ -372,12 +354,7 @@ def api_ingest_files(req: IngestFilesRequest):
 
     # Phase 2: Store docs in KB immediately (before analysis)
     with _state_lock:
-        if _state.get("has_samples"):
-            _state["kb_docs"] = raw_docs
-            _state["has_samples"] = False
-            logger.info("Sample data replaced with real imports")
-        else:
-            _state["kb_docs"] = _state.get("kb_docs", []) + raw_docs
+        _state["kb_docs"] = _state.get("kb_docs", []) + raw_docs
         _save_kb(_state["kb_docs"])
 
     # Phase 3: Launch background analysis if requested
@@ -513,18 +490,6 @@ def api_ingest_news(req: IngestNewsRequest):
         "headlines": data.get("headlines", [])[:10],
         "meta_total": len(_state["meta_store"]),
     }
-
-
-@app.post("/api/ingest/sample")
-def api_ingest_sample():
-    """Load built-in sample data into KB buffer"""
-    _ensure_init()
-    docs = _state["sample_docs"]
-    with _state_lock:
-        _state["kb_docs"] = _state.get("kb_docs", []) + docs
-        _save_kb(_state["kb_docs"])
-    return {"loaded": len(docs), "total": len(_state["kb_docs"]), "documents": _state["kb_docs"],
-            "kb_path": _KB_PATH}
 
 
 @app.post("/api/build")
@@ -757,8 +722,17 @@ def api_analyze_news(req: AnalyzeNewsRequest):
 
     # Continuous learning: save analysis conclusion to KB
     if result.get("assessment") and result.get("analysis"):
-        topic = req.query or text[:20]
-        _save_analysis_to_kb(topic, result["assessment"], str(result["analysis"]), "news")
+        # Extract meaningful topic name from entities or query
+        topic = req.query or ""
+        if not topic:
+            entities = result.get("entities", {})
+            companies = entities.get("companies", [])
+            if companies:
+                first = companies[0]
+                topic = first.get("name", "") if isinstance(first, dict) else str(first)
+            if not topic:
+                topic = result.get("doc_type", "") or "news"
+        _save_analysis_to_kb(topic[:20], result["assessment"], str(result["analysis"]), "news")
         result["saved_to_kb"] = True
 
     return result
