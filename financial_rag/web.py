@@ -35,11 +35,19 @@ from financial_rag.services.persistence import (
     KB_PATH as _KB_PATH,
     META_PATH as _META_PATH,
     NEWS_ARCHIVE_PATH as _NEWS_DB_PATH,
+    INDEX_PATH as _INDEX_PATH,
     load_kb as _load_kb,
     save_kb as _save_kb,
     load_meta as _load_meta,
     save_meta as _save_meta,
     append_news_archive as _append_news_archive,
+    append_learning_record as _append_learning_record,
+    load_learning_history as _load_learning_history,
+    load_stats as _load_stats,
+    update_stats as _update_stats,
+    get_version as _get_version,
+    assign_doc_ids as _assign_doc_ids,
+    dedup_docs as _dedup_docs,
 )
 
 # Lazy-init holder so import doesn't block
@@ -93,14 +101,37 @@ def _ensure_init():
         _state["kb_docs"] = _load_kb()
         _state["kb_built"] = False
 
-        # Auto-build index for existing docs
+        # Assign stable doc_ids to all loaded docs (idempotent)
+        _assign_doc_ids(_state["kb_docs"])
+
+        # Auto-build or load persisted index
         if _state["kb_docs"]:
             try:
                 r = _state["retriever"]
                 r.clear()
-                r.index(_state["kb_docs"], precompute_embeddings=True)
-                _state["kb_built"] = True
-                logger.info(f"KB auto-built from {len(_state['kb_docs'])} docs")
+                # Try loading saved index (avoids expensive re-embedding)
+                import os as _os
+                if _os.path.exists(_INDEX_PATH):
+                    try:
+                        r.load_index(_INDEX_PATH)
+                        # Validate: index doc count must match KB doc count
+                        if len(r.documents) == len(_state["kb_docs"]):
+                            _state["kb_built"] = True
+                            logger.info(f"KB index loaded from disk ({len(r.documents)} docs, no re-embed needed)")
+                        else:
+                            # Stale index — rebuild
+                            r.clear()
+                            raise ValueError("doc count mismatch, rebuilding")
+                    except Exception as e:
+                        logger.info(f"Saved index not usable ({e}), rebuilding...")
+                        r.clear()
+
+                if not _state["kb_built"]:
+                    r.index(_state["kb_docs"], precompute_embeddings=True)
+                    _state["kb_built"] = True
+                    # Persist index for next startup
+                    r.save_index(_INDEX_PATH)
+                    logger.info(f"KB built & index saved ({len(_state['kb_docs'])} docs)")
             except Exception as e:
                 logger.warning(f"KB auto-build failed: {e}")
         _state["kb_path"] = _KB_PATH
@@ -117,6 +148,9 @@ def _ensure_init():
                     f"{len(_state['meta_store'])} 条新闻元数据, "
                     f"来源分布: {source_counts}")
 
+        # Refresh stats on startup to reflect current KB state
+        _update_stats(kb_docs=_state["kb_docs"])
+
         _state["ready"] = True
 
 
@@ -128,13 +162,19 @@ def _on_shutdown():
 
 
 def _persist_state():
-    """Save KB + metadata to disk. Safe to call multiple times."""
+    """Save KB + metadata + index to disk. Safe to call multiple times."""
     try:
         with _state_lock:
             if _state.get("kb_docs") is not None:
                 _save_kb(_state["kb_docs"])
             if _state.get("meta_store") is not None:
                 _save_meta(_state["meta_store"])
+            # Persist index for fast next startup
+            if _state.get("kb_built") and _state.get("retriever"):
+                try:
+                    _state["retriever"].save_index(_INDEX_PATH)
+                except Exception as e:
+                    logger.warning(f"[Shutdown] Index save failed: {e}")
         logger.info("[Shutdown] State saved.")
     except Exception as e:
         logger.warning(f"[Shutdown] Save failed: {e}")
@@ -352,30 +392,58 @@ def api_ingest_files(req: IngestFilesRequest):
 
     logger.info(f"[Ingest] 文件读取完成: {len(file_stats)} 个文件, {len(raw_docs)} 篇文档")
 
-    # Phase 2: Store docs in KB immediately (before analysis)
+    # Phase 2: Assign doc_ids, dedup, then store in KB
+    _assign_doc_ids(raw_docs)
     with _state_lock:
-        _state["kb_docs"] = _state.get("kb_docs", []) + raw_docs
+        existing = _state.get("kb_docs", [])
+        new_only = _dedup_docs(existing, raw_docs)
+        skipped = len(raw_docs) - len(new_only)
+        if skipped > 0:
+            logger.info(f"[Ingest] Skipped {skipped} duplicate docs")
+        _state["kb_docs"] = existing + new_only
         _save_kb(_state["kb_docs"])
+        # Incremental index: add new docs only (no full rebuild)
+        if _state.get("kb_built") and new_only:
+            try:
+                _state["retriever"].add(new_only, use_chunker=True)
+                logger.info(f"[Ingest] Incremental index: +{len(new_only)} docs")
+            except Exception as e:
+                logger.warning(f"[Ingest] Incremental index failed: {e}")
+
+    # Return response based on whether analysis was requested
+    actual_loaded = len(new_only)
+    if actual_loaded == 0 and skipped > 0:
+        return {
+            "loaded": 0,
+            "skipped_duplicates": skipped,
+            "analyzed": 0,
+            "total": len(_state["kb_docs"]),
+            "status": "no_new_docs",
+            "message": f"所有 {skipped} 篇文档已存在于知识库，已跳过",
+            "kb_path": _KB_PATH,
+        }
 
     # Phase 3: Launch background analysis if requested
-    if req.analyze and raw_docs:
+    if req.analyze and new_only:
         _ingest_progress.update({
-            "running": True, "current": 0, "total": len(raw_docs),
+            "running": True, "current": 0, "total": len(new_only),
             "analyzed": 0, "errors": 0, "message": "分析中...",
         })
-        t = threading.Thread(target=_run_ingest_analysis, args=(raw_docs,), daemon=True)
+        t = threading.Thread(target=_run_ingest_analysis, args=(new_only,), daemon=True)
         t.start()
         return {
-            "loaded": len(raw_docs),
+            "loaded": actual_loaded,
+            "skipped_duplicates": skipped,
             "analyzed": 0,
             "total": len(_state["kb_docs"]),
             "status": "analyzing_in_background",
-            "message": f"已导入 {len(raw_docs)} 篇文档，后台分析中...",
+            "message": f"已导入 {actual_loaded} 篇新文档（跳过 {skipped} 篇重复），后台分析中...",
             "kb_path": _KB_PATH,
         }
 
     return {
-        "loaded": len(raw_docs),
+        "loaded": actual_loaded,
+        "skipped_duplicates": skipped,
         "analyzed": 0,
         "total": len(_state["kb_docs"]),
         "documents": [],
@@ -500,6 +568,9 @@ def api_build_kb(req: BuildRequest):
     if not documents:
         raise HTTPException(400, "没有文档可索引，请先摄取数据")
 
+    # Ensure all docs have doc_ids
+    _assign_doc_ids(documents)
+
     logger.info(f"[API] /build: {len(documents)} documents")
     r = _state["retriever"]
     r.clear()
@@ -511,6 +582,9 @@ def api_build_kb(req: BuildRequest):
 
     with _state_lock:
         _state["kb_built"] = True
+
+    # Save index to disk for fast next startup
+    r.save_index(_INDEX_PATH)
 
     # Run test queries to verify
     test_queries = []
@@ -524,7 +598,7 @@ def api_build_kb(req: BuildRequest):
             ],
         })
 
-    bm25_terms = len(r.bm25_index)
+    bm25_terms = len(r._bm25._corpus_tokens) if r._bm25 and r._bm25._corpus_tokens else 0
     embedding_dim = len(r.doc_embeddings[0]) if r.doc_embeddings else 0
 
     return {
@@ -546,8 +620,13 @@ def api_kb_clear():
         _state["kb_built"] = False
         _state["retriever"].clear()
         _save_kb([])
+        # Remove stale index file
+        import os as _os
+        if _os.path.exists(_INDEX_PATH):
+            _os.remove(_INDEX_PATH)
     # Reset background ingestion progress
     _ingest_progress.update({"running": False, "current": 0, "total": 0, "analyzed": 0, "errors": 0, "message": ""})
+    _update_stats(kb_docs=[])
     return {"ok": True, "kb_path": _KB_PATH}
 
 
@@ -569,14 +648,21 @@ def api_kb_remove_source(source_name: str):
                 try:
                     _state["retriever"].clear()
                     _state["retriever"].index(_state["kb_docs"], precompute_embeddings=True)
-                    logger.info(f"[KB] 索引已重建 (删除 {source_name} 后, {len(_state['kb_docs'])} 篇)")
+                    _state["retriever"].save_index(_INDEX_PATH)
+                    logger.info(f"[KB] 索引已重建并保存 (删除 {source_name} 后, {len(_state['kb_docs'])} 篇)")
                 except Exception as e:
                     _state["kb_built"] = False
                     logger.warning(f"[KB] 索引重建失败: {e}")
             elif not _state["kb_docs"]:
                 _state["retriever"].clear()
                 _state["kb_built"] = False
+                # Remove stale index file
+                import os as _os
+                if _os.path.exists(_INDEX_PATH):
+                    _os.remove(_INDEX_PATH)
     logger.info(f"[API] KB 删除来源: {source_name!r}, 移除 {removed} 篇, 剩余 {len(_state['kb_docs'])} 篇")
+    if removed > 0:
+        _update_stats(kb_docs=_state["kb_docs"])
     return {"removed": removed, "remaining": len(_state["kb_docs"])}
 
 
@@ -624,21 +710,30 @@ def api_kb_remove_keyword(keyword: str):
                 try:
                     _state["retriever"].clear()
                     _state["retriever"].index(_state["kb_docs"], precompute_embeddings=True)
-                    logger.info(f"[KB] 索引已重建 (删除关键词 {keyword!r} 后, {len(_state['kb_docs'])} 篇)")
+                    _state["retriever"].save_index(_INDEX_PATH)
+                    logger.info(f"[KB] 索引已重建并保存 (删除关键词 {keyword!r} 后, {len(_state['kb_docs'])} 篇)")
                 except Exception as e:
                     _state["kb_built"] = False
                     logger.warning(f"[KB] 索引重建失败: {e}")
             elif not _state["kb_docs"]:
                 _state["retriever"].clear()
                 _state["kb_built"] = False
+                import os as _os
+                if _os.path.exists(_INDEX_PATH):
+                    _os.remove(_INDEX_PATH)
     logger.info(f"[API] KB 删除关键词: {keyword!r}, 移除 {removed} 篇, 剩余 {len(_state['kb_docs'])} 篇")
+    if removed > 0:
+        _update_stats(kb_docs=_state["kb_docs"])
     return {"removed": removed, "remaining": len(_state["kb_docs"])}
 
 
 # ===================== Continuous Learning: Auto-save Analysis to KB =====================
 
-def _save_analysis_to_kb(topic: str, assessment: str, analysis: str, analysis_type: str):
-    """Save analysis conclusion to KB so future queries can reference historical judgments."""
+def _save_analysis_to_kb(topic: str, assessment: str, analysis: str, analysis_type: str, confidence: str = ""):
+    """Save analysis conclusion to KB and record in learning history.
+
+    Also updates KB statistics (analysis counter, verdict breakdown).
+    """
     from datetime import datetime
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     # Build a concise KB doc from analysis result
@@ -654,6 +749,7 @@ def _save_analysis_to_kb(topic: str, assessment: str, analysis: str, analysis_ty
             "timestamp": now,
             "type": "analysis_result",
             "assessment": assessment,
+            "confidence": confidence,
         },
     }
     with _state_lock:
@@ -670,29 +766,38 @@ def _save_analysis_to_kb(topic: str, assessment: str, analysis: str, analysis_ty
             try:
                 _state["retriever"].clear()
                 _state["retriever"].index(_state["kb_docs"], precompute_embeddings=True)
+                _state["retriever"].save_index(_INDEX_PATH)
             except Exception:
                 pass
+    # Record in learning history (append-only log)
+    record = _append_learning_record(
+        topic=topic, assessment=assessment,
+        analysis_type=analysis_type, confidence=confidence, kb_saved=True,
+    )
+    # Update stats
+    _update_stats(kb_docs=_state["kb_docs"], analysis_record=record)
     logger.info(f"[KB] 分析结论已存入知识库: {analysis_type}:{topic!r} ({assessment})")
 
 
 @app.get("/api/kb/history")
 def api_kb_history():
-    """Return analysis conclusions stored in KB (type=analysis_result), newest first."""
+    """Return learning history from the dedicated log (newest first), plus stats summary."""
     _ensure_init()
+    history = _load_learning_history(limit=50)
+    stats = _load_stats()
+    return {"count": len(history), "history": history, "stats": stats}
+
+
+@app.get("/api/learning/stats")
+def api_learning_stats():
+    """KB learning statistics: analysis counts, verdict breakdown, doc counts, version."""
+    _ensure_init()
+    stats = _load_stats()
+    # Enrich with live counts
     docs = _state.get("kb_docs", [])
-    history = []
-    for d in docs:
-        meta = d.get("meta", {})
-        if meta.get("type") == "analysis_result":
-            history.append({
-                "source": meta.get("source", ""),
-                "assessment": meta.get("assessment", ""),
-                "timestamp": meta.get("timestamp", ""),
-                "preview": d.get("text", "")[:200],
-            })
-    # Sort by timestamp descending (newest first)
-    history.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-    return {"count": len(history), "history": history}
+    stats["kb_doc_count"] = len(docs)
+    stats["version"] = _get_version()
+    return stats
 
 
 # ===================== Intelligent Analysis (User-Facing) =====================
@@ -732,7 +837,8 @@ def api_analyze_news(req: AnalyzeNewsRequest):
                 topic = first.get("name", "") if isinstance(first, dict) else str(first)
             if not topic:
                 topic = result.get("doc_type", "") or "news"
-        _save_analysis_to_kb(topic[:20], result["assessment"], str(result["analysis"]), "news")
+        _save_analysis_to_kb(topic[:20], result["assessment"], str(result["analysis"]), "news",
+                            confidence=result.get("confidence", ""))
         result["saved_to_kb"] = True
 
     return result
@@ -761,7 +867,8 @@ def api_analyze_topic(req: AnalyzeTopicRequest):
 
     # Continuous learning: save analysis conclusion to KB
     if result.get("assessment") and result.get("analysis"):
-        _save_analysis_to_kb(topic, result["assessment"], str(result["analysis"]), "topic")
+        _save_analysis_to_kb(topic, result["assessment"], str(result["analysis"]), "topic",
+                            confidence=result.get("confidence", ""))
         result["saved_to_kb"] = True
 
     # Store fetched news as metadata

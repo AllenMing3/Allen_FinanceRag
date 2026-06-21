@@ -56,14 +56,21 @@ function updateMetaStatus(count) {
 }
 
 function showKBStorage(path, size, built) {
-  const card = document.getElementById('kbStorageCard');
-  const stats = document.getElementById('kbStorageStats');
-  card.style.display = 'block';
-  stats.innerHTML = `
-    <div class="stat">📁 路径 <strong style="font-size:11px;word-break:break-all">${escHtml(path)}</strong></div>
-    <div class="stat">📦 大小 <strong>${size} KB</strong></div>
-    <div class="stat">${built ? '<span class="tag tag-ok">✓ 索引已构建</span>' : '<span class="tag tag-warn">未构建索引</span>'}</div>
-  `;
+  // Legacy compat — redirect to dashboard update
+}
+
+function updateKBDashboard(data) {
+  const docs = data.doc_count || 0;
+  const built = data.kb_built || false;
+  const size = data.file_size_kb || 0;
+  const meta = data.meta_count || 0;
+  const el = (id) => document.getElementById(id);
+  if (el('kbDashDocs')) el('kbDashDocs').textContent = docs;
+  if (el('kbDashIndex')) el('kbDashIndex').innerHTML = built
+    ? '<span class="tag tag-ok" style="font-size:11px">✓ 已构建</span>'
+    : '<span class="tag tag-warn" style="font-size:11px">未构建</span>';
+  if (el('kbDashSize')) el('kbDashSize').textContent = size + ' KB';
+  if (el('kbDashMeta')) el('kbDashMeta').textContent = meta;
 }
 
 function renderDocList(docs) {
@@ -128,7 +135,8 @@ async function ingestDir(dirPath, btn) {
     const d = await api('/api/ingest/files', { dir: dirPath, analyze: true });
     updateKBStatus(d.total || 0);
     if (btn) {
-      btn.textContent = `✓ ${d.loaded} 篇已导入`; btn.className = 'btn btn-success btn-sm';
+      const skipInfo = d.skipped_duplicates > 0 ? ` (跳过 ${d.skipped_duplicates} 重复)` : '';
+      btn.textContent = `✓ ${d.loaded || 0} 篇已导入${skipInfo}`; btn.className = 'btn btn-success btn-sm';
     }
     // If background analysis started, poll progress
     if (d.status === 'analyzing_in_background') {
@@ -169,8 +177,9 @@ async function ingestFiles() {
     const d = await api('/api/ingest/files', { dir });
     const total = d.total || 0;
     updateKBStatus(total);
+    const skipInfo = d.skipped_duplicates > 0 ? ` · 跳过 ${d.skipped_duplicates} 篇重复` : '';
     document.getElementById('ingest-file-result').innerHTML =
-      `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 已加载 ${d.loaded} 篇 (共 ${total} 篇)<br><span style="font-size:12px;color:var(--text2)">💾 ${escHtml(d.kb_path)}</span></div>`;
+      `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 新增 ${d.loaded || 0} 篇${skipInfo} (共 ${total} 篇)</div>`;
     refreshKBStatus(); refreshKBManager();
   } catch(e) {
     document.getElementById('ingest-file-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`;
@@ -213,8 +222,6 @@ async function buildKB() {
       <div class="stat">Embedding <strong>${d.embedding_dim || 'N/A'} 维</strong></div>
       <div class="stat">耗时 <strong>${d.elapsed_ms}ms</strong></div>
     </div>`;
-    if (d.kb_path) h += `<div style="font-size:12px;color:var(--text2)">💾 ${escHtml(d.kb_path)}</div>`;
-    showKBStorage(d.kb_path || '', 0, true);
     if (d.test_queries && d.test_queries.length) {
       h += '<div style="margin-top:12px;font-size:13px;color:var(--text2)">验证检索:</div>';
       d.test_queries.forEach(tq => {
@@ -224,6 +231,7 @@ async function buildKB() {
       });
     }
     document.getElementById('build-result').innerHTML = h;
+    refreshKBStatus();
   } catch(e) {
     document.getElementById('build-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`;
   }
@@ -234,10 +242,10 @@ async function clearKB() {
   try { await fetch('/api/kb/clear', {method:'POST'}); await fetch('/api/metadata/clear', {method:'POST'}); } catch(e) {}
   kbDocs = []; kbBuilt = false;
   updateKBStatus(0); updateMetaStatus(0); renderDocList([]); refreshKBManager();
+  updateKBDashboard({doc_count:0, kb_built:false, file_size_kb:0, meta_count:0});
   document.getElementById('buildCount').textContent = '0';
   document.getElementById('build-result').innerHTML = '';
   document.getElementById('query-result').innerHTML = '';
-  document.getElementById('kbStorageCard').style.display = 'none';
 }
 
 // ===== STEP 3: Query =====
@@ -569,8 +577,9 @@ async function deleteKBKeyword() {
 async function refreshKBStatus() {
   try {
     const d = await fetch('/api/kb/status').then(r => r.json());
-    if (d.doc_count > 0) { updateKBStatus(d.doc_count); showKBStorage(d.kb_path, d.file_size_kb, d.kb_built); }
+    if (d.doc_count > 0) { updateKBStatus(d.doc_count); }
     if (d.meta_count > 0) updateMetaStatus(d.meta_count);
+    updateKBDashboard(d);
   } catch(e) {}
 }
 

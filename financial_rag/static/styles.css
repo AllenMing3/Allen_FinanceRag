@@ -28,6 +28,9 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 .flow-step:hover { background: var(--surface2); color: var(--text); }
 .flow-step.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .flow-step .step-icon { font-size: 18px; }
+.flow-step .step-label { display: flex; flex-direction: column; gap: 2px; }
+.flow-step .step-sub { font-size: 10px; color: var(--text2); font-weight: 400; opacity: .8; }
+.flow-step.active .step-sub { color: rgba(255,255,255,.7); }
 .flow-step .step-count { font-size: 11px; background: rgba(255,255,255,.15); padding: 1px 6px; border-radius: 10px; }
 .flow-arrow { color: var(--text2); font-size: 18px; opacity: .4; }
 
