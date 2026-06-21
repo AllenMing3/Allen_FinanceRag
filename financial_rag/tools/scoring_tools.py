@@ -82,10 +82,15 @@ def evaluate_pipeline_quality(
                      details={"template": fill_stats.get("template_name", "unknown")})
         stages.append({"stage": "output", "score": score, "elapsed_ms": output_elapsed_ms})
 
+    # Compute grade from overall score
+    from financial_rag.core.scorer import ScoreGrade
+    overall = card.overall_score()
+    grade = ScoreGrade.from_score(overall).value
+
     return {
         "stages": stages,
         "summary": card.summary(),
-        "grade": card.grade().value if hasattr(card, 'grade') and callable(card.grade) else "N/A",
+        "grade": grade,
         "total_stages": len(stages),
     }
 

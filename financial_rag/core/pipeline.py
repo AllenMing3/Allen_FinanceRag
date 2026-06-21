@@ -345,22 +345,26 @@ class PipelineScheduler:
                     context_text = (
                         f"查询: {query}\n\n参考数据:\n" + "\n---\n".join(chunks)
                     )
-                # 将结构化检索结果 + 路由元数据传入 AgentContext
+                # 将结构化检索结果 + 路由元数据 + 时间指标传入 AgentContext
                 agent_context = AgentContext(
                     raw_input=context_text,
                     metadata={
                         "retrieved_items": result.retrieved_items,
                         "fetched_data": result.fetched_data,
                         "intent": routing.intent,
+                        "fetch_elapsed_ms": result.fetch_elapsed_ms,
+                        "index_elapsed_ms": result.index_elapsed_ms,
                         **routing.metadata,
                     },
                 )
             else:
-                # 即使没有检索结果，也传路由元数据
+                # 即使没有检索结果，也传路由元数据 + 时间指标
                 agent_context = AgentContext(
                     raw_input=query,
                     metadata={
                         "intent": routing.intent,
+                        "fetch_elapsed_ms": result.fetch_elapsed_ms,
+                        "index_elapsed_ms": result.index_elapsed_ms,
                         **routing.metadata,
                     },
                 )

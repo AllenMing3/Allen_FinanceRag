@@ -1193,6 +1193,10 @@ def api_kline(req: KlineRequest):
     from financial_rag.agents.analysis_agent import AnalysisAgent
 
     agent = AnalysisAgent()
+    registry = _state.get("registry")
+    executor = _state.get("executor")
+    if registry and executor:
+        agent.bind_tools(registry, executor)
     ctx = AgentContext(
         raw_input=req.query,
         metadata={

@@ -173,8 +173,11 @@ class AgentOrchestrator:
             r = self._run_one(agent, log)
             results.append(r)
             self._apply_updates(r)
-            if not r.success and not self.config.enable_retry:
-                break
+            if not r.success:
+                if not self.config.enable_retry:
+                    break
+                # Even with retry, log warning — downstream agents may get degraded context
+                logger.warning(f"[Orchestrator] {name} failed; continuing chain with potentially degraded context")
         return results
 
     def _run_parallel(self, log: List) -> List[AgentResult]:
@@ -209,6 +212,8 @@ class AgentOrchestrator:
             r = self._run_one(agent, log)
             results.append(r)
             self._apply_updates(r)
+            if not r.success:
+                logger.warning(f"[Orchestrator] {name} failed in conditional chain; continuing")
         return results
 
     # -------------------- 内部方法 --------------------

@@ -53,7 +53,7 @@ class ScoringAgent(BaseAgent):
         agent_results = []
         for finding in context.intermediate_findings:
             agent_results.append({
-                "success": True,
+                "success": finding.get("success", True),
                 "agent_name": finding.get("stage", "unknown"),
             })
 
@@ -93,13 +93,21 @@ class ScoringAgent(BaseAgent):
 
         report = report_result.get("report", "评分报告生成失败")
 
+        # Derive success from execution (did scoring complete?) not from scores themselves
+        grade = pipeline_scores.get("grade", "N/A") if isinstance(pipeline_scores, dict) else "N/A"
+        hallucination_risk = hallucination_check.get("risk", "unknown") if isinstance(hallucination_check, dict) else "unknown"
+        any_agent_failed = any(not ar.get("success", True) for ar in agent_results)
+        # Success = scoring ran to completion. Quality info lives in data.
+        scoring_success = bool(pipeline_scores) and grade != "N/A"
+
         return AgentResult(
-            success=True,
+            success=scoring_success,
             message=f"全链路评分完成 ({pipeline_scores.get('total_stages', 0)} 阶段)",
             data={
                 "pipeline_scores": pipeline_scores,
                 "hallucination_check": hallucination_check,
                 "report": report,
+                "any_agent_failed": any_agent_failed,
             },
             context_updates={
                 "metadata": {

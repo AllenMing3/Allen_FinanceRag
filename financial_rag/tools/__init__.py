@@ -87,6 +87,12 @@ from financial_rag.tools.report_tools import (
     inject_report_llm,
     REPORT_TOOLS,
 )
+from financial_rag.tools.analysis_tools import (
+    analyze_news_deep,
+    analyze_topic_deep,
+    inject_analysis_deps,
+    ANALYSIS_TOOLS,
+)
 __all__ = [
     # core
     "FunctionDef",
@@ -137,4 +143,9 @@ __all__ = [
     "classify_query_intent",
     "select_agent_chain",
     "COORDINATOR_TOOLS",
+    # analysis_tools
+    "analyze_news_deep",
+    "analyze_topic_deep",
+    "inject_analysis_deps",
+    "ANALYSIS_TOOLS",
 ]

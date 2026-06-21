@@ -750,6 +750,12 @@ def create_financial_registry(retriever=None, llm=None) -> FunctionRegistry:
     for tool_def in REPORT_TOOLS:
         registry.add(tool_def)
 
+    # ---- 深度分析工具 ----
+    from financial_rag.tools.analysis_tools import ANALYSIS_TOOLS, inject_analysis_deps
+    inject_analysis_deps(llm=llm, retriever=retriever, kb_built=retriever is not None)
+    for tool_def in ANALYSIS_TOOLS:
+        registry.add(tool_def)
+
     return registry
 
 

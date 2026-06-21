@@ -60,6 +60,9 @@ class AnalysisAgent(BaseAgent):
             findings = self._run_kline_chain(context)
         elif intent == "event_impact":
             findings = self._run_event_chain(context)
+        elif intent == "news" and context.parsed_data:
+            # 新闻解读: 已有加载文本时走深度分析
+            return self._run_deep_news_chain(context)
         else:
             findings = self._run_extraction_chain(context)
 
@@ -171,6 +174,97 @@ class AnalysisAgent(BaseAgent):
             "kline_context": kline_context, "assessment": assessment,
         }
 
+    # ===================== 深度新闻分析工具链 =====================
+
+    def _run_deep_news_chain(self, context: AgentContext) -> AgentResult:
+        """新闻解读: 调用 analyze_news_deep 工具获取结构化多维分析"""
+        query = context.raw_input or ""
+        # 组合文本: parsed_data + intermediate_findings
+        text_parts = []
+        for d in (context.parsed_data or []):
+            if isinstance(d, dict) and d.get("text"):
+                text_parts.append(d["text"])
+        for f in context.intermediate_findings:
+            if isinstance(f, dict) and f.get("stage") != "extraction":
+                text_parts.append(str({k: v for k, v in f.items() if k != "stage"}))
+        combined = "\n\n".join(text_parts)
+
+        if not combined:
+            return AgentResult(
+                success=False,
+                message="无新闻文本可供分析",
+                context_updates={"final_answer": "无新闻文本可供分析"},
+            )
+
+        try:
+            result = self.call_tool("analyze_news_deep", text=combined, query=query)
+        except Exception as e:
+            logger.error(f"[AnalysisAgent] analyze_news_deep 失败: {e}")
+            result = {"error": str(e), "structured": {}, "analysis": f"分析失败: {e}"}
+
+        structured = result.get("structured", {})
+        analysis_text = result.get("analysis", "")
+        success = not result.get("error")
+
+        markdown = self._render_structured_news(structured, analysis_text)
+
+        return AgentResult(
+            success=success,
+            message=f"深度新闻分析完成: {structured.get('verdict', 'N/A')}",
+            data={"structured": structured, "analysis": analysis_text, "markdown": markdown},
+            context_updates={
+                "final_answer": markdown,
+                "intermediate_findings": [{"stage": "deep_news", "success": success}],
+                "metadata": {
+                    "analysis_mode": "deep_news",
+                    "verdict": structured.get("verdict", "N/A"),
+                    "confidence": structured.get("confidence", "N/A"),
+                },
+            },
+        )
+
+    # ===================== 深度话题调研工具链 =====================
+
+    def _run_deep_topic_chain(self, context: AgentContext) -> AgentResult:
+        """话题调研: 调用 analyze_topic_deep 工具获取结构化调研结果"""
+        query = context.raw_input or ""
+        topic = context.metadata.get("topic", "") or query
+        max_news = context.metadata.get("max_news", 20)
+
+        if not topic:
+            return AgentResult(
+                success=False,
+                message="无话题关键词",
+                context_updates={"final_answer": "无话题关键词"},
+            )
+
+        try:
+            result = self.call_tool("analyze_topic_deep", topic=topic, max_news=max_news)
+        except Exception as e:
+            logger.error(f"[AnalysisAgent] analyze_topic_deep 失败: {e}")
+            result = {"error": str(e), "structured": {}, "analysis": f"调研失败: {e}"}
+
+        structured = result.get("structured", {})
+        analysis_text = result.get("analysis", "")
+        success = not result.get("error")
+
+        markdown = self._render_structured_topic(structured, analysis_text)
+
+        return AgentResult(
+            success=success,
+            message=f"深度话题调研完成: {structured.get('verdict', 'N/A')}",
+            data={"structured": structured, "analysis": analysis_text, "markdown": markdown},
+            context_updates={
+                "final_answer": markdown,
+                "intermediate_findings": [{"stage": "deep_topic", "success": success}],
+                "metadata": {
+                    "analysis_mode": "deep_topic",
+                    "verdict": structured.get("verdict", "N/A"),
+                    "confidence": structured.get("confidence", "N/A"),
+                },
+            },
+        )
+
     # ===================== 抽取 + 报告工具链 =====================
 
     def _run_extraction_chain(self, context: AgentContext) -> Dict:
@@ -247,7 +341,7 @@ class AnalysisAgent(BaseAgent):
                 data=findings,
                 context_updates={
                     "final_answer": answer,
-                    "intermediate_findings": [findings],
+                    "intermediate_findings": [{**findings, "success": True}],
                 },
             )
 
@@ -259,7 +353,7 @@ class AnalysisAgent(BaseAgent):
                 data=findings,
                 context_updates={
                     "final_answer": answer,
-                    "intermediate_findings": [findings],
+                    "intermediate_findings": [{**findings, "success": True}],
                 },
             )
 
@@ -304,6 +398,7 @@ class AnalysisAgent(BaseAgent):
                                        "queries": findings.get("queries", [])},
                 "intermediate_findings": [{
                     "stage": "extraction",
+                    "success": True,
                     "source_count": len(sources),
                     "extraction_score": findings.get("_scores", {}).get("extraction", 0),
                 }],
@@ -389,6 +484,115 @@ class AnalysisAgent(BaseAgent):
                 date_str = f" ({s['date']})" if s.get("date") else ""
                 source_str = f" — {s['source']}" if s.get("source") else ""
                 lines.append(f"[{s['id']}] {s['title'][:80]}{date_str}{source_str}")
+
+        return "\n".join(lines)
+
+    def _render_structured_news(self, structured: Dict, analysis_text: str) -> str:
+        """将深度新闻分析结构化数据渲染为 Markdown"""
+        lines = []
+        verdict = structured.get("verdict", "N/A")
+        confidence = structured.get("confidence", "N/A")
+        v_icon = {"bullish": "📈", "bearish": "📉", "neutral": "➡️"}.get(verdict, "❓")
+        lines.append(f"## 综合研判: {v_icon} {verdict} (置信度: {confidence})\n")
+
+        # 多维影响
+        impact = structured.get("impact", {})
+        if impact:
+            lines.append("### 多维影响\n")
+            for dim in ["industry", "company", "tech", "market"]:
+                d = impact.get(dim, {})
+                if d:
+                    dir_label = {"bullish": "📈 利好", "bearish": "📉 利空", "neutral": "➡️ 中性"}.get(d.get("direction", ""), "❓")
+                    dim_cn = {"industry": "行业", "company": "公司", "tech": "技术", "market": "市场"}.get(dim, dim)
+                    lines.append(f"- **{dim_cn}**: {dir_label} — {d.get('summary', '')}")
+            lines.append("")
+
+        # 关键信号
+        signals = structured.get("key_signals", [])
+        if signals:
+            lines.append("### 关键信号\n")
+            for s in signals:
+                sev = s.get("severity", 3)
+                bar = "■" * sev + "□" * (5 - sev)
+                sig_type = {"positive": "✅", "negative": "⚠️", "neutral": "ℹ️"}.get(s.get("type", ""), "•")
+                lines.append(f"- {sig_type} [{bar}] {s.get('signal', '')}")
+            lines.append("")
+
+        # 综合分析
+        if analysis_text:
+            lines.append("### 综合分析\n")
+            lines.append(analysis_text + "\n")
+
+        # 风险 + 后续关注
+        risks = structured.get("risks", [])
+        watch = structured.get("watch_next", [])
+        if risks:
+            lines.append("### 风险提示\n")
+            for r in risks:
+                lines.append(f"- ⚠️ {r}")
+            lines.append("")
+        if watch:
+            lines.append("### 后续关注\n")
+            for w in watch:
+                lines.append(f"- 👀 {w}")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def _render_structured_topic(self, structured: Dict, analysis_text: str) -> str:
+        """将深度话题调研结构化数据渲染为 Markdown"""
+        lines = []
+        verdict = structured.get("verdict", "N/A")
+        confidence = structured.get("confidence", "N/A")
+        trend = structured.get("sentiment_trend", "unknown")
+        trend_icon = {"improving": "📈", "deteriorating": "📉", "stable": "➡️", "mixed": "↕️"}.get(trend, "❓")
+        lines.append(f"## 话题调研: {verdict} (置信度: {confidence}, 情绪趋势: {trend_icon} {trend})\n")
+
+        # 子话题
+        subs = structured.get("sub_topics", [])
+        if subs:
+            lines.append("### 子话题聚类\n")
+            for s in subs:
+                sent = {"positive": "🟢", "negative": "🔴", "neutral": "🟡"}.get(s.get("sentiment", ""), "⚪")
+                lines.append(f"- {sent} **{s.get('name', '')}**: {s.get('summary', '')}")
+            lines.append("")
+
+        # 关键参与者
+        players = structured.get("key_players", [])
+        if players:
+            lines.append("### 关键参与者\n")
+            lines.append("| 名称 | 角色 | 提及次数 |")
+            lines.append("|------|------|---------|")
+            for p in players:
+                lines.append(f"| {p.get('name', '')} | {p.get('role', '')} | {p.get('mentions', 0)} |")
+            lines.append("")
+
+        # 综合分析
+        if analysis_text:
+            lines.append("### 综合分析\n")
+            lines.append(analysis_text + "\n")
+
+        # 投资启示
+        implication = structured.get("investment_implication", "")
+        if implication:
+            lines.append("### 投资启示\n")
+            lines.append(implication + "\n")
+
+        # 反向信号
+        contra = structured.get("contrarian_signals", [])
+        if contra:
+            lines.append("### 反向信号\n")
+            for c in contra:
+                lines.append(f"- 🔍 {c}")
+            lines.append("")
+
+        # 风险
+        risks = structured.get("risks", [])
+        if risks:
+            lines.append("### 风险提示\n")
+            for r in risks:
+                lines.append(f"- ⚠️ {r}")
+            lines.append("")
 
         return "\n".join(lines)
 
