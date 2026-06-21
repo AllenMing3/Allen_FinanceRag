@@ -76,6 +76,8 @@
 | `/api/kb/clear` | POST | Wipe all docs + reset ingestion progress |
 | `/api/kb/history` | GET | List analysis conclusions (learning history) |
 | `/api/ingest/progress` | GET | Poll background ingestion progress |
+| `/api/file/preview` | GET | Preview first N lines of a file (`?path=xxx&file=yyy&lines=20`) |
+| `/api/ingest/files` | POST | Import selected files with analysis mode (`files: [...]`, `mode: "deep"|"quick"`) |
 
 ---
 
@@ -104,7 +106,7 @@ Every chain ends with `ScoringAgent` for quality assurance. `CoordinatorAgent` i
 | `kline` | AnalysisAgent (intent=kline) → ScoringAgent |
 | `event_impact` | AnalysisAgent (intent=event_impact) → ScoringAgent |
 | `report` | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
-| `news` | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
+| `news` | IngestionAgent → AnalysisAgent (intent=news, deep analysis) → ScoringAgent |
 | `general` | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
 
 **Low-confidence override:** When intent confidence < 0.5, `IngestionAgent` is prepended to ensure context gathering before downstream agents.
@@ -142,6 +144,21 @@ ScoringAgent
   → call_tool(evaluate_pipeline_quality)
   → call_tool(check_hallucination)
   → call_tool(generate_score_report)
+```
+
+### News Deep Analysis Chain
+
+```
+IngestionAgent
+  → call_tool(extract_document_metadata)
+  → context.parsed_data →
+
+AnalysisAgent (intent=news, has parsed_data)
+  → call_tool(analyze_news_deep)       # wraps services/analysis.py
+  → _render_structured_news()          # multi-dim impact, key signals, risks
+  → context →
+
+ScoringAgent
 ```
 
 ### K-Line Chain
@@ -289,11 +306,11 @@ text = caller.call("Generate summary", temperature=0.3)
 |------|------|
 | `coordinator_agent.py` | Intent classification + chain selection via `call_tool(classify_query_intent, select_agent_chain)` |
 | `ingestion_agent.py` | Data ingestion → `call_tool(extract_document_metadata, detect_document_type)` |
-| `analysis_agent.py` | Unified analysis: routes by `context.metadata["intent"]` — extraction, K-line, event impact, report generation |
+| `analysis_agent.py` | Unified analysis: routes by `context.metadata["intent"]` — extraction, K-line, event impact, deep news analysis |
 | `scoring_agent.py` | Quality scoring → `call_tool(evaluate_pipeline_quality, check_hallucination, generate_score_report)` |
 | `utils.py` | Shared: `build_news_context()` |
 
-### `financial_rag/tools/` — 26 Registered Tools across 8 Modules
+### `financial_rag/tools/` — 28 Registered Tools across 9 Modules
 
 | File | Tools | Role |
 |------|-------|------|
@@ -305,7 +322,8 @@ text = caller.call("Generate summary", temperature=0.3)
 | `scoring_tools.py` | 3 | Evaluate pipeline quality, check hallucination, generate score report |
 | `coordinator_tools.py` | 2 | Classify query intent, select agent chain |
 | `report_tools.py` | 1 | Synthesize report (LLM-driven or heuristic fallback) |
-| `__init__.py` | — | `create_financial_registry()` — registers all 26 tools; re-exports `STOCK_MAP` |
+| `analysis_tools.py` | 2 | Deep analysis: `analyze_news_deep` (wraps services/analysis.py for multi-dim impact), `analyze_topic_deep` (sub-topics, key players, sentiment trend) |
+| `__init__.py` | — | `create_financial_registry()` — registers all 28 tools; re-exports `STOCK_MAP` |
 
 ### `financial_rag/retrievers/` — Modular Retrieval Stack
 
@@ -330,12 +348,18 @@ text = caller.call("Generate summary", temperature=0.3)
 | `model_router.py` | Auto-select model by task complexity + budget control (4 tiers), `get_caller()` / `get_caller_for_agent()` |
 | `caller.py` | `LLMCaller`: retry + JSON parsing + response cache + input validation + anti-hallucination constraints |
 
+### `financial_rag/guard/` — Anti-Hallucination
+
+| File | Role |
+|------|------|
+| `reflector.py` | `HallucinationGuard`: 6-layer check (source verification, consistency, fact check, completeness, citation accuracy, overall score) |
+
 ### `financial_rag/services/` — Business Logic Layer
 
 | File | Role | Key exports |
 |------|------|-------------|
 | `analysis.py` | Pure analysis functions (no HTTP deps, DI via kwargs) | `analyze_news_text()`, `analyze_topic_research()`, `_extract_confidence()`, `_parse_verdict()` |
-| `persistence.py` | KB / Meta / Archive JSON read / write | `load_kb()`, `save_kb()`, `load_meta()`, `save_meta()`, `append_news_archive()` |
+| `persistence.py` | KB / Meta / Archive JSON read/write + index persistence | `load_kb()`, `save_kb()`, `save_index()`, `load_index()`, `append_news_archive()` |
 
 ### `financial_rag/static/` — Frontend
 

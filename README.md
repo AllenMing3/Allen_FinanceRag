@@ -22,11 +22,11 @@ This system solves that with **intent-aware routing**: a query like "茅台走�
 | **AgentRouter** | Automatic query intent classification across 5 domains (kline / event_impact / report / news / general), with dynamic agent chain selection |
 | **4 Streamlined Agents** | Coordinator · Ingestion · Analysis · Scoring — AnalysisAgent merges extraction, K-line, event impact, and report generation into a single intent-driven unit |
 | **LLMCaller Protection** | Retry (exponential backoff) + structured JSON parsing + response caching + input validation + anti-hallucination constraints — wraps every LLM call |
-| **26 Registered Tools** | Function-calling tools across 7 modules (extraction, news, kline, event_impact, scoring, coordinator, report) |
+| **28 Registered Tools** | Function-calling tools across 9 modules (extraction, news, kline, event_impact, scoring, coordinator, report, analysis, core) |
 | **Hybrid Retrieval** | BM25 + 1024-dim vector embedding + RRF fusion + qwen3-rerank + TextChunker + TextPreprocessor + QueryParser + DataOrchestrator (multi-pool routing) |
 | **Full-Chain Scoring** | Every query ends with `ScoringAgent` — pipeline quality evaluation, hallucination guard, and structured score report |
 | **LLM-Optional** | Heuristic fallback when no API key is configured; mock mode for data sources enables fully offline development |
-| **322 Unit Tests** | All pass in < 0.2 s, no API key required, regex-fallback for extraction tools |
+| **369 Unit Tests** | All pass in < 5 s, no API key required, regex-fallback for extraction tools |
 
 ---
 
@@ -53,9 +53,9 @@ This system solves that with **intent-aware routing**: a query like "茅台走�
 └─────────────────────────┬───────────────────────────────────┘
                           │
 ┌─────────────────────────▼───────────────────────────────────┐
-│                    Tool Layer (26 tools)                     │
+│                    Tool Layer (28 tools)                     │
 │   extraction · news · kline · event_impact                  │
-│   scoring · coordinator · report                            │
+│   scoring · coordinator · report · analysis                 │
 └──────────┬──────────────┬──────────────┬────────────────────┘
            │              │              │
 ┌──────────▼───┐  ┌──────▼──────┐  ┌───▼────────────────┐
@@ -87,7 +87,7 @@ Fetch → Index → Process → Output → Evolve
 | `kline` | "茅台走势", "RSI指标", "支撑位" | AnalysisAgent (intent=kline) → ScoringAgent |
 | `event_impact` | "利好利空", "并购重组", "涨停分析" | AnalysisAgent (intent=event_impact) → ScoringAgent |
 | `report` | "财报分析", "营收增长", "年报" | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
-| `news` | "最新动态", "行业新闻" | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
+| `news` | "最新动态", "行业新闻" | IngestionAgent → AnalysisAgent (intent=news, deep analysis) → ScoringAgent |
 | `general` | fallback | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
 
 **Design principle:** Every chain ends with `ScoringAgent` to ensure output quality. `CoordinatorAgent` is never placed in chains — the pipeline itself handles routing. `AnalysisAgent` consolidates extraction, K-line, event impact, and report generation — selecting tools by `intent` metadata.
@@ -105,7 +105,7 @@ Fetch → Index → Process → Output → Evolve
 | Frontend | Vanilla HTML/CSS/JS (dark theme) |
 | Data APIs | Tushare Pro, 10jqka, Sina Finance, EastMoney |
 | Retrieval | Custom BM25 + Vector + RRF fusion + TextChunker + TextPreprocessor + DataOrchestrator + metadata filter |
-| Testing | pytest — 322 tests, regex-fallback for offline operation |
+| Testing | pytest — 369 tests, regex-fallback for offline operation |
 
 ---
 
@@ -162,7 +162,9 @@ python -m pytest tests/ -v
 | `test_query_parser.py` | QueryParser intent, entity, date extraction | 23 |
 | `test_factory.py` | 4-agent factory wiring, chain ordering | 12 |
 | `test_orchestrator_merge.py` | Metadata merge, findings extend, scalar replace | 10 |
-| **Total** | | **322** |
+| `test_smoke.py` | Web API smoke tests (all endpoints) | 55 |
+| `test_persistence.py` | Index save/load, dedup, backup rotation | 32 |
+| **Total** | | **369** |
 
 Tests mock only data sources — LLM, embedding, and rerank stay real. Extraction tools use regex fallback, so no API key is needed.
 
@@ -198,7 +200,7 @@ financial_rag/
 │   ├── pipeline.py            # 5-phase PipelineScheduler
 │   ├── factory.py             # create_orchestrator, setup_environment
 │   └── scorer.py              # PipelineScoreCard
-├── tools/           # 26 registered tools across 8 modules
+├── tools/           # 28 registered tools across 9 modules
 │   ├── core.py                # FunctionRegistry, ToolExecutor, ToolCallSession
 │   ├── extraction_tools.py
 │   ├── news_tools.py
@@ -206,7 +208,8 @@ financial_rag/
 │   ├── event_impact_tools.py
 │   ├── scoring_tools.py
 │   ├── coordinator_tools.py
-│   └── report_tools.py
+│   ├── report_tools.py
+│   └── analysis_tools.py      # Deep analysis: analyze_news_deep, analyze_topic_deep
 ├── retrievers/      # Modular retrieval stack
 │   ├── retriever.py           # HybridRetriever: BM25 + Vector + RRF
 │   ├── bm25_engine.py         # BM25 scoring engine
@@ -222,6 +225,8 @@ financial_rag/
 │   ├── dashscope_client.py    # DashScope API: LLM + Embedding + Rerank
 │   ├── model_router.py        # Auto-select model by task complexity (4 tiers)
 │   └── caller.py              # LLMCaller: retry + JSON + cache + constraints
+├── guard/           # Anti-hallucination guard
+│   └── reflector.py           # HallucinationGuard (6-layer check)
 ├── static/          # Frontend (HTML / CSS / JS, dark theme)
 ├── config.py        # Global configuration (LLM, RAG, Coordinator, Pipeline)
 ├── web.py           # FastAPI endpoints
@@ -236,6 +241,7 @@ financial_rag/
 |----------|-----------|
 | **Agent = Orchestrator only** | Agents call `call_tool()` — never import business modules directly. Enforced by architecture rule |
 | **AnalysisAgent consolidation** | 5 agents (Extraction, KLine, EventImpact, Report + intent) merged into 1 — `context.metadata["intent"]` selects tool chain, reducing chain complexity |
+| **Deep analysis via tools** | `analysis_tools.py` wraps `services/analysis.py` so agent chain produces same structured output (multi-dim impact, key signals, sub-topics) as direct API endpoints |
 | **Metadata merge (not replace)** | `orchestrator._apply_updates()` merges dicts and extends lists, preventing downstream agents from wiping upstream data |
 | **CoordinatorAgent excluded from chains** | Pipeline's own `_route_query()` already handles routing; adding CoordinatorAgent would create a redundant second router |
 | **LLMCaller wrapping** | All LLM calls go through `LLMCaller` for retry, JSON parsing, caching, and anti-hallucination constraints — no bare `llm.chat()` in tools |

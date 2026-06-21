@@ -32,11 +32,11 @@ python -m financial_rag.main web
 | 步骤 | 页面 | 操作 | 说明 |
 |------|------|------|------|
 | 1 | 导入数据 | 搜索新闻（如 "AI人工智能"） | 收集元数据，辅助后续文件解析。新闻**不进知识库** |
-| 2 | 导入数据 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库（后台 LLM 分析 + 进度显示） |
+| 2 | 导入数据 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库（后台 LLM 分析 + 进度显示）。支持文件勾选、预览、分析模式切换 |
 | 3 | 构建知识库 | 构建索引 | BM25 + 向量双通道索引（TextChunker 自动切分） |
 | 4 | 管理知识库 | 按来源/关键词搜索删除 | 查看各来源文档数，一键删除某个来源或匹配关键词的文档 |
 | 5 | RAG 查询 | 提问 | AgentRouter **自动路由** → 检索知识库 → LLM 回答（带引用和分数明细） |
-| 6 | 智能分析 | 粘贴新闻 / 输入话题 | 抽取指标 + 实体 + KB 上下文 → 利好/利空/中性 + 置信度 |
+| 6 | 智能分析 | 粘贴新闻 / 输入话题 | 结构化分析: 多维影响评估 + 关键信号 + 风险提示 / 子话题聚类 + 情绪趋势 + 反向信号 |
 | 7 | 分析工具 | K线分析 | 输入股票代码或名称，生成技术分析报告 |
 | 8 | 事件分析 | 事件影响分析 | 输入日期 + 股票，评估事件利好/利空 + 影响因子 |
 
@@ -51,12 +51,21 @@ python -m financial_rag.main web
 
 ## 2.5 知识库管理
 
-在"构建知识库"页面可以维护知识库内容：
+在"导入数据"页面可以进行精细控制：
 
 | 功能 | 说明 |
 |------|------|
+| **文件勾选** | 每个文件带 checkbox，支持全选/取消 |
+| **内容预览** | 点击文件名预览前 20 行 |
+| **分析模式** | 🔍 深度分析 (LLM 抽取指标+实体) / ⚡ 快速导入 (跳过 LLM) |
+| **新闻条数** | 下拉选择 10/20/30/50 |
+| **关键词过滤** | 只拉取匹配关键词的新闻 |
+| **自定义目录** | 直接输入路径导入非默认目录的文件 |
+
+| 功能 | 说明 |
+|------|------|
+在"构建知识库"页面可以维护知识库内容：
 | **来源查看** | 显示各来源的文档数量，如 `news: 73`, `nvidia_2025: 1` |
-| **来源级删除** | 一键删除某个来源的所有文档 |
 | **关键词搜索** | 输入关键词（如“商汤”）搜索匹配的文档 |
 | **关键词删除** | 删除所有匹配关键词的文档 |
 | **清空知识库** | 一键清空全部文档 + 重置进度 |
@@ -99,7 +108,7 @@ Web UI 开启 Mock 模式时会显示橙色提示条。
 ## 4. 测试
 
 ```cmd
-:: 全量（322 tests，无需 API Key）
+:: 全量（369 tests，无需 API Key）
 python -m pytest tests/ -v
 ```
 
@@ -114,6 +123,8 @@ python -m pytest tests/ -v
 | 数据合并 | `pytest tests/test_orchestrator_merge.py -v` | metadata merge、findings extend |
 | 原始 Agent | `pytest tests/test_agents.py -v` | Ingestion + Analysis + 完整链 |
 | 智能分析 | `pytest tests/test_analysis.py -v` | 新闻分析 + 话题调研 (mock) |
+| Smoke | `pytest tests/test_smoke.py -v` | Web API 全端点、文件预览、KB 去重 |
+| 持久化 | `pytest tests/test_persistence.py -v` | 索引保存/加载、去重、备份轮转 |
 | 抽取工具 | `pytest tests/test_extraction_tools.py -v` | 5 个抽取工具 + 长文章 |
 | 分析工具 | `pytest tests/test_analysis_tools.py -v` | 增长率、比率、对比、汇总 |
 | Mock 数据 | `pytest tests/test_mock_data.py -v` | K线、搜索、指标、新闻 |
@@ -151,7 +162,7 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 |-------|------|----------|
 | **CoordinatorAgent** | 意图分类 + Agent 链选择 | 手动调起（`call_tool(classify_query_intent)`） |
 | **IngestionAgent** | 数据摄取 + 元数据提取 | report / news / general 链 |
-| **AnalysisAgent** | 统一分析引擎（指标抽取 + K线分析 + 事件影响 + 报告生成） | 所有链，通过 `intent` 元数据选择工具链 |
+| **AnalysisAgent** | 统一分析引擎（指标抽取 + K线分析 + 事件影响 + 报告生成 + 深度新闻/话题分析） | 所有链，通过 `intent` 元数据选择工具链 |
 | **ScoringAgent** | 全链路评分 + 防幻觉校验 | **所有链末端** |
 
 **AnalysisAgent 意图路由：**
@@ -160,6 +171,7 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 |--------|-------|
 | `kline` | fetch_kline_report → analyze_kline → generate_kline_analysis |
 | `event_impact` | fetch_date_events → assess_event_impact |
+| `news` | analyze_news_deep (多维影响 + 关键信号 + 风险 + 后续关注) |
 | `general` | extract_financial_metrics → extract_entities → synthesize_report |
 
 **核心设计原则：**
