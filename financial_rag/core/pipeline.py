@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from financial_rag.templates import SlottedTemplate
     from financial_rag.slot_filler import SlotFiller
     from financial_rag.core.scorer import PipelineScoreCard
-    from financial_rag.core.reflector import HallucinationGuard
+    from financial_rag.guard.reflector import HallucinationGuard
     from financial_rag.retrievers import HybridRetriever
     from financial_rag.core.agent_router import RoutingDecision
 
@@ -488,7 +488,7 @@ class PipelineScheduler:
 
         try:
             from financial_rag.core.scorer import PipelineScoreCard
-            from financial_rag.core.reflector import HallucinationGuard
+            from financial_rag.guard.reflector import HallucinationGuard
 
             card = PipelineScoreCard(query=result.query)
             result.scorecard = card

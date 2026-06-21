@@ -140,14 +140,16 @@ TOPIC_MAP = {
 
 
 def _extract_keywords(llm, query: str) -> List[str]:
-    """用 LLM 从用户查询中提取搜索关键词（无 LLM 时退化）"""
+    """用 LLM 从用户查询中提取搜索关键词 — via LLMCaller"""
     keywords = [query]
     if llm is None:
         return keywords
 
     try:
-        resp = llm.chat(
-            messages=f"用户问：{query}\n\n请提取用于搜索财经新闻的3-5个中文关键词，只输出逗号分隔的关键词，不要其他内容。",
+        from financial_rag.llm.caller import LLMCaller
+        caller = LLMCaller(llm)
+        resp = caller.call(
+            f"用户问：{query}\n\n请提取用于搜索财经新闻的3-5个中文关键词，只输出逗号分隔的关键词，不要其他内容。",
             max_tokens=40,
         )
         keywords = [k.strip() for k in resp.content.replace("\n", "").replace("、", ",").split(",") if k.strip()]
@@ -165,17 +167,19 @@ def _extract_keywords(llm, query: str) -> List[str]:
 
 
 def _generate_summary(llm, headlines: List[Dict], topic: str) -> str:
-    """用 LLM 对新闻标题列表做摘要"""
+    """用 LLM 对新闻标题列表做摘要 — via LLMCaller"""
     if llm is None or not headlines:
         return ""
 
     try:
+        from financial_rag.llm.caller import LLMCaller
         hl_text = "\n".join(
             f"- [{h.get('publish_time', '')[:10]}] {h['title']}"
             for h in headlines[:30]
         )
-        resp = llm.chat(
-            messages=f"以下是关于{topic}的最新财经新闻标题。请用300字以内做摘要，概括主要动态和趋势：\n\n{hl_text}",
+        caller = LLMCaller(llm)
+        resp = caller.call(
+            f"以下是关于{topic}的最新财经新闻标题。请用300字以内做摘要，概括主要动态和趋势：\n\n{hl_text}",
             max_tokens=400,
         )
         return resp.content

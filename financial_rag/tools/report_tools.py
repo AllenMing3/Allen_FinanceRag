@@ -98,7 +98,7 @@ def synthesize_report(
         # HallucinationGuard 预检
         check_result = {}
         if report_json.get("summary"):
-            from financial_rag.core.reflector import HallucinationGuard
+            from financial_rag.guard.reflector import HallucinationGuard
             guard = HallucinationGuard()
             source_texts = [s.get("text", "")[:200] for s in sources if isinstance(s, dict)]
             check_result = guard.precheck(report_json["summary"], source_texts)

@@ -7,9 +7,10 @@
 - router:         CLI 命令路由 (CommandRouter)
 - factory:        工厂函数 (create_orchestrator, setup_environment)
 - indexer:        混合检索 + RRF 融合
-- reflector:      ReAct 反思 + 防幻觉
 - scorer:         全链路打分卡
 - protocol:       Agent 间消息总线 (MessageBus)
+
+注: reflector (HallucinationGuard / ReflectionLoop) 已迁移至 financial_rag.guard
 """
 from .base import BaseAgent, AgentContext, AgentResult, AgentStatus, ExecutionMode
 from .orchestrator import AgentOrchestrator, CoordinatorConfig, ExecutionResult
@@ -18,10 +19,14 @@ from .factory import create_orchestrator, create_hybrid_retriever, setup_environ
 from .agent_router import AgentRouter, RoutingDecision, QueryIntent, create_agent_router
 from .router import CommandRouter
 from .indexer import PipelineOrchestrator, PipelineConfig, PipelineResult, PipelineStatus
-from .reflector import ReflectionLoop, ReflectionConfig, ThoughtStep, ActionType, ReflectionState, HallucinationGuard
 from .scorer import PipelineScoreCard, StageScore, ScoreGrade, StageGroup, create_scorecard
 from .protocol import AgentMessage, MessageBus, MessageAdapter
 from .data_orchestrator import DataOrchestrator, KnowledgePool, DataRouter, IngestStats
+
+# Backward-compat: reflector 已迁移至 financial_rag.guard，此处 re-export 避免旧代码报键
+from financial_rag.guard.reflector import (  # noqa: F401
+    ReflectionLoop, ReflectionConfig, ThoughtStep, ActionType, ReflectionState, HallucinationGuard,
+)
 
 __all__ = [
     # Base

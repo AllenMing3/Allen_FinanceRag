@@ -688,7 +688,7 @@ def api_kb_query(req: QueryRequest):
     _ensure_init()
     logger.info(f"[API] /kb-query: query={req.query!r}, top_k={req.top_k}")
     from financial_rag.core.scorer import PipelineScoreCard, ScoreGrade
-    from financial_rag.core.reflector import HallucinationGuard
+    from financial_rag.guard.reflector import HallucinationGuard
 
     if not _state.get("kb_built"):
         # Auto-build if docs exist but not indexed

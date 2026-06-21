@@ -102,7 +102,7 @@ def check_hallucination(output_text: str, source_items: List = None) -> Dict:
         output_text: 最终生成的文本
         source_items: 源数据列表 [{"text": "...", ...}, ...]
     """
-    from financial_rag.core.reflector import HallucinationGuard
+    from financial_rag.guard.reflector import HallucinationGuard
 
     guard = HallucinationGuard()
     sources = source_items or []

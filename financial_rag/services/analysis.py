@@ -160,20 +160,28 @@ def analyze_topic_research(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _search_kb(retriever, query: str, kb_built: bool) -> list:
-    """Search KB for relevant context documents."""
+def _search_kb(retriever, query: str, kb_built: bool, min_score: float = 0.4) -> list:
+    """Search KB for relevant context documents.
+
+    Only returns results above min_score threshold to avoid
+    feeding irrelevant content (score < 0.4) to the LLM.
+    """
     if not kb_built or not retriever:
         return []
     try:
         results, _ = retriever.search_with_scores(query, top_k=5)
-        return [
+        filtered = [
             {
                 "text": it.get("text", ""),
                 "source": it.get("meta", {}).get("source", ""),
                 "score": round(it.get("score", 0), 4),
             }
             for it in results[:5]
+            if it.get("score", 0) >= min_score
         ]
+        if len(results) > 0:
+            logger.info(f"[KB search] {len(results)} results, {len(filtered)} above threshold {min_score}")
+        return filtered
     except Exception as e:
         logger.warning(f"KB search failed: {e}")
         return []
@@ -189,10 +197,12 @@ def _parse_verdict(text: str) -> str:
 
 
 def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities: dict, kb_sources: list) -> tuple:
-    """LLM-powered news assessment with structured output."""
+    """LLM-powered news assessment with structured output — via LLMCaller."""
+    from financial_rag.llm.caller import LLMCaller
+
     metrics_str = "\n".join(f"  - {k}: {v}" for k, v in metrics.items()) if metrics else "  (无)"
     entities_str = "\n".join(f"  - {k}: {v}" for k, v in entities.items()) if entities else "  (无)"
-    kb_str = "\n".join(f"  - [{s['source']}] {s['text'][:150]}" for s in kb_sources[:3]) if kb_sources else "  (无相关知识库背景)"
+    kb_str = "\n".join(f"  - [{s['source']}] (相关度{s['score']:.2f}) {s['text'][:150]}" for s in kb_sources[:3]) if kb_sources else "  (无相关知识库背景)"
 
     system = """你是专业的 AI/科技行业分析师。请对以下新闻进行深度分析。
 
@@ -203,7 +213,12 @@ def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities:
 【影响分析】150-300字，说明为什么是利好/利空/中性，涉及哪些公司/行业
 【风险提示】1-2 个需要关注的不确定因素
 
-要求：有依据、不空泛、站在投资者角度。"""
+要求：
+- 有依据、不空泛、站在投资者角度
+- 基于提供的信息回答，不要编造任何数据或数字
+- 如果知识库背景与新闻无关（相关度低于0.5），请忽略它，不要强行关联
+- 如果信息不足，明确说明“数据不足，无法判断”
+"""
 
     user = f"""新闻内容：
 {text[:3000]}
@@ -222,7 +237,8 @@ def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities:
 请给出你的分析。"""
 
     try:
-        resp = llm.chat(messages=user, system=system, max_tokens=800)
+        caller = LLMCaller(llm)
+        resp = caller.call(user, system=system, max_tokens=800)
         return _parse_verdict(resp.content), resp.content
     except Exception as e:
         logger.warning(f"LLM news analysis failed: {e}")
@@ -230,14 +246,16 @@ def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities:
 
 
 def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_sources: list) -> tuple:
-    """LLM-powered topic research assessment."""
+    """LLM-powered topic research assessment — via LLMCaller."""
+    from financial_rag.llm.caller import LLMCaller
+
     news_preview = "\n".join(
         f"  - [{item.get('source', '')}] {item.get('title', '')}"
         for item in items[:15]
     ) or "  (未获取到相关新闻)"
 
     kb_str = "\n".join(
-        f"  - [{s['source']}] {s['text'][:150]}"
+        f"  - [{s['source']}] (相关度{s['score']:.2f}) {s['text'][:150]}"
         for s in kb_sources[:3]
     ) or "  (无相关知识库背景)"
 
@@ -251,7 +269,12 @@ def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_s
 【投资启示】1-2 句话，站在投资者角度给出建议
 【风险提示】1-2 个不确定因素
 
-要求：有数据支撑、逻辑清晰、不空泛。"""
+要求：
+- 有数据支撑、逻辑清晰、不空泛
+- 基于提供的信息回答，不要编造任何数据或数字
+- 如果知识库背景与话题无关（相关度低于0.5），请忽略它
+- 如果信息不足，明确说明“数据不足，无法判断”
+"""
 
     user = f"""研究话题：{topic}
 
@@ -267,7 +290,8 @@ def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_s
 请给出综合研判。"""
 
     try:
-        resp = llm.chat(messages=user, system=system, max_tokens=1000)
+        caller = LLMCaller(llm)
+        resp = caller.call(user, system=system, max_tokens=1000)
         return _parse_verdict(resp.content), resp.content
     except Exception as e:
         logger.warning(f"LLM topic analysis failed: {e}")

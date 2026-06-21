@@ -138,7 +138,7 @@ class CommandRouter:
             NEWS_BRIEF_TEMPLATE, DEEP_ANALYSIS_TEMPLATE,
         )
         from financial_rag.core.scorer import PipelineScoreCard
-        from financial_rag.core.reflector import HallucinationGuard
+        from financial_rag.guard.reflector import HallucinationGuard
 
         print("=" * 60)
         print("Financial RAG — 财报/经济新闻智能分析 (阿里百炼)")
