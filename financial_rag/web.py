@@ -46,6 +46,16 @@ from financial_rag.services.persistence import (
 _state: dict = {}
 _state_lock = threading.Lock()
 
+# Background ingestion progress tracker
+_ingest_progress: dict = {
+    "running": False,
+    "current": 0,
+    "total": 0,
+    "analyzed": 0,
+    "errors": 0,
+    "message": "",
+}
+
 
 def _ensure_init():
     """Lazy-init heavy components on first request (thread-safe)"""
@@ -131,18 +141,21 @@ def _ensure_init():
 
 @app.on_event("shutdown")
 def _on_shutdown():
-    """Persist state on graceful shutdown (uvicorn handles SIGINT)"""
-    logger.info("Shutdown: saving state...")
+    """Persist state on graceful shutdown"""
+    _persist_state()
+
+
+def _persist_state():
+    """Save KB + metadata to disk. Safe to call multiple times."""
     try:
         with _state_lock:
             if _state.get("kb_docs") is not None:
                 _save_kb(_state["kb_docs"])
             if _state.get("meta_store") is not None:
                 _save_meta(_state["meta_store"])
+        logger.info("[Shutdown] State saved.")
     except Exception as e:
-        logger.warning(f"Shutdown save failed: {e}")
-    else:
-        logger.info("State saved.")
+        logger.warning(f"[Shutdown] Save failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -294,21 +307,24 @@ def api_directories():
 def api_ingest_files(req: IngestFilesRequest):
     """Load and optionally analyze documents from a directory into the KB.
 
-    analyze=True runs IngestionAgent + AnalysisAgent on each document
-    to extract structured features (metrics, entities) before KB entry.
+    File reading is synchronous. Heavy LLM analysis runs in background thread.
+    Poll GET /api/ingest/progress for status.
     """
     _ensure_init()
     import json
+
+    if _ingest_progress.get("running"):
+        raise HTTPException(409, f"导入正在进行中: {_ingest_progress['current']}/{_ingest_progress['total']}")
 
     dir_path = req.dir
     if not os.path.isdir(dir_path):
         raise HTTPException(400, f"目录不存在: {dir_path}")
 
     logger.info(f"[API] /ingest/files: dir={dir_path!r}, analyze={req.analyze}")
-    t_total = time.time()
 
+    # Phase 1: Read files (fast, synchronous)
     raw_docs = []
-    file_stats = []  # per-file stats for logging
+    file_stats = []
     for fname in os.listdir(dir_path):
         fpath = os.path.join(dir_path, fname)
         if not os.path.isfile(fpath):
@@ -354,9 +370,45 @@ def api_ingest_files(req: IngestFilesRequest):
 
     logger.info(f"[Ingest] 文件读取完成: {len(file_stats)} 个文件, {len(raw_docs)} 篇文档")
 
-    # Optional: run agent analysis on loaded documents
-    analyzed_count = 0
+    # Phase 2: Store docs in KB immediately (before analysis)
+    with _state_lock:
+        if _state.get("has_samples"):
+            _state["kb_docs"] = raw_docs
+            _state["has_samples"] = False
+            logger.info("Sample data replaced with real imports")
+        else:
+            _state["kb_docs"] = _state.get("kb_docs", []) + raw_docs
+        _save_kb(_state["kb_docs"])
+
+    # Phase 3: Launch background analysis if requested
     if req.analyze and raw_docs:
+        _ingest_progress.update({
+            "running": True, "current": 0, "total": len(raw_docs),
+            "analyzed": 0, "errors": 0, "message": "分析中...",
+        })
+        t = threading.Thread(target=_run_ingest_analysis, args=(raw_docs,), daemon=True)
+        t.start()
+        return {
+            "loaded": len(raw_docs),
+            "analyzed": 0,
+            "total": len(_state["kb_docs"]),
+            "status": "analyzing_in_background",
+            "message": f"已导入 {len(raw_docs)} 篇文档，后台分析中...",
+            "kb_path": _KB_PATH,
+        }
+
+    return {
+        "loaded": len(raw_docs),
+        "analyzed": 0,
+        "total": len(_state["kb_docs"]),
+        "documents": [],
+        "kb_path": _KB_PATH,
+    }
+
+
+def _run_ingest_analysis(raw_docs):
+    """Background thread: run agent analysis on ingested documents."""
+    try:
         from financial_rag.core.base import AgentContext
         from financial_rag.agents.ingestion_agent import IngestionAgent
         from financial_rag.agents.analysis_agent import AnalysisAgent
@@ -364,15 +416,15 @@ def api_ingest_files(req: IngestFilesRequest):
         ingest_agent = IngestionAgent()
         extract_agent = AnalysisAgent()
 
-        # 绑定工具能力 (从全局注册中心)
         registry = _state.get("registry")
         executor = _state.get("executor")
         if registry and executor:
             ingest_agent.bind_tools(registry, executor)
             extract_agent.bind_tools(registry, executor)
 
-        logger.info(f"[Ingest] 开始分析 {len(raw_docs)} 篇文档...")
+        logger.info(f"[Ingest-BG] 开始后台分析 {len(raw_docs)} 篇文档...")
         for i, doc in enumerate(raw_docs, 1):
+            _ingest_progress["current"] = i
             t_doc = time.time()
             try:
                 ctx = AgentContext(
@@ -390,37 +442,32 @@ def api_ingest_files(req: IngestFilesRequest):
                     doc["meta"]["analyzed"] = True
                     doc["meta"]["metrics"] = features.get("metrics", {})
                     doc["meta"]["entities"] = features.get("entities", [])
-                    analyzed_count += 1
+                    _ingest_progress["analyzed"] += 1
                 elapsed_doc = (time.time() - t_doc) * 1000
                 src = doc["meta"].get("source", "?")
-                logger.info(f"[Ingest] [{i}/{len(raw_docs)}] {src}: {elapsed_doc:.0f}ms, "
-                            f"analyzed={doc['meta'].get('analyzed', False)}")
+                logger.info(f"[Ingest-BG] [{i}/{len(raw_docs)}] {src}: {elapsed_doc:.0f}ms")
             except Exception as e:
                 elapsed_doc = (time.time() - t_doc) * 1000
-                logger.warning(f"[Ingest] [{i}/{len(raw_docs)}] 分析失败 ({elapsed_doc:.0f}ms): {e}")
+                _ingest_progress["errors"] += 1
+                logger.warning(f"[Ingest-BG] [{i}/{len(raw_docs)}] 分析失败 ({elapsed_doc:.0f}ms): {e}")
                 doc["meta"]["analyzed"] = False
 
-    # Store in KB (thread-safe) — replace samples with real data
-    with _state_lock:
-        if _state.get("has_samples"):
-            # Clear sample data, keep only real imports
-            _state["kb_docs"] = raw_docs
-            _state["has_samples"] = False
-            logger.info("Sample data replaced with real imports")
-        else:
-            _state["kb_docs"] = _state.get("kb_docs", []) + raw_docs
-        _save_kb(_state["kb_docs"])
+        # Save updated KB with analysis results
+        with _state_lock:
+            _save_kb(_state["kb_docs"])
+        _ingest_progress["message"] = f"完成: {_ingest_progress['analyzed']}/{len(raw_docs)} 已分析"
+        logger.info(f"[Ingest-BG] {_ingest_progress['message']}")
+    except Exception as e:
+        _ingest_progress["message"] = f"后台分析异常: {e}"
+        logger.error(f"[Ingest-BG] 异常: {e}")
+    finally:
+        _ingest_progress["running"] = False
 
-    elapsed_total = (time.time() - t_total) * 1000
-    logger.info(f"[Ingest] 完成: {len(raw_docs)} 篇文档, 分析 {analyzed_count}/{len(raw_docs)}, "
-                f"总耗时 {elapsed_total:.0f}ms, KB 现有 {len(_state['kb_docs'])} 篇")
-    return {
-        "loaded": len(raw_docs),
-        "analyzed": analyzed_count,
-        "total": len(_state["kb_docs"]),
-        "documents": _state["kb_docs"],
-        "kb_path": _KB_PATH,
-    }
+
+@app.get("/api/ingest/progress")
+def api_ingest_progress():
+    """Poll background ingestion progress."""
+    return dict(_ingest_progress)
 
 
 @app.post("/api/ingest/news")
@@ -534,6 +581,8 @@ def api_kb_clear():
         _state["kb_built"] = False
         _state["retriever"].clear()
         _save_kb([])
+    # Reset background ingestion progress
+    _ingest_progress.update({"running": False, "current": 0, "total": 0, "analyzed": 0, "errors": 0, "message": ""})
     return {"ok": True, "kb_path": _KB_PATH}
 
 
@@ -566,6 +615,121 @@ def api_kb_remove_source(source_name: str):
     return {"removed": removed, "remaining": len(_state["kb_docs"])}
 
 
+@app.get("/api/kb/search")
+def api_kb_search(keyword: str = "", limit: int = 50):
+    """Search KB docs by keyword — preview before deletion"""
+    _ensure_init()
+    docs = _state.get("kb_docs", [])
+    logger.info(f"[API] /api/kb/search: keyword={keyword!r}, total_docs={len(docs)}")
+    if not keyword:
+        return {"count": len(docs), "matched": 0, "matches": [], "keyword": ""}
+    kw = keyword.lower()
+    matches = []
+    for i, d in enumerate(docs):
+        text = d.get("text", "").lower()
+        source = d.get("meta", {}).get("source", "unknown")
+        if kw in text or kw in source.lower():
+            matches.append({
+                "index": i,
+                "source": source,
+                "preview": d.get("text", "")[:120],
+            })
+            if len(matches) >= limit:
+                break
+    logger.info(f"[API] /api/kb/search: matched={len(matches)}")
+    return {"count": len(docs), "matched": len(matches), "keyword": keyword, "matches": matches}
+
+
+@app.delete("/api/kb/keyword/{keyword}")
+def api_kb_remove_keyword(keyword: str):
+    """Remove all KB docs whose text contains the keyword"""
+    _ensure_init()
+    kw = keyword.lower()
+    with _state_lock:
+        before = len(_state["kb_docs"])
+        _state["kb_docs"] = [
+            d for d in _state["kb_docs"]
+            if kw not in d.get("text", "").lower()
+            and kw not in d.get("meta", {}).get("source", "").lower()
+        ]
+        removed = before - len(_state["kb_docs"])
+        if removed > 0:
+            _save_kb(_state["kb_docs"])
+            if _state.get("kb_built") and _state["kb_docs"]:
+                try:
+                    _state["retriever"].clear()
+                    _state["retriever"].index(_state["kb_docs"], precompute_embeddings=True)
+                    logger.info(f"[KB] 索引已重建 (删除关键词 {keyword!r} 后, {len(_state['kb_docs'])} 篇)")
+                except Exception as e:
+                    _state["kb_built"] = False
+                    logger.warning(f"[KB] 索引重建失败: {e}")
+            elif not _state["kb_docs"]:
+                _state["retriever"].clear()
+                _state["kb_built"] = False
+    logger.info(f"[API] KB 删除关键词: {keyword!r}, 移除 {removed} 篇, 剩余 {len(_state['kb_docs'])} 篇")
+    return {"removed": removed, "remaining": len(_state["kb_docs"])}
+
+
+# ===================== Continuous Learning: Auto-save Analysis to KB =====================
+
+def _save_analysis_to_kb(topic: str, assessment: str, analysis: str, analysis_type: str):
+    """Save analysis conclusion to KB so future queries can reference historical judgments."""
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # Build a concise KB doc from analysis result
+    text = (
+        f"[{analysis_type}结论] {topic}\n"
+        f"研判: {assessment}\n\n"
+        f"{analysis}"
+    )
+    doc = {
+        "text": text[:2000],  # cap to avoid bloating KB
+        "meta": {
+            "source": f"analysis:{analysis_type}:{topic[:20]}",
+            "timestamp": now,
+            "type": "analysis_result",
+            "assessment": assessment,
+        },
+    }
+    with _state_lock:
+        # Deduplicate: remove previous analysis for same topic+type
+        prefix = f"analysis:{analysis_type}:{topic[:20]}"
+        _state["kb_docs"] = [
+            d for d in _state["kb_docs"]
+            if d.get("meta", {}).get("source", "") != prefix
+        ]
+        _state["kb_docs"].append(doc)
+        _save_kb(_state["kb_docs"])
+        # Rebuild index if built
+        if _state.get("kb_built"):
+            try:
+                _state["retriever"].clear()
+                _state["retriever"].index(_state["kb_docs"], precompute_embeddings=True)
+            except Exception:
+                pass
+    logger.info(f"[KB] 分析结论已存入知识库: {analysis_type}:{topic!r} ({assessment})")
+
+
+@app.get("/api/kb/history")
+def api_kb_history():
+    """Return analysis conclusions stored in KB (type=analysis_result), newest first."""
+    _ensure_init()
+    docs = _state.get("kb_docs", [])
+    history = []
+    for d in docs:
+        meta = d.get("meta", {})
+        if meta.get("type") == "analysis_result":
+            history.append({
+                "source": meta.get("source", ""),
+                "assessment": meta.get("assessment", ""),
+                "timestamp": meta.get("timestamp", ""),
+                "preview": d.get("text", "")[:200],
+            })
+    # Sort by timestamp descending (newest first)
+    history.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return {"count": len(history), "history": history}
+
+
 # ===================== Intelligent Analysis (User-Facing) =====================
 
 @app.post("/api/analyze/news")
@@ -590,6 +754,13 @@ def api_analyze_news(req: AnalyzeNewsRequest):
                 f"analysis_type={type(result.get('analysis')).__name__}, "
                 f"entities_keys={list(result.get('entities', {}).keys())}, "
                 f"metrics_keys={list(result.get('metrics', {}).keys())}")
+
+    # Continuous learning: save analysis conclusion to KB
+    if result.get("assessment") and result.get("analysis"):
+        topic = req.query or text[:20]
+        _save_analysis_to_kb(topic, result["assessment"], str(result["analysis"]), "news")
+        result["saved_to_kb"] = True
+
     return result
 
 
@@ -613,6 +784,11 @@ def api_analyze_topic(req: AnalyzeTopicRequest):
     )
     logger.info(f"[API] /analyze/topic: assessment={result.get('assessment')}, "
                 f"news_count={result.get('news_count')}, kb_sources={len(result.get('kb_sources', []))}")
+
+    # Continuous learning: save analysis conclusion to KB
+    if result.get("assessment") and result.get("analysis"):
+        _save_analysis_to_kb(topic, result["assessment"], str(result["analysis"]), "topic")
+        result["saved_to_kb"] = True
 
     # Store fetched news as metadata
     from datetime import datetime
@@ -1049,11 +1225,24 @@ def index():
 # Entry point
 # ---------------------------------------------------------------------------
 def main():
+    import signal
     import uvicorn
     host = os.getenv("WEB_HOST", "127.0.0.1")
     port = int(os.getenv("WEB_PORT", "8000"))
     logger.info(f"Starting Financial RAG Web UI at http://{host}:{port}")
-    uvicorn.run(app, host=host, port=port, log_level="info")
+
+    def _sig_handler(sig, frame):
+        logger.info(f"\n[Signal {sig}] Shutting down, saving state...")
+        _persist_state()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _sig_handler)
+    signal.signal(signal.SIGTERM, _sig_handler)
+
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="info")
+    finally:
+        _persist_state()
 
 
 if __name__ == "__main__":

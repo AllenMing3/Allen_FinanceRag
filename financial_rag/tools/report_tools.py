@@ -87,10 +87,10 @@ def synthesize_report(
         )
         # 防御: call_json 可能返回 str/list，统一为 dict
         if not isinstance(report_json, dict):
-            logger.warning(f"[synthesize_report] call_json 返回 {type(report_json).__name__}，兑底")
+            logger.warning(f"[synthesize_report] call_json 返回 {type(report_json).__name__}，兜底")
             report_json = None
         if not report_json:
-            # JSON 解析失败，用纯文本内容兑底
+            # JSON 解析失败，用纯文本内容兜底
             response = caller.call(
                 prompt,
                 system=NEWS_SYNTHESIS_SYSTEM,
@@ -98,15 +98,15 @@ def synthesize_report(
                 temperature=0.1,
             )
             report_json = {"summary": response.content.strip(), "key_findings": [], "title": query}
-
+    
         # HallucinationGuard 预检
         check_result = {}
-        if report_json.get("summary"):
+        if isinstance(report_json, dict) and report_json.get("summary"):
             from financial_rag.guard.reflector import HallucinationGuard
             guard = HallucinationGuard()
             source_texts = [s.get("text", "")[:200] for s in sources if isinstance(s, dict)]
             check_result = guard.precheck(report_json["summary"], source_texts)
-
+    
         return {
             "report": report_json,
             "hallucination_check": check_result,

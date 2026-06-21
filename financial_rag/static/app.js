@@ -11,6 +11,8 @@ document.querySelectorAll('.flow-step').forEach(el => {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     el.classList.add('active');
     document.getElementById('panel-' + el.dataset.panel).classList.add('active');
+    // Auto-refresh learning history when switching to analyze tab
+    if (el.dataset.panel === 'analyze') refreshLearningHistory();
   });
 });
 
@@ -121,19 +123,43 @@ function renderDirBrowser(dirs) {
 }
 
 async function ingestDir(dirPath, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = '分析中...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '导入中...'; }
   try {
     const d = await api('/api/ingest/files', { dir: dirPath, analyze: true });
-    kbDocs = d.documents || [];
-    updateKBStatus(kbDocs.length);
-    renderDocList(kbDocs);
+    updateKBStatus(d.total || 0);
     if (btn) {
-      let label = `✓ ${d.loaded} 篇`;
-      if (d.analyzed > 0) label += ` (${d.analyzed} 篇已分析)`;
-      btn.textContent = label; btn.className = 'btn btn-success btn-sm';
+      btn.textContent = `✓ ${d.loaded} 篇已导入`; btn.className = 'btn btn-success btn-sm';
+    }
+    // If background analysis started, poll progress
+    if (d.status === 'analyzing_in_background') {
+      _pollIngestProgress(btn);
     }
     refreshKBStatus();
   } catch(e) { if (btn) { btn.disabled = false; btn.textContent = '失败'; } }
+}
+
+async function _pollIngestProgress(btn) {
+  const resultEl = document.getElementById('ingest-dir-result') || document.getElementById('ingest-file-result');
+  const poll = setInterval(async () => {
+    try {
+      const p = await fetch('/api/ingest/progress').then(r => r.json());
+      const pct = p.total > 0 ? Math.round(p.current / p.total * 100) : 0;
+      if (resultEl) {
+        resultEl.innerHTML = `<div style="margin-top:8px;font-size:13px">
+          <span class="tag tag-info">分析中</span> ${p.current}/${p.total} (${pct}%) · 已分析 ${p.analyzed} · 失败 ${p.errors}
+        </div>`;
+      }
+      if (btn) btn.textContent = `分析中 ${pct}%`;
+      if (!p.running) {
+        clearInterval(poll);
+        if (btn) { btn.textContent = `✓ 完成: ${p.analyzed}/${p.total} 已分析`; btn.disabled = false; }
+        if (resultEl) {
+          resultEl.innerHTML = `<div style="margin-top:8px"><span class="tag tag-ok">完成</span> ${p.analyzed}/${p.total} 篇已分析，${p.errors} 篇失败</div>`;
+        }
+        refreshKBStatus(); refreshKBManager();
+      }
+    } catch(e) { clearInterval(poll); }
+  }, 2000);
 }
 
 async function ingestFiles() {
@@ -141,11 +167,11 @@ async function ingestFiles() {
   if (!dir) return;
   try {
     const d = await api('/api/ingest/files', { dir });
-    kbDocs = d.documents || [];
-    updateKBStatus(kbDocs.length); renderDocList(kbDocs);
+    const total = d.total || 0;
+    updateKBStatus(total);
     document.getElementById('ingest-file-result').innerHTML =
-      `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 已加载 ${d.loaded} 篇 (共 ${kbDocs.length} 篇)<br><span style="font-size:12px;color:var(--text2)">💾 ${escHtml(d.kb_path)}</span></div>`;
-    refreshKBStatus();
+      `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 已加载 ${d.loaded} 篇 (共 ${total} 篇)<br><span style="font-size:12px;color:var(--text2)">💾 ${escHtml(d.kb_path)}</span></div>`;
+    refreshKBStatus(); refreshKBManager();
   } catch(e) {
     document.getElementById('ingest-file-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`;
   }
@@ -177,10 +203,10 @@ async function ingestNews() {
 async function loadSampleData() {
   try {
     const d = await api('/api/ingest/sample', {});
-    kbDocs = d.documents || [];
-    updateKBStatus(kbDocs.length); renderDocList(kbDocs);
-    document.getElementById('sample-load-result').innerHTML = `<span class="tag tag-ok">OK</span> 已加载 ${kbDocs.length} 篇 — 💾 ${escHtml(d.kb_path)}`;
-    refreshKBStatus();
+    const total = d.total || 0;
+    updateKBStatus(total);
+    document.getElementById('sample-load-result').innerHTML = `<span class="tag tag-ok">OK</span> 已加载 ${d.loaded} 篇 (共 ${total} 篇) — 💾 ${escHtml(d.kb_path)}`;
+    refreshKBStatus(); refreshKBManager();
   } catch(e) {
     document.getElementById('sample-load-result').innerHTML = `<span class="tag tag-fail">Error</span> ${escHtml(e.message)}`;
   }
@@ -188,12 +214,11 @@ async function loadSampleData() {
 
 // ===== STEP 2: Build =====
 async function buildKB() {
-  if (!kbDocs.length) { document.getElementById('build-result').innerHTML = '<div style="margin-top:8px"><span class="tag tag-warn">Warn</span> 请先导入数据</div>'; return; }
   showLoading('build-loading');
   try {
-    const d = await api('/api/build', { documents: kbDocs });
+    const d = await api('/api/build', {});
     kbBuilt = true;
-    document.getElementById('buildCount').textContent = kbDocs.length;
+    document.getElementById('buildCount').textContent = d.doc_count;
     let h = `<div class="stats">
       <div class="stat">文档数 <strong>${d.doc_count}</strong></div>
       <div class="stat">BM25 <strong>${d.bm25_terms || '-'} terms</strong></div>
@@ -358,6 +383,7 @@ async function analyzeNews() {
     const d = await api('/api/analyze/news', { text, query });
     let h = '<div style="margin-top:12px">';
     h += `<div style="margin-bottom:14px;text-align:center">${verdictBadge(d.assessment)}</div>`;
+    if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:8px">💾 分析结论已存入知识库</div>`;
     if (d.analysis) h += `<div class="answer-section" style="margin-bottom:12px"><h3>💡 分析结论</h3><div class="answer-text">${escHtml(d.analysis)}</div></div>`;
     if (d.doc_type || d.entities || d.metrics) {
       h += '<div class="stats">';
@@ -376,6 +402,7 @@ async function analyzeNews() {
     }
     h += '</div>';
     document.getElementById('analyze-news-result').innerHTML = h;
+    if (d.saved_to_kb) refreshLearningHistory();
   } catch(e) { document.getElementById('analyze-news-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`; }
   hideLoading('analyze-news-loading');
 }
@@ -390,6 +417,7 @@ async function analyzeTopic() {
     const d = await api('/api/analyze/topic', { topic, max_news: maxNews });
     let h = '<div style="margin-top:12px">';
     h += `<div style="margin-bottom:14px;text-align:center">${verdictBadge(d.assessment)}</div>`;
+    if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:8px">💾 研判结论已存入知识库</div>`;
     if (d.analysis) h += `<div class="answer-section" style="margin-bottom:12px"><h3>💡 综合研判</h3><div class="answer-text">${escHtml(d.analysis)}</div></div>`;
     h += `<div class="stats"><div class="stat">话题 <strong>${escHtml(d.topic)}</strong></div><div class="stat">新闻 <strong>${d.news_count}</strong></div></div>`;
     if (d.news && d.news.length) {
@@ -404,8 +432,41 @@ async function analyzeTopic() {
     }
     h += '</div>';
     document.getElementById('analyze-topic-result').innerHTML = h;
+    if (d.saved_to_kb) refreshLearningHistory();
   } catch(e) { document.getElementById('analyze-topic-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`; }
   hideLoading('analyze-topic-loading');
+}
+
+// ===== Learning History =====
+async function refreshLearningHistory() {
+  const container = document.getElementById('learningHistoryList');
+  if (!container) return;
+  try {
+    const d = await fetch('/api/kb/history').then(r => r.json());
+    if (d.count === 0) {
+      container.innerHTML = '<div class="empty-state" style="padding:16px"><div class="icon">🧠</div><p>尚未积累学习记录</p><div class="hint">每次新闻解读或话题调研的结论会自动存入知识库，供未来分析参考</div></div>';
+      return;
+    }
+    let h = `<div style="font-size:12px;color:var(--text2);margin-bottom:10px">已积累 <strong>${d.count}</strong> 条分析结论</div>`;
+    h += '<div style="display:flex;flex-direction:column;gap:8px">';
+    for (const item of d.history) {
+      const type = item.source.startsWith('analysis:news') ? '📰 新闻解读' : '🔍 话题调研';
+      const verdictColor = item.assessment.includes('利好') ? '#0d8a3e' : item.assessment.includes('利空') ? '#d93025' : '#666';
+      const topic = item.source.replace(/^analysis:(news|topic):/, '');
+      h += `<div style="padding:10px 12px;background:var(--bg2);border-radius:8px;font-size:13px">`;
+      h += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">`;
+      h += `<span style="font-weight:600">${type}：${escHtml(topic)}</span>`;
+      h += `<span style="font-size:11px;color:${verdictColor};font-weight:600">${escHtml(item.assessment)}</span>`;
+      h += `</div>`;
+      h += `<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.preview.slice(0, 120))}</div>`;
+      h += `<div style="font-size:10px;color:var(--text2);margin-top:4px">⏱️ ${escHtml(item.timestamp)}</div>`;
+      h += `</div>`;
+    }
+    h += '</div>';
+    container.innerHTML = h;
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--danger);font-size:12px">加载失败: ${escHtml(e.message)}</div>`;
+  }
 }
 
 // ===== KB Manager =====
@@ -427,7 +488,8 @@ async function refreshKBManager() {
       h += `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg2);border-radius:6px;font-size:13px">`;
       h += `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(src)}">${escHtml(src)}</span>`;
       h += `<span class="tag tag-info" style="margin:0 8px;font-size:11px">${count} 篇</span>`;
-      h += `<button class="btn btn-sm" style="padding:2px 8px;font-size:11px;color:var(--danger)" onclick="removeKBSource('${escHtml(src)}')">删除</button>`;
+      const safeSrc = src.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      h += `<button class="btn btn-sm" style="padding:2px 8px;font-size:11px;color:var(--danger)" onclick="removeKBSource('${safeSrc}')">删除</button>`;
       h += `</div>`;
     }
     h += '</div>';
@@ -445,6 +507,54 @@ async function removeKBSource(source) {
     refreshKBManager();
     refreshKBStatus();
   } catch(e) { alert('删除失败: ' + e.message); }
+}
+
+async function searchKBKeyword() {
+  const kw = document.getElementById('kbKeywordInput').value.trim();
+  const box = document.getElementById('kbSearchResults');
+  if (!kw) { box.style.display = 'none'; return; }
+  console.log('[KB Search] searching for:', kw);
+  try {
+    const resp = await fetch(`/api/kb/search?keyword=${encodeURIComponent(kw)}`);
+    console.log('[KB Search] response status:', resp.status);
+    const d = await resp.json();
+    console.log('[KB Search] result:', d);
+    if (d.matched === 0) {
+      box.innerHTML = `<div style="padding:8px;font-size:12px;color:var(--text2)">未找到包含「${escHtml(kw)}」的文档</div>`;
+    } else {
+      let html = `<div style="padding:8px;font-size:12px;color:var(--text2)">找到 <strong>${d.matched}</strong> 篇包含「${escHtml(kw)}」的文档：</div>`;
+      html += '<div style="max-height:160px;overflow-y:auto;padding:0 8px">';
+      for (const m of d.matches) {
+        html += `<div style="font-size:11px;padding:4px 0;border-bottom:1px solid var(--border)">
+          <span style="color:var(--text2)">[${escHtml(m.source)}]</span> ${escHtml((m.preview||'').slice(0,80))}...
+        </div>`;
+      }
+      html += '</div>';
+      box.innerHTML = html;
+    }
+    box.style.display = 'block';
+  } catch(e) { console.error('[KB Search] error:', e); box.innerHTML = `<div style="padding:8px;color:red">${e.message}</div>`; box.style.display = 'block'; }
+}
+
+async function deleteKBKeyword() {
+  const kw = document.getElementById('kbKeywordInput').value.trim();
+  if (!kw) return;
+  console.log('[KB Delete] keyword:', kw);
+  const d = await fetch(`/api/kb/search?keyword=${encodeURIComponent(kw)}`).then(r => r.json());
+  console.log('[KB Delete] search result:', d);
+  if (d.matched === 0) { alert(`未找到包含「${kw}」的文档`); return; }
+  if (!confirm(`确认删除 ${d.matched} 篇包含「${kw}」的知识库文档？\n\n此操作不可恢复。`)) return;
+  try {
+    const resp = await fetch(`/api/kb/keyword/${encodeURIComponent(kw)}`, { method: 'DELETE' });
+    console.log('[KB Delete] response status:', resp.status);
+    const r = await resp.json();
+    console.log('[KB Delete] result:', r);
+    alert(`已删除 ${r.removed} 篇，剩余 ${r.remaining} 篇`);
+    document.getElementById('kbSearchResults').style.display = 'none';
+    document.getElementById('kbKeywordInput').value = '';
+    refreshKBManager();
+    refreshKBStatus();
+  } catch(e) { console.error('[KB Delete] error:', e); alert('删除失败: ' + e.message); }
 }
 
 // ===== Init =====
