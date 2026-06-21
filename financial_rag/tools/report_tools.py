@@ -85,6 +85,10 @@ def synthesize_report(
             max_tokens=2048,
             temperature=0.1,
         )
+        # 防御: call_json 可能返回 str/list，统一为 dict
+        if not isinstance(report_json, dict):
+            logger.warning(f"[synthesize_report] call_json 返回 {type(report_json).__name__}，兑底")
+            report_json = None
         if not report_json:
             # JSON 解析失败，用纯文本内容兑底
             response = caller.call(
@@ -117,6 +121,8 @@ def _format_sources(sources: List[Dict]) -> str:
     """格式化 sources 为 LLM prompt 文本"""
     parts = []
     for s in sources:
+        if not isinstance(s, dict):
+            continue
         header = f"[{s.get('id', '?')}] {s.get('title', '')}"
         if s.get("date"):
             header += f" ({s['date']})"

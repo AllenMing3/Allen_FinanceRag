@@ -101,6 +101,8 @@ def analyze_topic_research(
     """
     # 1. Fetch news (mock-aware)
     logger.info(f"[analyze_topic] 开始: topic={topic!r}, max_news={max_news}, kb_built={kb_built}, llm={'yes' if llm else 'no'}")
+    import time as _time
+    t0 = _time.time()
     from financial_rag.config import is_mock_enabled
     if is_mock_enabled():
         from financial_rag.mock_data import mock_search_news
@@ -109,16 +111,20 @@ def analyze_topic_research(
         logger.info(f"[Mock] Topic '{topic}': {len(items)} mock news items")
     else:
         from financial_rag.tools.news_tools import run_news_pipeline
+        logger.info(f"[analyze_topic] 步骤 1/4: 抓取新闻中...")
         data = run_news_pipeline(llm=llm, query=topic, summarize=False, max_news=max_news)
         items = data.get("items", [])
+    logger.info(f"[analyze_topic] 步骤 1/4 完成: {len(items)} 条新闻 ({(_time.time()-t0)*1000:.0f}ms)")
 
     # 2. Combine news content
+    t1 = _time.time()
     combined_text = "\n\n".join(
         f"{item.get('title', '')}: {item.get('content', '')}"
         for item in items if item.get("title") or item.get("content")
     )[:6000]
 
     # 3. KB search
+    logger.info(f"[analyze_topic] 步骤 2/4: KB 检索...")
     search_query = topic
     if llm:
         try:
@@ -128,16 +134,19 @@ def analyze_topic_research(
         except Exception:
             pass
     kb_sources = _search_kb(retriever, search_query, kb_built)
-    logger.info(f"[analyze_topic] 新闻 {len(items)} 条, KB {len(kb_sources)} sources")
+    logger.info(f"[analyze_topic] 步骤 2/4 完成: KB {len(kb_sources)} sources ({(_time.time()-t1)*1000:.0f}ms)")
 
     # 4. LLM assessment or fallback
+    logger.info(f"[analyze_topic] 步骤 3/4: LLM 研判...")
+    t2 = _time.time()
     if llm:
         assessment, analysis = _llm_topic_assessment(llm, topic, items, combined_text, kb_sources)
     else:
         assessment = "neutral"
         analysis = f"话题: {topic}\n获取新闻: {len(items)} 条\n\n配置 DASHSCOPE_API_KEY 可获得 LLM 智能研判。"
 
-    logger.info(f"[analyze_topic] 完成: assessment={assessment}, news_count={len(items)}")
+    logger.info(f"[analyze_topic] 步骤 3/4 完成: assessment={assessment} ({(_time.time()-t2)*1000:.0f}ms)")
+    logger.info(f"[analyze_topic] 完成: assessment={assessment}, news_count={len(items)}, 总耗时 {(_time.time()-t0)*1000:.0f}ms")
     return {
         "assessment": assessment,
         "analysis": analysis,

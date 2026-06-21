@@ -139,8 +139,18 @@ TOPIC_MAP = {
 }
 
 
+# 过于宽泛的关键词黑名单 — 搜索这些会拉回大量无关结果
+_GENERIC_KEYWORDS = {
+    "AI", "ai", "人工智能", "科技", "行业", "发展", "动态", "最新", "新闻",
+    "市场", "公司", "企业", "投资", "分析", "趋势", "技术", "产品",
+}
+
+
 def _extract_keywords(llm, query: str) -> List[str]:
-    """用 LLM 从用户查询中提取搜索关键词 — via LLMCaller"""
+    """用 LLM 从用户查询中提取搜索关键词 — via LLMCaller
+
+    始终保留原始查询作为第一个关键词，确保搜索不会偏离主题。
+    """
     keywords = [query]
     if llm is None:
         return keywords
@@ -149,10 +159,19 @@ def _extract_keywords(llm, query: str) -> List[str]:
         from financial_rag.llm.caller import LLMCaller
         caller = LLMCaller(llm)
         resp = caller.call(
-            f"用户问：{query}\n\n请提取用于搜索财经新闻的3-5个中文关键词，只输出逗号分隔的关键词，不要其他内容。",
+            f"用户问：{query}\n\n"
+            f"请提取用于搜索财经新闻的2-4个具体关键词。\n"
+            f"要求：只提取具体的公司名、产品名、人名、事件名，不要提取“AI”“科技”“行业”等宽泛词。\n"
+            f"只输出逗号分隔的关键词，不要其他内容。",
             max_tokens=40,
         )
-        keywords = [k.strip() for k in resp.content.replace("\n", "").replace("、", ",").split(",") if k.strip()]
+        raw = [k.strip() for k in resp.content.replace("\n", "").replace("、", ",").split(",") if k.strip()]
+        # 过滤宽泛词
+        filtered = [k for k in raw if k not in _GENERIC_KEYWORDS and len(k) >= 2]
+        if filtered:
+            # 原始查询始终排第一
+            keywords = [query] + [k for k in filtered if k != query]
+        logger.info(f"[extract_keywords] query={query!r}, raw={raw}, filtered={filtered}, final={keywords[:3]}")
     except Exception:
         pass
 
