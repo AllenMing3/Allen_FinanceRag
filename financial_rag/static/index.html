@@ -127,15 +127,28 @@
         <span class="tag tag-ok" style="font-size:11px">→ 知识库</span>
       </div>
       <p style="font-size:13px;color:var(--text2);margin-bottom:14px">导入的文件经 <strong style="color:var(--accent)">IngestionAgent + TextPreprocessor + DataOrchestrator</strong> 分析后进入知识库，用于后续 RAG 检索</p>
+      <!-- Analysis mode toggle -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:8px 12px;background:var(--bg2);border-radius:8px">
+        <span style="font-size:12px;font-weight:600">分析模式：</span>
+        <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px">
+          <input type="radio" name="ingestMode" value="analyze" checked> 🔍 深度分析 (LLM 抽取指标+实体)
+        </label>
+        <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px">
+          <input type="radio" name="ingestMode" value="quick"> ⚡ 快速导入 (跳过 LLM)
+        </label>
+      </div>
+      <!-- Directory browser -->
       <div id="dirBrowser"><div style="text-align:center;color:var(--text2);padding:16px"><div class="spinner" style="margin:0 auto"></div></div></div>
-      <details style="margin-top:12px">
-        <summary style="font-size:12px;color:var(--text2);cursor:pointer">⚙️ 自定义目录路径</summary>
-        <div class="form-row" style="margin-top:8px">
-          <input class="input" id="ingest-dir" placeholder="输入自定义目录路径..." />
-          <button class="btn btn-secondary" onclick="ingestFiles()">导入</button>
+      <!-- Custom directory -->
+      <div style="margin-top:14px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">📂 自定义目录</div>
+        <div class="form-row">
+          <input class="input" id="ingest-dir" placeholder="输入目录路径，如 D:\docs\reports 或 ./data/custom" />
+          <button class="btn btn-secondary btn-sm" onclick="browseCustomDir()">浏览</button>
+          <button class="btn btn-primary btn-sm" onclick="ingestCustomDir()">导入</button>
         </div>
         <div id="ingest-file-result"></div>
-      </details>
+      </div>
     </div>
 
     <div class="card" style="margin-bottom:20px">
@@ -146,7 +159,13 @@
       <p style="font-size:13px;color:var(--text2);margin-bottom:14px">从同花顺 / 新浪 / 东方财富拉取实时新闻，仅作为查询时的上下文补充</p>
       <div class="form-row">
         <input class="input" id="ingest-news-q" placeholder="主题: AI、茅台、降准..." />
+        <select class="input" id="ingest-news-count" style="flex:none;width:80px">
+          <option value="10">10条</option><option value="20">20条</option><option value="30" selected>30条</option><option value="50">50条</option>
+        </select>
         <button class="btn btn-primary" onclick="ingestNews()">抓取</button>
+      </div>
+      <div class="form-row" style="margin-top:6px">
+        <input class="input" id="ingest-news-filter" placeholder="过滤关键词（可选，逗号分隔）" style="font-size:12px" />
       </div>
       <div id="ingest-news-result"></div>
     </div>

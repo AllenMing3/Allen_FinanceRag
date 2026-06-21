@@ -20,10 +20,36 @@ class TestAnalyzeNewsText:
         result = analyze_news_text(SAMPLE_AI_NEWS)
         assert "assessment" in result
         assert "analysis" in result
+        assert "structured" in result
         assert "metrics" in result
         assert "entities" in result
         assert "doc_type" in result
         assert "kb_sources" in result
+
+    def test_structured_output_shape(self):
+        from financial_rag.services.analysis import analyze_news_text
+        result = analyze_news_text(SAMPLE_AI_NEWS)
+        s = result["structured"]
+        assert isinstance(s, dict)
+        assert "verdict" in s
+        assert "impact" in s
+        assert "key_signals" in s
+        assert "analysis" in s
+        assert "risks" in s
+        assert "watch_next" in s
+        # Impact should have 4 dimensions
+        imp = s["impact"]
+        for dim in ("industry", "company", "tech", "market"):
+            assert dim in imp
+            assert "direction" in imp[dim]
+            assert "summary" in imp[dim]
+        # Signals should be a list
+        assert isinstance(s["key_signals"], list)
+        assert len(s["key_signals"]) > 0
+        for sig in s["key_signals"]:
+            assert "signal" in sig
+            assert "severity" in sig
+            assert "type" in sig
 
     def test_assessment_value(self):
         from financial_rag.services.analysis import analyze_news_text
@@ -90,10 +116,27 @@ class TestAnalyzeTopicResearch:
         # Verify all expected keys
         assert "assessment" in result
         assert "analysis" in result
+        assert "structured" in result
         assert "topic" in result
         assert "news_count" in result
         assert "news" in result
         assert "kb_sources" in result
+
+    @patch("financial_rag.config.is_mock_enabled", return_value=True)
+    def test_structured_output_shape(self, _mock_flag):
+        from financial_rag.services.analysis import analyze_topic_research
+        result = analyze_topic_research("AI大模型")
+        s = result["structured"]
+        assert isinstance(s, dict)
+        assert "verdict" in s
+        assert "sub_topics" in s
+        assert "key_players" in s
+        assert "sentiment_trend" in s
+        assert "analysis" in s
+        assert "risks" in s
+        assert isinstance(s["sub_topics"], list)
+        assert isinstance(s["key_players"], list)
+        assert s["sentiment_trend"] in ("improving", "deteriorating", "stable", "mixed")
 
     @patch("financial_rag.config.is_mock_enabled", return_value=True)
     def test_mock_mode_news_items(self, _mock_flag):
@@ -147,16 +190,18 @@ class TestAnalysisHelpers:
     def test_heuristic_assessment_positive(self):
         from financial_rag.services.analysis import _heuristic_assessment
         metrics = {"revenue": {"value": "50亿", "yoy_growth": 36}}
-        assessment, analysis = _heuristic_assessment("financial_report", metrics, {})
+        assessment, structured = _heuristic_assessment("financial_report", metrics, {})
         assert assessment in ("bullish", "neutral")
-        assert analysis
+        assert isinstance(structured, dict)
+        assert "impact" in structured
+        assert "key_signals" in structured
 
     def test_heuristic_assessment_negative(self):
         from financial_rag.services.analysis import _heuristic_assessment
         metrics = {"revenue": {"value": "10亿", "yoy_growth": -30}}
-        assessment, analysis = _heuristic_assessment("financial_report", metrics, {})
+        assessment, structured = _heuristic_assessment("financial_report", metrics, {})
         assert assessment in ("bearish", "neutral")
-        assert analysis
+        assert isinstance(structured, dict)
 
     def test_search_kb_no_retriever(self):
         from financial_rag.services.analysis import _search_kb

@@ -221,6 +221,7 @@ class ScoreRequest(BaseModel):
 class IngestFilesRequest(BaseModel):
     dir: str = "./data/financial"
     analyze: bool = False
+    files: list = []  # Optional: specific filenames to import (empty = all)
 
 
 class IngestNewsRequest(BaseModel):
@@ -258,6 +259,42 @@ def api_config():
         "has_api_key": _state["has_key"],
         "mock_mode": is_mock_enabled(),
     }
+
+
+# ===================== File Preview =====================
+
+@app.get("/api/file/preview")
+def api_file_preview(path: str = "", file: str = "", lines: int = 20):
+    """Preview first N lines of a file in a known directory.
+
+    Args:
+        path: directory path (must be under ./data/)
+        file: filename
+        lines: max lines to return (default 20, max 50)
+    """
+    if not path or not file:
+        raise HTTPException(400, "Missing path or file")
+    # Security: only allow paths under ./data/
+    norm = os.path.normpath(os.path.join(path, file))
+    if not norm.startswith(os.path.normpath("./data")):
+        raise HTTPException(403, "Access denied: path must be under ./data/")
+    if not os.path.isfile(norm):
+        raise HTTPException(404, f"File not found: {file}")
+    lines = min(max(1, lines), 50)
+    try:
+        with open(norm, "r", encoding="utf-8") as f:
+            content_lines = []
+            count = 0
+            for line in f:
+                if count >= lines:
+                    break
+                content_lines.append(line.rstrip())
+                count += 1
+        return {"file": file, "path": norm, "lines": content_lines, "truncated": count >= lines}
+    except UnicodeDecodeError:
+        return {"file": file, "path": norm, "lines": ["(binary file, cannot preview)"], "truncated": False}
+    except Exception as e:
+        raise HTTPException(500, f"Preview failed: {e}")
 
 
 # ===================== KB Pipeline (Ingest → Build → Query) =====================
@@ -347,7 +384,11 @@ def api_ingest_files(req: IngestFilesRequest):
     # Phase 1: Read files (fast, synchronous)
     raw_docs = []
     file_stats = []
+    selected_files = set(req.files) if req.files else None
     for fname in os.listdir(dir_path):
+        # Skip files not in selection (if selection provided)
+        if selected_files is not None and fname not in selected_files:
+            continue
         fpath = os.path.join(dir_path, fname)
         if not os.path.isfile(fpath):
             continue

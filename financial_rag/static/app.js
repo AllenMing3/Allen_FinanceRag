@@ -92,14 +92,29 @@ function renderDocList(docs) {
 }
 
 // ===== STEP 1: Ingest =====
+// ===== Ingest state =====
+const _dirData = {};  // dirPath → files array
+const _selectedFiles = {};  // dirPath → Set of selected filenames
+
 async function loadDirBrowser() {
   try {
     const d = await fetch('/api/directories').then(r => r.json());
+    d.directories.forEach(dir => {
+      if (dir.exists) {
+        _dirData[dir.path] = dir.files;
+        _selectedFiles[dir.path] = new Set(dir.files.map(f => f.name));
+      }
+    });
     renderDirBrowser(d.directories);
   } catch(e) {
     document.getElementById('dirBrowser').innerHTML =
       `<div style="color:var(--danger)">加载目录失败: ${escHtml(e.message)}</div>`;
   }
+}
+
+function _getIngestMode() {
+  const radio = document.querySelector('input[name="ingestMode"]:checked');
+  return radio ? radio.value : 'analyze';
 }
 
 function renderDirBrowser(dirs) {
@@ -108,19 +123,37 @@ function renderDirBrowser(dirs) {
   dirs.forEach(dir => {
     const icon = dir.exists ? '📂' : '📭';
     const status = dir.exists ? `${dir.file_count} 个文件 · ${dir.total_size_kb} KB` : '目录不存在';
-    h += `<div class="dir-card"><div class="dir-header"><div>
-      <span style="font-size:18px">${icon}</span> <strong>${escHtml(dir.label)}</strong>
-      <span style="font-size:12px;color:var(--text2);margin-left:8px">${escHtml(dir.path)}</span>
-    </div><div style="display:flex;align-items:center;gap:8px">
-      <span class="tag ${dir.file_count > 0 ? 'tag-info' : 'tag-off'}">${status}</span>
-      ${dir.exists && dir.file_count > 0 ? `<button class="btn btn-primary btn-sm" onclick="ingestDir('${escHtml(dir.path)}', this)">分析并导入</button>` : ''}
-    </div></div>`;
+    const dirId = dir.path.replace(/[^a-zA-Z0-9]/g, '_');
+    h += `<div class="dir-card" id="dirCard_${dirId}">`;
+    // Header row: label + status + batch actions
+    h += `<div class="dir-header"><div>`;
+    h += `<span style="font-size:18px">${icon}</span> <strong>${escHtml(dir.label)}</strong>`;
+    h += `<span style="font-size:12px;color:var(--text2);margin-left:8px">${escHtml(dir.path)}</span>`;
+    h += `</div><div style="display:flex;align-items:center;gap:8px">`;
+    h += `<span class="tag ${dir.file_count > 0 ? 'tag-info' : 'tag-off'}">${status}</span>`;
+    h += `</div></div>`;
+    // File list with checkboxes
     if (dir.exists && dir.files.length > 0) {
+      h += `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;margin-bottom:4px">`;
+      h += `<label style="font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px">`;
+      h += `<input type="checkbox" id="selAll_${dirId}" checked onchange="toggleSelectAll('${escHtml(dir.path)}', this.checked)"> 全选</label>`;
+      h += `<span style="font-size:11px;color:var(--text2)" id="selCount_${dirId}">${dir.files.length}/${dir.files.length} 已选</span>`;
+      h += `<button class="btn btn-primary btn-sm" style="margin-left:auto;font-size:11px" onclick="ingestSelected('${escHtml(dir.path)}', this)">📥 导入所选</button>`;
+      h += `</div>`;
       h += '<div class="dir-files">';
       dir.files.forEach(f => {
         const typeIcon = f.ext === '.jsonl' ? '📝' : f.ext === '.json' ? '📦' : f.ext === '.txt' ? '📄' : '📎';
         const lineInfo = f.line_count > 0 ? ` · ${f.line_count} 条` : '';
-        h += `<div class="dir-file"><span>${typeIcon} ${escHtml(f.name)}</span><span style="color:var(--text2)">${f.size_kb} KB${lineInfo}</span></div>`;
+        const previewId = `preview_${dirId}_${f.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        h += `<div class="dir-file" style="flex-wrap:wrap">`;
+        h += `<label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer;min-width:0">`;
+        h += `<input type="checkbox" checked data-dir="${escHtml(dir.path)}" data-file="${escHtml(f.name)}" onchange="updateSelCount('${escHtml(dir.path)}', '${dirId}')">`;
+        h += `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${typeIcon} ${escHtml(f.name)}</span>`;
+        h += `</label>`;
+        h += `<span style="color:var(--text2);flex-shrink:0">${f.size_kb} KB${lineInfo}</span>`;
+        h += `<button class="btn btn-sm" style="padding:1px 6px;font-size:10px;color:var(--accent)" onclick="previewFile('${escHtml(dir.path)}', '${escHtml(f.name)}', '${previewId}')">👁️</button>`;
+        h += `<div id="${previewId}" style="display:none;width:100%;padding:6px 8px;margin-top:4px;background:var(--bg);border-radius:6px;font-size:11px;font-family:monospace;white-space:pre-wrap;max-height:200px;overflow-y:auto;border:1px solid var(--border)"></div>`;
+        h += `</div>`;
       });
       h += '</div>';
     }
@@ -129,25 +162,70 @@ function renderDirBrowser(dirs) {
   el.innerHTML = h;
 }
 
-async function ingestDir(dirPath, btn) {
+function toggleSelectAll(dirPath, checked) {
+  const checkboxes = document.querySelectorAll(`input[data-dir="${dirPath}"]`);
+  checkboxes.forEach(cb => cb.checked = checked);
+  if (checked) {
+    _selectedFiles[dirPath] = new Set(_dirData[dirPath].map(f => f.name));
+  } else {
+    _selectedFiles[dirPath] = new Set();
+  }
+  const dirId = dirPath.replace(/[^a-zA-Z0-9]/g, '_');
+  updateSelCount(dirPath, dirId);
+}
+
+function updateSelCount(dirPath, dirId) {
+  const checkboxes = document.querySelectorAll(`input[data-dir="${dirPath}"]`);
+  const selected = Array.from(checkboxes).filter(cb => cb.checked);
+  const countEl = document.getElementById(`selCount_${dirId}`);
+  if (countEl) countEl.textContent = `${selected.length}/${checkboxes.length} 已选`;
+  const selAllEl = document.getElementById(`selAll_${dirId}`);
+  if (selAllEl) selAllEl.checked = selected.length === checkboxes.length;
+  // Update _selectedFiles
+  _selectedFiles[dirPath] = new Set(selected.map(cb => cb.dataset.file));
+}
+
+async function previewFile(dirPath, fileName, previewId) {
+  const el = document.getElementById(previewId);
+  if (!el) return;
+  if (el.style.display !== 'none' && el.innerHTML) {
+    el.style.display = 'none';
+    return;
+  }
+  el.innerHTML = '<span style="color:var(--text2)">加载中...</span>';
+  el.style.display = 'block';
+  try {
+    const d = await fetch(`/api/file/preview?path=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(fileName)}&lines=15`).then(r => r.json());
+    if (d.lines && d.lines.length) {
+      el.textContent = d.lines.join('\n');
+      if (d.truncated) el.textContent += '\n... (更多内容省略)';
+    } else {
+      el.textContent = '(空文件)';
+    }
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--danger)">预览失败: ${escHtml(e.message)}</span>`;
+  }
+}
+
+async function ingestSelected(dirPath, btn) {
+  const files = Array.from(_selectedFiles[dirPath] || []);
+  if (files.length === 0) { alert('请至少选择一个文件'); return; }
+  const analyze = _getIngestMode() === 'analyze';
   if (btn) { btn.disabled = true; btn.textContent = '导入中...'; }
   try {
-    const d = await api('/api/ingest/files', { dir: dirPath, analyze: true });
+    const d = await api('/api/ingest/files', { dir: dirPath, analyze, files });
     updateKBStatus(d.total || 0);
     if (btn) {
       const skipInfo = d.skipped_duplicates > 0 ? ` (跳过 ${d.skipped_duplicates} 重复)` : '';
       btn.textContent = `✓ ${d.loaded || 0} 篇已导入${skipInfo}`; btn.className = 'btn btn-success btn-sm';
     }
-    // If background analysis started, poll progress
-    if (d.status === 'analyzing_in_background') {
-      _pollIngestProgress(btn);
-    }
+    if (d.status === 'analyzing_in_background') _pollIngestProgress(btn);
     refreshKBStatus();
-  } catch(e) { if (btn) { btn.disabled = false; btn.textContent = '失败'; } }
+  } catch(e) { if (btn) { btn.disabled = false; btn.textContent = '📥 导入所选'; } }
 }
 
 async function _pollIngestProgress(btn) {
-  const resultEl = document.getElementById('ingest-dir-result') || document.getElementById('ingest-file-result');
+  const resultEl = document.getElementById('ingest-file-result');
   const poll = setInterval(async () => {
     try {
       const p = await fetch('/api/ingest/progress').then(r => r.json());
@@ -170,16 +248,40 @@ async function _pollIngestProgress(btn) {
   }, 2000);
 }
 
-async function ingestFiles() {
+async function browseCustomDir() {
   const dir = document.getElementById('ingest-dir').value.trim();
   if (!dir) return;
   try {
-    const d = await api('/api/ingest/files', { dir });
-    const total = d.total || 0;
-    updateKBStatus(total);
+    const d = await fetch(`/api/directories`).then(r => r.json());
+    // Try to ingest just to see what's there
+    document.getElementById('ingest-file-result').innerHTML =
+      `<div style="margin-top:8px;font-size:12px;color:var(--text2)">尝试浏览目录: ${escHtml(dir)}...</div>`;
+    // Use ingest API with empty files list to validate directory
+    const resp = await fetch('/api/file/preview?path=' + encodeURIComponent(dir) + '&file=.&lines=1');
+    if (resp.ok) {
+      document.getElementById('ingest-file-result').innerHTML =
+        `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 目录可访问，点击“导入”按钮导入</div>`;
+    }
+  } catch(e) {
+    document.getElementById('ingest-file-result').innerHTML =
+      `<div style="margin-top:8px;font-size:12px;color:var(--text2)">输入路径后点击“导入”</div>`;
+  }
+}
+
+async function ingestCustomDir() {
+  const dir = document.getElementById('ingest-dir').value.trim();
+  if (!dir) { alert('请输入目录路径'); return; }
+  const analyze = _getIngestMode() === 'analyze';
+  try {
+    const d = await api('/api/ingest/files', { dir, analyze });
+    updateKBStatus(d.total || 0);
     const skipInfo = d.skipped_duplicates > 0 ? ` · 跳过 ${d.skipped_duplicates} 篇重复` : '';
     document.getElementById('ingest-file-result').innerHTML =
-      `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 新增 ${d.loaded || 0} 篇${skipInfo} (共 ${total} 篇)</div>`;
+      `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 新增 ${d.loaded || 0} 篇${skipInfo} (共 ${d.total} 篇)</div>`;
+    if (d.status === 'analyzing_in_background') {
+      const fakeBtn = null; // Progress shown in ingest-file-result
+      _pollIngestProgress(fakeBtn);
+    }
     refreshKBStatus(); refreshKBManager();
   } catch(e) {
     document.getElementById('ingest-file-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`;
@@ -189,18 +291,19 @@ async function ingestFiles() {
 async function ingestNews() {
   const q = document.getElementById('ingest-news-q').value.trim();
   if (!q) return;
+  const maxNews = parseInt(document.getElementById('ingest-news-count').value) || 30;
   try {
-    const d = await api('/api/ingest/news', { query: q, max_news: 30 });
+    const d = await api('/api/ingest/news', { query: q, max_news: maxNews });
     let h = `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 抓取 ${d.fetched} 条新闻 → 元数据`;
     if (d.has_summary) h += ' + AI摘要';
     h += ` (累计: ${d.meta_total} 条)</div>`;
     updateMetaStatus(d.meta_total);
     if (d.headlines && d.headlines.length) {
       h += '<div style="margin-top:8px">';
-      d.headlines.slice(0, 5).forEach(item => {
+      d.headlines.slice(0, 8).forEach(item => {
         h += `<div class="news-item"><h4>${escHtml(item.title)}</h4><div class="meta">${escHtml(item.source)} · ${escHtml(item.publish_time)}</div></div>`;
       });
-      if (d.headlines.length > 5) h += `<div style="font-size:12px;color:var(--text2)">... 还有 ${d.headlines.length - 5} 条</div>`;
+      if (d.headlines.length > 8) h += `<div style="font-size:12px;color:var(--text2)">... 还有 ${d.headlines.length - 8} 条</div>`;
       h += '</div>';
     }
     document.getElementById('ingest-news-result').innerHTML = h;
@@ -380,6 +483,30 @@ function confidenceBadge(c) {
   return ` <span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;background:${color}22;color:${color};border:1px solid ${color}44;margin-left:6px">${label}</span>`;
 }
 
+function directionArrow(dir) {
+  const map = { bullish: ['↑','var(--ok)'], bearish: ['↓','var(--danger)'], neutral: ['→','var(--text2)'],
+    positive: ['↑','var(--ok)'], negative: ['↓','var(--danger)'], improving: ['↑','var(--ok)'], deteriorating: ['↓','var(--danger)'],
+    stable: ['→','var(--text2)'], mixed: ['↔','#f59e0b'] };
+  const [arrow, color] = map[dir] || ['→','var(--text2)'];
+  return `<span style="color:${color};font-weight:700">${arrow}</span>`;
+}
+
+function severityBar(level) {
+  const n = Math.min(5, Math.max(1, level || 1));
+  let bars = '';
+  for (let i = 1; i <= 5; i++) {
+    const color = i <= n ? (n >= 4 ? 'var(--danger)' : n >= 3 ? '#f59e0b' : 'var(--ok)') : 'var(--border)';
+    bars += `<span style="display:inline-block;width:4px;height:12px;background:${color};border-radius:2px;margin-right:2px"></span>`;
+  }
+  return bars;
+}
+
+function sentimentPill(s) {
+  const map = { positive: ['积极','var(--ok)'], negative: ['消极','var(--danger)'], neutral: ['中性','var(--text2)'] };
+  const [label, color] = map[s] || map.neutral;
+  return `<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${color}22;color:${color}">${label}</span>`;
+}
+
 async function analyzeNews() {
   const text = document.getElementById('analyze-news-text').value.trim();
   if (!text) return;
@@ -388,10 +515,48 @@ async function analyzeNews() {
   document.getElementById('analyze-news-result').innerHTML = '';
   try {
     const d = await api('/api/analyze/news', { text, query });
+    const s = d.structured || {};
     let h = '<div style="margin-top:12px">';
+    // Verdict + confidence
     h += `<div style="margin-bottom:14px;text-align:center">${verdictBadge(d.assessment)}${confidenceBadge(d.confidence)}</div>`;
     if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:8px">💾 分析结论已存入知识库</div>`;
-    if (d.analysis) h += `<div class="answer-section" style="margin-bottom:12px"><h3>💡 分析结论</h3><div class="answer-text">${escHtml(d.analysis)}</div></div>`;
+
+    // Multi-dimensional impact
+    if (s.impact) {
+      const imp = s.impact;
+      const dims = [
+        {key:'industry',icon:'🏢',label:'行业'}, {key:'company',icon:'🏭',label:'公司'},
+        {key:'tech',icon:'⚡',label:'技术'}, {key:'market',icon:'📈',label:'市场'}
+      ];
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">';
+      dims.forEach(dim => {
+        const v = imp[dim.key] || {};
+        const dir = v.direction || 'neutral';
+        h += `<div style="padding:8px 10px;background:var(--bg2);border-radius:8px;font-size:12px">`;
+        h += `<div style="font-weight:600;margin-bottom:4px">${dim.icon} ${dim.label} ${directionArrow(dir)}</div>`;
+        h += `<div style="color:var(--text2);font-size:11px">${escHtml(v.summary || '')}</div></div>`;
+      });
+      h += '</div>';
+    }
+
+    // Key signals
+    if (s.key_signals && s.key_signals.length) {
+      h += '<div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">🔔 关键信号</div>';
+      s.key_signals.forEach(sig => {
+        const typeColor = sig.type === 'positive' ? 'var(--ok)' : sig.type === 'negative' ? 'var(--danger)' : 'var(--text2)';
+        h += `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border)">`;
+        h += `<span style="flex-shrink:0">${severityBar(sig.severity)}</span>`;
+        h += `<span style="flex:1;color:var(--text)">${escHtml(sig.signal || '')}</span>`;
+        h += `<span style="font-size:10px;color:${typeColor};font-weight:600">${sig.type === 'positive' ? '▲' : sig.type === 'negative' ? '▼' : '●'}</span>`;
+        h += '</div>';
+      });
+      h += '</div>';
+    }
+
+    // Analysis text
+    if (d.analysis) h += `<div class="answer-section" style="margin-bottom:12px"><h3>💡 综合分析</h3><div class="answer-text">${escHtml(d.analysis)}</div></div>`;
+
+    // Extraction stats
     if (d.doc_type || d.entities || d.metrics) {
       h += '<div class="stats">';
       if (d.doc_type) h += `<div class="stat">文档类型 <strong>${escHtml(d.doc_type)}</strong></div>`;
@@ -399,11 +564,30 @@ async function analyzeNews() {
       if (ent.companies && ent.companies.length) h += `<div class="stat">公司 <strong>${ent.companies.map(c=>escHtml(typeof c === 'string' ? c : c.name || c)).join(', ')}</strong></div>`;
       if (ent.persons && ent.persons.length) h += `<div class="stat">人物 <strong>${ent.persons.map(p=>escHtml(typeof p === 'string' ? p : p.name || p)).slice(0,3).join(', ')}</strong></div>`;
       if (ent.ai_models && ent.ai_models.length) h += `<div class="stat">AI模型 <strong>${ent.ai_models.map(m=>escHtml(typeof m === 'string' ? m : m.name || m)).slice(0,3).join(', ')}</strong></div>`;
-      if (ent.tech_terms && ent.tech_terms.length) h += `<div class="stat">技术 <strong>${ent.tech_terms.map(t=>escHtml(typeof t === 'string' ? t : t)).slice(0,3).join(', ')}</strong></div>`;
       if (met.revenue) h += `<div class="stat">营收 <strong>${escHtml(String(met.revenue))}</strong></div>`;
       if (met.net_profit) h += `<div class="stat">净利润 <strong>${escHtml(String(met.net_profit))}</strong></div>`;
       h += '</div>';
     }
+
+    // Risks + Watch Next (side by side)
+    if ((s.risks && s.risks.length) || (s.watch_next && s.watch_next.length)) {
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">';
+      if (s.risks && s.risks.length) {
+        h += '<div style="padding:10px;background:rgba(217,48,37,.06);border-radius:8px;border:1px solid rgba(217,48,37,.15)">';
+        h += '<div style="font-size:12px;font-weight:600;color:var(--danger);margin-bottom:6px">⚠️ 风险提示</div>';
+        s.risks.forEach(r => { h += `<div style="font-size:11px;color:var(--text);padding:2px 0">• ${escHtml(r)}</div>`; });
+        h += '</div>';
+      }
+      if (s.watch_next && s.watch_next.length) {
+        h += '<div style="padding:10px;background:rgba(78,205,196,.06);border-radius:8px;border:1px solid rgba(78,205,196,.15)">';
+        h += '<div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:6px">👁️ 后续关注</div>';
+        s.watch_next.forEach(w => { h += `<div style="font-size:11px;color:var(--text);padding:2px 0">• ${escHtml(w)}</div>`; });
+        h += '</div>';
+      }
+      h += '</div>';
+    }
+
+    // KB sources
     if (d.kb_sources && d.kb_sources.length) {
       h += `<div style="margin-top:10px;font-size:13px;color:var(--text2)">📚 KB来源 (${d.kb_sources.length})</div>`;
       d.kb_sources.slice(0, 3).forEach((s, i) => {
@@ -423,22 +607,85 @@ async function analyzeTopic() {
   const maxNews = parseInt(document.getElementById('analyze-topic-count').value);
   showLoading('analyze-topic-loading');
   document.getElementById('analyze-topic-result').innerHTML = '';
-  // Cycling progress text
   const steps = ['① 提取关键词...', '② 抓取新闻...', '③ 查询知识库...', '④ LLM 综合研判...'];
   let stepIdx = 0;
   const loadingEl = document.querySelector('#analyze-topic-loading p');
   const progressTimer = setInterval(() => { stepIdx = Math.min(stepIdx + 1, steps.length - 1); if (loadingEl) loadingEl.textContent = steps[stepIdx]; }, 5000);
   try {
     const d = await api('/api/analyze/topic', { topic, max_news: maxNews });
+    const s = d.structured || {};
     let h = '<div style="margin-top:12px">';
+    // Verdict + confidence
     h += `<div style="margin-bottom:14px;text-align:center">${verdictBadge(d.assessment)}${confidenceBadge(d.confidence)}</div>`;
     if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:8px">💾 研判结论已存入知识库</div>`;
-    if (d.analysis) h += `<div class="answer-section" style="margin-bottom:12px"><h3>💡 综合研判</h3><div class="answer-text">${escHtml(d.analysis)}</div></div>`;
-    h += `<div class="stats"><div class="stat">话题 <strong>${escHtml(d.topic)}</strong></div><div class="stat">新闻 <strong>${d.news_count}</strong></div></div>`;
+
+    // Stats bar
+    const trendDir = s.sentiment_trend || 'mixed';
+    h += `<div class="stats" style="margin-bottom:14px">`;
+    h += `<div class="stat">话题 <strong>${escHtml(d.topic)}</strong></div>`;
+    h += `<div class="stat">新闻 <strong>${d.news_count}</strong></div>`;
+    h += `<div class="stat">情绪趋势 ${directionArrow(trendDir)} <strong style="font-size:11px">${escHtml({improving:'回暖',deteriorating:'恶化',stable:'稳定',mixed:'分化'}[trendDir] || trendDir)}</strong></div>`;
+    h += '</div>';
+
+    // Sub-topics
+    if (s.sub_topics && s.sub_topics.length) {
+      h += '<div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">🧩 子话题聚类</div>';
+      h += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
+      s.sub_topics.forEach(st => {
+        const sentColor = st.sentiment === 'positive' ? 'var(--ok)' : st.sentiment === 'negative' ? 'var(--danger)' : 'var(--text2)';
+        h += `<div style="padding:8px 12px;background:var(--bg2);border-radius:8px;border-left:3px solid ${sentColor};font-size:12px;min-width:140px">`;
+        h += `<div style="font-weight:600;margin-bottom:3px">${escHtml(st.name || '')} ${sentimentPill(st.sentiment)}</div>`;
+        h += `<div style="color:var(--text2);font-size:11px">${escHtml(st.summary || '')}</div></div>`;
+      });
+      h += '</div></div>';
+    }
+
+    // Key players
+    if (s.key_players && s.key_players.length) {
+      h += '<div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;margin-bottom:6px">👤 关键玩家</div>';
+      h += '<div style="display:flex;flex-direction:column;gap:4px">';
+      s.key_players.forEach(p => {
+        h += `<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;background:var(--bg2);border-radius:6px;font-size:12px">`;
+        h += `<span style="font-weight:600;min-width:80px">${escHtml(p.name || '')}</span>`;
+        h += `<span style="flex:1;color:var(--text2);font-size:11px">${escHtml(p.role || '')}</span>`;
+        if (p.mentions) h += `<span class="tag tag-info" style="font-size:10px">${p.mentions}次提及</span>`;
+        h += '</div>';
+      });
+      h += '</div></div>';
+    }
+
+    // Analysis text
+    if (d.analysis) h += `<div class="answer-section" style="margin-bottom:12px"><h3>💡 综合分析</h3><div class="answer-text">${escHtml(d.analysis)}</div></div>`;
+
+    // Investment implication
+    if (s.investment_implication) {
+      h += `<div style="padding:10px;background:rgba(78,205,196,.06);border-radius:8px;border:1px solid rgba(78,205,196,.15);margin-bottom:12px">`;
+      h += `<div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:4px">💰 投资启示</div>`;
+      h += `<div style="font-size:12px">${escHtml(s.investment_implication)}</div></div>`;
+    }
+
+    // Contrarian signals
+    if (s.contrarian_signals && s.contrarian_signals.length) {
+      h += `<div style="padding:10px;background:rgba(245,158,11,.06);border-radius:8px;border:1px solid rgba(245,158,11,.15);margin-bottom:12px">`;
+      h += `<div style="font-size:12px;font-weight:600;color:#f59e0b;margin-bottom:4px">🔄 逆向信号</div>`;
+      s.contrarian_signals.forEach(c => { h += `<div style="font-size:11px;padding:2px 0">• ${escHtml(c)}</div>`; });
+      h += '</div>';
+    }
+
+    // Risks
+    if (s.risks && s.risks.length) {
+      h += `<div style="padding:10px;background:rgba(217,48,37,.06);border-radius:8px;border:1px solid rgba(217,48,37,.15);margin-bottom:12px">`;
+      h += `<div style="font-size:12px;font-weight:600;color:var(--danger);margin-bottom:4px">⚠️ 风险提示</div>`;
+      s.risks.forEach(r => { h += `<div style="font-size:11px;padding:2px 0">• ${escHtml(r)}</div>`; });
+      h += '</div>';
+    }
+
+    // News list
     if (d.news && d.news.length) {
       h += '<div style="margin-top:10px;font-size:13px;color:var(--text2)">📰 相关新闻</div>';
       d.news.forEach(n => { h += `<div class="news-item"><h4>${escHtml(n.title)}</h4><div class="meta">${escHtml(n.source)} · ${escHtml(n.publish_time)}</div></div>`; });
     }
+    // KB sources
     if (d.kb_sources && d.kb_sources.length) {
       h += `<div style="margin-top:10px;font-size:13px;color:var(--text2)">📚 KB (${d.kb_sources.length})</div>`;
       d.kb_sources.slice(0, 3).forEach((s, i) => {

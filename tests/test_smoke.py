@@ -330,6 +330,58 @@ class TestWebAPISmoke:
         data = resp.json()
         assert data["matched"] >= 1
 
+    def test_api_file_preview(self, tmp_path):
+        """File preview endpoint returns file content"""
+        test_file = tmp_path / "preview_test.txt"
+        test_file.write_text("line 1\nline 2\nline 3\n", encoding="utf-8")
+        # Ensure tmp_path is under ./data for security check
+        import os
+        data_dir = os.path.normpath("./data")
+        os.makedirs(data_dir, exist_ok=True)
+        preview_dir = os.path.join(data_dir, "_test_preview")
+        os.makedirs(preview_dir, exist_ok=True)
+        preview_file = os.path.join(preview_dir, "test.txt")
+        with open(preview_file, "w", encoding="utf-8") as f:
+            f.write("hello world\nline 2\nline 3\n")
+        try:
+            resp = self.client.get("/api/file/preview", params={"path": preview_dir, "file": "test.txt", "lines": 5})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["file"] == "test.txt"
+            assert len(data["lines"]) >= 1
+            assert "hello world" in data["lines"][0]
+        finally:
+            import shutil
+            shutil.rmtree(preview_dir, ignore_errors=True)
+
+    def test_api_file_preview_security(self):
+        """File preview blocks paths outside ./data/"""
+        resp = self.client.get("/api/file/preview", params={"path": "C:/Windows", "file": "system32.dll"})
+        assert resp.status_code == 403
+
+    def test_api_ingest_file_selection(self, tmp_path):
+        """Ingest with file selection only imports selected files"""
+        (tmp_path / "a.jsonl").write_text(
+            json.dumps({"text": "doc from file A", "metadata": {"source": "sel_a"}}) + "\n",
+            encoding="utf-8"
+        )
+        (tmp_path / "b.jsonl").write_text(
+            json.dumps({"text": "doc from file B", "metadata": {"source": "sel_b"}}) + "\n",
+            encoding="utf-8"
+        )
+        # Clear KB first
+        self.client.post("/api/kb/clear")
+        # Import only file A
+        resp = self.client.post("/api/ingest/files", json={
+            "dir": str(tmp_path), "analyze": False, "files": ["a.jsonl"]
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["loaded"] >= 1
+        # Verify only file A was imported
+        status = self.client.get("/api/kb/status").json()
+        assert status["doc_count"] >= 1
+
 
 # ===================== KB Dedup Integration =====================
 
