@@ -26,7 +26,9 @@ This system solves that with **intent-aware routing**: a query like "茅台走�
 | **Hybrid Retrieval** | BM25 + 1024-dim vector embedding + RRF fusion + qwen3-rerank + TextChunker + TextPreprocessor + QueryParser + DataOrchestrator (multi-pool routing) |
 | **Full-Chain Scoring** | Every query ends with `ScoringAgent` — pipeline quality evaluation, hallucination guard, and structured score report |
 | **LLM-Optional** | Heuristic fallback when no API key is configured; mock mode for data sources enables fully offline development |
-| **369 Unit Tests** | All pass in < 5 s, no API key required, regex-fallback for extraction tools |
+| **Modular API** | `financial_rag/api/` package — 4 FastAPI routers (KB, ingest, analysis, query) with async endpoints + shared state management |
+| **Performance** | Background startup init, parallel LLM extraction (ThreadPoolExecutor), efficient KB deletion (no full rebuild), TTL config cache |
+| **507 Unit Tests** | All pass in < 5 s, no API key required, regex-fallback for extraction tools |
 
 ---
 
@@ -105,7 +107,7 @@ Fetch → Index → Process → Output → Evolve
 | Frontend | Vanilla HTML/CSS/JS (dark theme) |
 | Data APIs | Tushare Pro, 10jqka, Sina Finance, EastMoney |
 | Retrieval | Custom BM25 + Vector + RRF fusion + TextChunker + TextPreprocessor + DataOrchestrator + metadata filter |
-| Testing | pytest — 369 tests, regex-fallback for offline operation |
+| Testing | pytest — 507 tests, regex-fallback for offline operation |
 
 ---
 
@@ -150,21 +152,28 @@ python -m pytest tests/ -v
 | Test File | Coverage | Tests |
 |-----------|----------|------:|
 | `test_agent_router.py` | Intent classification, chain selection, metadata extraction | 36 |
-| `test_extraction_tools.py` | 5 extraction tools (regex fallback) + long-article extraction | 34 |
-| `test_new_agents.py` | Coordinator / Analysis / Scoring agents | 29 |
-| `test_mock_data.py` | Mock K-line, news search, financial indicators | 31 |
-| `test_agents.py` | IngestionAgent + AnalysisAgent + full agent chain | 22 |
+| `test_extraction_tools.py` | 5 extraction tools (regex fallback) + long-article extraction | 40 |
+| `test_new_agents.py` | Coordinator / Analysis / Scoring agents | 22 |
+| `test_mock_data.py` | Mock K-line, news search, financial indicators | 24 |
+| `test_agents.py` | IngestionAgent + AnalysisAgent + full agent chain | 14 |
 | `test_new_tools.py` | Scoring / coordinator / report / event_impact tools | 22 |
-| `test_analysis.py` | News analysis + topic research (mock mode) | 22 |
-| `test_analysis_tools.py` | Growth rate, ratio, compare, summarize | 16 |
+| `test_analysis.py` | News analysis + topic research (mock mode) | 24 |
+| `test_analysis_tools.py` | Growth rate, ratio, compare, summarize | 17 |
 | `test_llm_caller.py` | LLMCaller retry, JSON, cache, constraints | 38 |
-| `test_data_orchestrator.py` | DataOrchestrator multi-pool ingest/search/cross-search | 27 |
-| `test_query_parser.py` | QueryParser intent, entity, date extraction | 23 |
+| `test_data_orchestrator.py` | DataOrchestrator multi-pool ingest/search/cross-search | 29 |
+| `test_query_parser.py` | QueryParser intent, entity, date extraction | 36 |
 | `test_factory.py` | 4-agent factory wiring, chain ordering | 12 |
 | `test_orchestrator_merge.py` | Metadata merge, findings extend, scalar replace | 10 |
-| `test_smoke.py` | Web API smoke tests (all endpoints) | 55 |
-| `test_persistence.py` | Index save/load, dedup, backup rotation | 32 |
-| **Total** | | **369** |
+| `test_smoke.py` | Web API smoke tests (all endpoints) | 23 |
+| `test_persistence.py` | Index save/load, dedup, backup rotation | 22 |
+| `test_kline_tools.py` | K-line tool functions | 18 |
+| `test_news_tools.py` | News fetch tool functions | 23 |
+| `test_event_impact_tools.py` | Event impact tool functions | 18 |
+| `test_deep_analysis_tools.py` | Deep analysis tool functions | 12 |
+| `test_coordinator_tools.py` | Coordinator tool functions | 20 |
+| `test_report_tools.py` | Report synthesis tool functions | 23 |
+| `test_tushare_compute.py` | K-line stats, technical indicators (MACD/RSI/KDJ/Bollinger), analyze_kline | 24 |
+| **Total** | | **507** |
 
 Tests mock only data sources — LLM, embedding, and rerank stay real. Extraction tools use regex fallback, so no API key is needed.
 
@@ -227,9 +236,16 @@ financial_rag/
 │   └── caller.py              # LLMCaller: retry + JSON + cache + constraints
 ├── guard/           # Anti-hallucination guard
 │   └── reflector.py           # HallucinationGuard (6-layer check)
+├── api/             # FastAPI modular routers (async endpoints)
+│   ├── app_state.py         # Shared state + lazy init + persistence
+│   ├── models.py            # Pydantic request models
+│   ├── kb_router.py         # KB management + learning endpoints
+│   ├── ingest_router.py     # File/directory browsing + ingestion
+│   ├── analysis_router.py   # Analysis, news, metadata, kline, config
+│   └── query_router.py      # Pipeline, slot fill, scoring
 ├── static/          # Frontend (HTML / CSS / JS, dark theme)
 ├── config.py        # Global configuration (LLM, RAG, Coordinator, Pipeline)
-├── web.py           # FastAPI endpoints
+├── web.py           # FastAPI app wiring + router registration (90 lines)
 └── main.py          # CLI entry (argparse)
 ```
 

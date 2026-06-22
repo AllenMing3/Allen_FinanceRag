@@ -246,6 +246,21 @@ text = caller.call("Generate summary", temperature=0.3)
 
 `HybridRetriever` also applies `TextChunker` (split + overlap + metadata tagging) at index time and metadata filtering at query time.
 
+**Efficient deletion:** `HybridRetriever.remove(indices)` filters out docs + their embeddings and rebuilds only BM25 (cheap), avoiding a full `clear() + index()` cycle when deleting by keyword or source.
+
+## Performance Optimizations
+
+| Optimization | Description | File |
+|-------------|-------------|------|
+| **Background startup** | `_ensure_init()` runs in a background thread via FastAPI `lifespan` — server accepts requests immediately; endpoints still call `_ensure_init()` (idempotent, blocks if not ready) | `web.py` |
+| **Async endpoints** | All endpoints are `async def` with blocking calls wrapped in `asyncio.to_thread()` — FastAPI handles concurrent requests without serialization | `api/*.py` |
+| **Parallel extraction** | `AnalysisAgent._run_extraction_chain()` runs `extract_financial_metrics` + `extract_entities` in parallel via `ThreadPoolExecutor(2)` | `agents/analysis_agent.py` |
+| **Efficient KB deletion** | `HybridRetriever.remove(indices)` filters docs + embeddings, rebuilds only BM25 — no full re-embedding | `retrievers/retriever.py` |
+| **Config TTL cache** | `/api/config` caches result for 60s, avoiding repeated config reads | `api/analysis_router.py` |
+| **HTML cache** | `index.html` read once at startup, served from memory | `web.py` |
+| **Orchestrator retry** | `max_retries=1`, retry delay `0.1s` (was 2 retries, 1s delay) | `core/factory.py`, `core/orchestrator.py` |
+| **Fetch normalization** | Pipeline `_phase_fetch` normalizes all tool results to standard doc format (`title`, `content`, `source`, `publish_time`, `url`) — handles alternate keys (`items` / `results`) | `core/pipeline.py` |
+
 ---
 
 ## Model Routing
@@ -282,7 +297,21 @@ text = caller.call("Generate summary", temperature=0.3)
 | `rss_fetcher.py` | Financial news via domestic APIs (10jqka / Sina / EastMoney) + rate limiting | `search_news`, `fetch_all_news` |
 | `tushare_client.py` | K-line & financial indicators via Tushare Pro | `fetch_stock_kline`, `compute_technical_indicators` |
 | `mock_data.py` | 25 AI-sector mock news + 3 long-form articles | Mock data for offline dev |
-| `web.py` | FastAPI Web UI server — thin shell, delegates to `services/` | FastAPI app, `/api/*` endpoints, background ingestion, signal-based shutdown |
+| `web.py` | FastAPI app wiring + router registration (90 lines) — thin shell that imports 4 routers from `api/` | FastAPI app, lifespan background init, signal-based shutdown |
+
+### `financial_rag/api/` — FastAPI Modular Routers
+
+| File | Role |
+|------|------|
+| `__init__.py` | Package marker |
+| `app_state.py` | Shared singleton state (`_state` dict), lazy `_ensure_init()` with double-check locking, `_persist_state()` |
+| `models.py` | Pydantic request models (QueryRequest, NewsRequest, KlineRequest, etc.) |
+| `kb_router.py` | KB management: status, query, build, clear, delete by source/keyword, learning history/stats |
+| `ingest_router.py` | File preview, directory listing, file/news ingestion with background thread analysis |
+| `analysis_router.py` | Config (TTL cached), news/topic analysis, metadata clear/status, news, kline endpoints |
+| `query_router.py` | Pipeline, slot fill, scoring endpoints |
+
+All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()` for non-blocking event loop.
 
 ### `financial_rag/core/` — Architecture Layer
 
@@ -365,9 +394,9 @@ text = caller.call("Generate summary", temperature=0.3)
 
 | File | Role |
 |------|------|
-| `index.html` | Web UI structure (376 lines) |
-| `styles.css` | Dark theme styling (175 lines) |
-| `app.js` | Frontend logic + API interaction (584 lines) |
+| `index.html` | Web UI structure (302 lines) |
+| `styles.css` | Dark theme styling (155 lines) |
+| `app.js` | Frontend logic + API interaction (737 lines) |
 
 ---
 
@@ -404,7 +433,7 @@ All config in `financial_rag/config.py`. Global instance: `from financial_rag.co
 | Section | Key params | Defaults |
 |---------|-----------|----------|
 | `config.llm` | model, embedding_model, rerank_model, temperature | qwen-plus, text-embedding-v3, qwen3-rerank, 0.0 |
-| `config.coordinator` | execution_mode, max_parallel_agents, max_retries | sequential, 3, 2 |
+| `config.coordinator` | execution_mode, max_parallel_agents, max_retries | sequential, 3, 1 |
 | `config.pipeline` | hybrid_top_k, rrf_k, bm25_weight, vector_weight | 10, 60, 0.3, 0.7 |
 | `config.reflection` | max_retrievals, max_steps, min_confidence | 3, 6, 0.6 |
 

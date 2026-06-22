@@ -108,7 +108,7 @@ Web UI 开启 Mock 模式时会显示橙色提示条。
 ## 4. 测试
 
 ```cmd
-:: 全量（369 tests，无需 API Key）
+:: 全量（507 tests，无需 API Key）
 python -m pytest tests/ -v
 ```
 
@@ -131,6 +131,13 @@ python -m pytest tests/ -v
 | LLM 调用层 | `pytest tests/test_llm_caller.py -v` | LLMCaller 重试、JSON、缓存、约束 |
 | 数据编排器 | `pytest tests/test_data_orchestrator.py -v` | 多池摄入/搜索/跨池检索 |
 | 查询解析器 | `pytest tests/test_query_parser.py -v` | 意图、实体、日期提取 |
+| K线工具 | `pytest tests/test_kline_tools.py -v` | K线获取、技术分析 |
+| 新闻工具 | `pytest tests/test_news_tools.py -v` | 股票新闻、财经新闻、公告 |
+| 事件影响工具 | `pytest tests/test_event_impact_tools.py -v` | 事件获取、影响评估 |
+| 深度分析工具 | `pytest tests/test_deep_analysis_tools.py -v` | 新闻深度、话题深度 |
+| 协调器工具 | `pytest tests/test_coordinator_tools.py -v` | 意图分类、链选择 |
+| 报告工具 | `pytest tests/test_report_tools.py -v` | 报告合成 |
+| Tushare 计算 | `pytest tests/test_tushare_compute.py -v` | K线统计、技术指标、analyze_kline |
 
 > 测试只 mock 数据源，LLM / Embedding / Rerank 保持真实。抽取工具走 regex fallback，无需 API Key。
 
@@ -193,3 +200,7 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 **K线获取失败** — 检查 `.env` 中有 `TUSHARE_TOKEN` 且积分 >= 120。
 
 **详细日志** — 大部分命令加 `-v` 可输出详细过程。
+
+**服务端启动慢** — 首次启动会在后台线程初始化知识库和组件（`_ensure_init()`），服务立即接受请求，若初始化未完成则端点会等待。
+
+**知识库删除后重建索引慢** — 已优化：按关键词/来源删除时使用 `HybridRetriever.remove()` 过滤文档+向量，仅重建 BM25，无需全量重建 embedding。
