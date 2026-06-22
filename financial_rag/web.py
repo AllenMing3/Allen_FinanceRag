@@ -11,6 +11,8 @@ import os
 import sys
 import signal
 import logging
+import threading
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
@@ -20,9 +22,37 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Background startup: run _ensure_init() in a thread so server accepts
+# requests immediately; endpoints still call _ensure_init() (idempotent)
+# which blocks if init isn't done yet.
+# ---------------------------------------------------------------------------
+from financial_rag.api.app_state import _persist_state, _ensure_init, _state  # noqa: re-exported for test_smoke
+
+
+def _background_init():
+    """Run heavy init in background thread"""
+    try:
+        _ensure_init()
+        logger.info("[Startup] Background init completed")
+    except Exception as e:
+        logger.warning(f"[Startup] Background init failed: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start init in background thread on startup
+    t = threading.Thread(target=_background_init, daemon=True)
+    t.start()
+    logger.info("[Startup] Server ready, background init running...")
+    yield
+    # Shutdown: persist state
+    _persist_state()
+
+
+# ---------------------------------------------------------------------------
 # App & static files
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Financial RAG", version="2.0.0")
+app = FastAPI(title="Financial RAG", version="2.0.0", lifespan=lifespan)
 
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(_static_dir, exist_ok=True)
@@ -42,25 +72,19 @@ app.include_router(_analysis_router)
 app.include_router(_query_router)
 
 # ---------------------------------------------------------------------------
-# Shutdown handler
+# Serve frontend (cached HTML)
 # ---------------------------------------------------------------------------
-from financial_rag.api.app_state import _persist_state, _state  # noqa: re-exported for test_smoke
+_index_html = None
 
 
-@app.on_event("shutdown")
-def _on_shutdown():
-    """Persist state on graceful shutdown"""
-    _persist_state()
-
-
-# ---------------------------------------------------------------------------
-# Serve frontend
-# ---------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def index():
-    html_path = os.path.join(_static_dir, "index.html")
-    with open(html_path, "r", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+    global _index_html
+    if _index_html is None:
+        html_path = os.path.join(_static_dir, "index.html")
+        with open(html_path, "r", encoding="utf-8") as f:
+            _index_html = f.read()
+    return HTMLResponse(_index_html)
 
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,9 @@ Endpoints:
 - POST /api/news
 - POST /api/kline
 """
+import asyncio
 import os
+import time
 import logging
 
 from fastapi import APIRouter, HTTPException
@@ -29,16 +31,25 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Simple TTL cache for /api/config (rarely changes)
+_config_cache: dict = {}
+_config_cache_time: float = 0.0
+_CONFIG_TTL = 60.0  # seconds
+
 
 # ===================== Endpoints =====================
 
 
 @router.get("/api/config")
-def api_config():
-    _ensure_init()
+async def api_config():
+    global _config_cache, _config_cache_time
+    await asyncio.to_thread(_ensure_init)
+    now = time.time()
+    if _config_cache and (now - _config_cache_time) < _CONFIG_TTL:
+        return _config_cache
     cfg = _state["cfg"]
     from financial_rag.config import is_mock_enabled
-    return {
+    _config_cache = {
         "llm_model": cfg.llm.model,
         "embedding_model": cfg.llm.embedding_model,
         "rerank_model": cfg.llm.rerank_model,
@@ -46,12 +57,14 @@ def api_config():
         "has_api_key": _state["has_key"],
         "mock_mode": is_mock_enabled(),
     }
+    _config_cache_time = now
+    return _config_cache
 
 
 @router.post("/api/analyze/news")
-def api_analyze_news(req: AnalyzeNewsRequest):
+async def api_analyze_news(req: AnalyzeNewsRequest):
     """Analyze pasted news text: structured extraction + KB context + bullish/bearish verdict"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     from financial_rag.services.analysis import analyze_news_text
 
     text = req.text.strip()
@@ -91,9 +104,9 @@ def api_analyze_news(req: AnalyzeNewsRequest):
 
 
 @router.post("/api/analyze/topic")
-def api_analyze_topic(req: AnalyzeTopicRequest):
+async def api_analyze_topic(req: AnalyzeTopicRequest):
     """Topic research: fetch news + query KB + LLM comprehensive assessment"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     from financial_rag.services.analysis import analyze_topic_research
 
     topic = req.topic.strip()
@@ -134,9 +147,9 @@ def api_analyze_topic(req: AnalyzeTopicRequest):
 
 
 @router.post("/api/metadata/clear")
-def api_metadata_clear():
+async def api_metadata_clear():
     """Clear collected news metadata"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     with _state_lock:
         _state["meta_store"] = []
         _save_meta([])
@@ -144,9 +157,9 @@ def api_metadata_clear():
 
 
 @router.get("/api/metadata/status")
-def api_metadata_status():
+async def api_metadata_status():
     """News metadata status"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     meta = _state.get("meta_store", [])
     keywords = {}
     for m in meta:
@@ -161,8 +174,8 @@ def api_metadata_status():
 
 
 @router.post("/api/news")
-def api_news(req: NewsRequest):
-    _ensure_init()
+async def api_news(req: NewsRequest):
+    await asyncio.to_thread(_ensure_init)
     from financial_rag.tools.news_tools import run_news_pipeline
 
     data = run_news_pipeline(
@@ -222,9 +235,9 @@ def api_news(req: NewsRequest):
 
 
 @router.post("/api/kline")
-def api_kline(req: KlineRequest):
+async def api_kline(req: KlineRequest):
     """K线技术分析 — 按需查询，不进知识库"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     from financial_rag.core.base import AgentContext
     from financial_rag.agents.analysis_agent import AnalysisAgent
 

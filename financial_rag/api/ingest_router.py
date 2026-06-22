@@ -8,6 +8,7 @@ Endpoints:
 - GET  /api/ingest/progress
 - POST /api/ingest/news
 """
+import asyncio
 import os
 import time
 import logging
@@ -38,7 +39,7 @@ _KNOWN_DIRS = [
 
 
 @router.get("/api/file/preview")
-def api_file_preview(path: str = "", file: str = "", lines: int = 20):
+async def api_file_preview(path: str = "", file: str = "", lines: int = 20):
     """Preview first N lines of a file in a known directory.
 
     Args:
@@ -72,7 +73,7 @@ def api_file_preview(path: str = "", file: str = "", lines: int = 20):
 
 
 @router.get("/api/directories")
-def api_directories():
+async def api_directories():
     """Scan known data directories and return file listings"""
     import json as _json
 
@@ -128,13 +129,13 @@ def api_directories():
 
 
 @router.post("/api/ingest/files")
-def api_ingest_files(req: IngestFilesRequest):
+async def api_ingest_files(req: IngestFilesRequest):
     """Load and optionally analyze documents from a directory into the KB.
 
     File reading is synchronous. Heavy LLM analysis runs in background thread.
     Poll GET /api/ingest/progress for status.
     """
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     import json
 
     if _ingest_progress.get("running"):
@@ -316,15 +317,15 @@ def _run_ingest_analysis(raw_docs):
 
 
 @router.get("/api/ingest/progress")
-def api_ingest_progress():
+async def api_ingest_progress():
     """Poll background ingestion progress."""
     return dict(_ingest_progress)
 
 
 @router.post("/api/ingest/news")
-def api_ingest_news(req: IngestNewsRequest):
+async def api_ingest_news(req: IngestNewsRequest):
     """Fetch news and store as metadata only (NOT added to KB)"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     from financial_rag.tools.news_tools import run_news_pipeline
 
     logger.info(f"[API] /ingest/news: query={req.query!r}, max_news={req.max_news}")

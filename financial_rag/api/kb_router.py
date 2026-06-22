@@ -14,6 +14,7 @@ Endpoints:
 
 Also contains _save_analysis_to_kb helper used by analysis_router.
 """
+import asyncio
 import os
 import time
 import logging
@@ -96,9 +97,9 @@ def _save_analysis_to_kb(topic: str, assessment: str, analysis: str, analysis_ty
 
 
 @router.get("/api/kb/status")
-def api_kb_status():
+async def api_kb_status():
     """KB status: path, doc count, built state"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     docs = _state.get("kb_docs", [])
     # Source breakdown
     sources = {}
@@ -121,9 +122,9 @@ def api_kb_status():
 
 
 @router.post("/api/kb-query")
-def api_kb_query(req: QueryRequest):
+async def api_kb_query(req: QueryRequest):
     """Query against the built KB with full source citation"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     logger.info(f"[API] /kb-query: query={req.query!r}, top_k={req.top_k}")
     from financial_rag.core.scorer import PipelineScoreCard, ScoreGrade
     from financial_rag.guard.reflector import HallucinationGuard
@@ -214,9 +215,9 @@ def api_kb_query(req: QueryRequest):
 
 
 @router.post("/api/build")
-def api_build_kb(req: BuildRequest):
+async def api_build_kb(req: BuildRequest):
     """Build index from accumulated KB documents"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     documents = req.documents or _state.get("kb_docs", [])
     if not documents:
         raise HTTPException(400, "没有文档可索引，请先摄取数据")
@@ -265,9 +266,9 @@ def api_build_kb(req: BuildRequest):
 
 
 @router.post("/api/kb/clear")
-def api_kb_clear():
+async def api_kb_clear():
     """Clear the KB: remove all docs from memory and disk"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     from financial_rag.api.app_state import _ingest_progress
     with _state_lock:
         _state["kb_docs"] = []
@@ -285,32 +286,34 @@ def api_kb_clear():
 
 
 @router.delete("/api/kb/source/{source_name}")
-def api_kb_remove_source(source_name: str):
+async def api_kb_remove_source(source_name: str):
     """Remove all KB docs matching a given source name"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     with _state_lock:
-        before = len(_state["kb_docs"])
-        _state["kb_docs"] = [
-            d for d in _state["kb_docs"]
-            if d.get("meta", {}).get("source", "unknown") != source_name
-        ]
-        removed = before - len(_state["kb_docs"])
+        # Collect indices to remove
+        remove_indices = []
+        keep_docs = []
+        for i, d in enumerate(_state["kb_docs"]):
+            if d.get("meta", {}).get("source", "unknown") == source_name:
+                remove_indices.append(i)
+            else:
+                keep_docs.append(d)
+        removed = len(remove_indices)
         if removed > 0:
+            _state["kb_docs"] = keep_docs
             _save_kb(_state["kb_docs"])
-            # Rebuild index if it was built
+            # Efficient remove: filter docs + embeddings, rebuild BM25 only
             if _state.get("kb_built") and _state["kb_docs"]:
                 try:
-                    _state["retriever"].clear()
-                    _state["retriever"].index(_state["kb_docs"], precompute_embeddings=True)
+                    _state["retriever"].remove(remove_indices)
                     _state["retriever"].save_index(_INDEX_PATH)
-                    logger.info(f"[KB] 索引已重建并保存 (删除 {source_name} 后, {len(_state['kb_docs'])} 篇)")
+                    logger.info(f"[KB] 索引已更新 (删除 {source_name} 后, {len(_state['kb_docs'])} 篇)")
                 except Exception as e:
                     _state["kb_built"] = False
-                    logger.warning(f"[KB] 索引重建失败: {e}")
+                    logger.warning(f"[KB] 索引更新失败: {e}")
             elif not _state["kb_docs"]:
                 _state["retriever"].clear()
                 _state["kb_built"] = False
-                # Remove stale index file
                 import os as _os
                 if _os.path.exists(_INDEX_PATH):
                     _os.remove(_INDEX_PATH)
@@ -321,9 +324,9 @@ def api_kb_remove_source(source_name: str):
 
 
 @router.get("/api/kb/search")
-def api_kb_search(keyword: str = "", limit: int = 50):
+async def api_kb_search(keyword: str = "", limit: int = 50):
     """Search KB docs by keyword — preview before deletion"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     docs = _state.get("kb_docs", [])
     logger.info(f"[API] /api/kb/search: keyword={keyword!r}, total_docs={len(docs)}")
     if not keyword:
@@ -346,29 +349,32 @@ def api_kb_search(keyword: str = "", limit: int = 50):
 
 
 @router.delete("/api/kb/keyword/{keyword}")
-def api_kb_remove_keyword(keyword: str):
+async def api_kb_remove_keyword(keyword: str):
     """Remove all KB docs whose text contains the keyword"""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     kw = keyword.lower()
     with _state_lock:
-        before = len(_state["kb_docs"])
-        _state["kb_docs"] = [
-            d for d in _state["kb_docs"]
-            if kw not in d.get("text", "").lower()
-            and kw not in d.get("meta", {}).get("source", "").lower()
-        ]
-        removed = before - len(_state["kb_docs"])
+        # Collect indices to remove
+        remove_indices = []
+        keep_docs = []
+        for i, d in enumerate(_state["kb_docs"]):
+            if kw in d.get("text", "").lower() or kw in d.get("meta", {}).get("source", "").lower():
+                remove_indices.append(i)
+            else:
+                keep_docs.append(d)
+        removed = len(remove_indices)
         if removed > 0:
+            _state["kb_docs"] = keep_docs
             _save_kb(_state["kb_docs"])
+            # Efficient remove: filter docs + embeddings, rebuild BM25 only
             if _state.get("kb_built") and _state["kb_docs"]:
                 try:
-                    _state["retriever"].clear()
-                    _state["retriever"].index(_state["kb_docs"], precompute_embeddings=True)
+                    _state["retriever"].remove(remove_indices)
                     _state["retriever"].save_index(_INDEX_PATH)
-                    logger.info(f"[KB] 索引已重建并保存 (删除关键词 {keyword!r} 后, {len(_state['kb_docs'])} 篇)")
+                    logger.info(f"[KB] 索引已更新 (删除关键词 {keyword!r} 后, {len(_state['kb_docs'])} 篇)")
                 except Exception as e:
                     _state["kb_built"] = False
-                    logger.warning(f"[KB] 索引重建失败: {e}")
+                    logger.warning(f"[KB] 索引更新失败: {e}")
             elif not _state["kb_docs"]:
                 _state["retriever"].clear()
                 _state["kb_built"] = False
@@ -382,18 +388,18 @@ def api_kb_remove_keyword(keyword: str):
 
 
 @router.get("/api/kb/history")
-def api_kb_history():
+async def api_kb_history():
     """Return learning history from the dedicated log (newest first), plus stats summary."""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     history = _load_learning_history(limit=50)
     stats = _load_stats()
     return {"count": len(history), "history": history, "stats": stats}
 
 
 @router.get("/api/learning/stats")
-def api_learning_stats():
+async def api_learning_stats():
     """KB learning statistics: analysis counts, verdict breakdown, doc counts, version."""
-    _ensure_init()
+    await asyncio.to_thread(_ensure_init)
     stats = _load_stats()
     # Enrich with live counts
     docs = _state.get("kb_docs", [])

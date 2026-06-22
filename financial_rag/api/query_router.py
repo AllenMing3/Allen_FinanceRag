@@ -6,6 +6,7 @@ Endpoints:
 - POST /api/slot
 - POST /api/score
 """
+import asyncio
 import time
 import logging
 
@@ -24,8 +25,8 @@ router = APIRouter()
 
 
 @router.post("/api/pipeline")
-def api_pipeline(req: QueryRequest):
-    _ensure_init()
+async def api_pipeline(req: QueryRequest):
+    await asyncio.to_thread(_ensure_init)
     logger.info(f"[API] /pipeline: query={req.query!r}, template={req.template}, verbose={req.verbose}")
     if not _state["has_key"]:
         raise HTTPException(400, "Pipeline 需要 DASHSCOPE_API_KEY")
@@ -75,8 +76,8 @@ def api_pipeline(req: QueryRequest):
 
 
 @router.post("/api/slot")
-def api_slot(req: SlotRequest):
-    _ensure_init()
+async def api_slot(req: SlotRequest):
+    await asyncio.to_thread(_ensure_init)
     if not _state["has_key"]:
         raise HTTPException(400, "槽位填充需要 DASHSCOPE_API_KEY")
 
@@ -149,8 +150,8 @@ def api_slot(req: SlotRequest):
 
 
 @router.post("/api/score")
-def api_score(req: ScoreRequest):
-    _ensure_init()
+async def api_score(req: ScoreRequest):
+    await asyncio.to_thread(_ensure_init)
     r = _state["retriever"]
     if not _state.get("kb_built"):
         docs = _state.get("kb_docs", [])

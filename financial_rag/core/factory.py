@@ -54,7 +54,7 @@ def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
         CoordinatorConfig(
             execution_mode=ExecutionMode.SEQUENTIAL,
             verbose=True,
-            max_retries=2,
+            max_retries=1,
         )
     )
     # 注册所有 Agent（不设置默认 pipeline，由 AgentRouter 动态决定）

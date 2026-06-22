@@ -288,6 +288,22 @@ class HybridRetriever:
         results = self.search(query, top_k=top_k, use_rerank=use_rerank, scorecard=card)
         return results, card
 
+    def remove(self, indices: List[int]):
+        """Remove documents by index positions without rebuilding embeddings.
+
+        Filters out docs + their embeddings, then rebuilds BM25 (cheap).
+        """
+        if not indices:
+            return
+        remove_set = set(indices)
+        self.documents = [d for i, d in enumerate(self.documents) if i not in remove_set]
+        if self.doc_embeddings is not None:
+            self.doc_embeddings = [
+                emb for i, emb in enumerate(self.doc_embeddings) if i not in remove_set
+            ]
+        self._bm25.build(self.documents)
+        logger.info(f"HybridRetriever: removed {len(remove_set)} docs, {len(self.documents)} remaining")
+
     def clear(self):
         """清空索引"""
         self.documents = []

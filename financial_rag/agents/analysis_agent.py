@@ -13,6 +13,7 @@ Agent 只做编排决策，所有重活委托给 tools。
 import re
 import logging
 from typing import Dict, Any, List, Optional
+from concurrent.futures import ThreadPoolExecutor
 
 from financial_rag.core.base import BaseAgent, AgentContext, AgentResult
 from financial_rag.tools.kline_tools import STOCK_MAP
@@ -268,7 +269,7 @@ class AnalysisAgent(BaseAgent):
     # ===================== 抽取 + 报告工具链 =====================
 
     def _run_extraction_chain(self, context: AgentContext) -> Dict:
-        """抽取: extract_metrics + extract_entities + generate_queries"""
+        """抽取: extract_metrics + extract_entities in parallel, then generate_queries"""
         documents = context.parsed_data or []
         if not documents:
             # 尝试从 intermediate_findings 获取
@@ -284,21 +285,31 @@ class AnalysisAgent(BaseAgent):
             return {"metrics": {}, "entities": {}, "queries": [],
                     "documents": documents, "stage": "extraction"}
 
-        # 指标抽取
+        # Parallel: extract metrics + entities simultaneously
         metrics = {}
-        try:
-            metrics = self.call_tool("extract_financial_metrics", text=combined_text)
-        except Exception as e:
-            logger.warning(f"指标抽取失败: {e}")
-
-        # 实体抽取
         entities = {}
-        try:
-            entities = self.call_tool("extract_entities", text=combined_text)
-        except Exception as e:
-            logger.warning(f"实体抽取失败: {e}")
 
-        # 查询生成
+        def _extract_metrics():
+            try:
+                return self.call_tool("extract_financial_metrics", text=combined_text)
+            except Exception as e:
+                logger.warning(f"指标抽取失败: {e}")
+                return {}
+
+        def _extract_entities():
+            try:
+                return self.call_tool("extract_entities", text=combined_text)
+            except Exception as e:
+                logger.warning(f"实体抽取失败: {e}")
+                return {}
+
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            f_metrics = ex.submit(_extract_metrics)
+            f_entities = ex.submit(_extract_entities)
+            metrics = f_metrics.result()
+            entities = f_entities.result()
+
+        # Sequential: generate queries (needs metrics + entities)
         queries = []
         try:
             queries = self.call_tool(

@@ -232,7 +232,7 @@ class AgentOrchestrator:
                 break
             except Exception:
                 if retry < self.config.max_retries:
-                    time.sleep(1)
+                    time.sleep(0.1)
                 else:
                     result = AgentResult(
                         success=False,

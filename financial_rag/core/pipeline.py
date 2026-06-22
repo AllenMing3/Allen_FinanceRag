@@ -203,14 +203,35 @@ class PipelineScheduler:
 
             result.tool_call_stats = stats
 
-            # 提取获取到的原始数据
+            # 提取获取到的原始数据，归一化为标准文档格式
             for call in stats.calls:
-                if call.success and call.name.startswith("fetch_"):
-                    data = call.result
-                    if isinstance(data, dict):
-                        items = data.get("items", [])
-                        result.fetched_data.extend(items)
-                        result.fetch_result = data
+                if not call.success:
+                    continue
+                data = call.result
+                if not isinstance(data, dict):
+                    continue
+                result.fetch_result = data
+                # Normalize: tools may return data under different keys
+                items = data.get("items") or data.get("results") or []
+                if not isinstance(items, list):
+                    continue
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    # Ensure standard fields exist (title, content, source, publish_time, url)
+                    doc = {
+                        "title": item.get("title", ""),
+                        "content": item.get("content", "") or item.get("text", ""),
+                        "source": item.get("source", call.name),
+                        "publish_time": item.get("publish_time", ""),
+                        "url": item.get("url", ""),
+                    }
+                    # Keep extra fields for downstream use
+                    for k, v in item.items():
+                        if k not in doc:
+                            doc[k] = v
+                    if doc["title"] or doc["content"]:
+                        result.fetched_data.append(doc)
 
             if self.config.verbose:
                 print(
