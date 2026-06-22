@@ -385,10 +385,6 @@ async function runKBQuery() {
       d.news_context.forEach(n => { h += `<div class="news-item"><h4>${escHtml(n.title)}</h4><div class="meta">${escHtml(n.source)} · ${escHtml(n.publish_time)}</div></div>`; });
       h += '</div>';
     }
-    if (d.fill_stats) {
-      const fs = d.fill_stats;
-      h += `<div class="stats"><div class="stat">槽位 <strong>${fs.filled_slots}/${fs.total_slots}</strong></div><div class="stat">TTFT <strong>${fs.avg_ttft_ms}ms</strong></div><div class="stat">并行 <strong>${fs.parallel_gain}%</strong></div><div class="stat">耗时 <strong>${fs.elapsed_ms}ms</strong></div></div>`;
-    }
     document.getElementById('query-result').innerHTML = h;
     document.getElementById('queryCount').textContent = (parseInt(document.getElementById('queryCount').textContent) || 0) + 1;
   } catch(e) { document.getElementById('query-result').innerHTML = `<div class="card"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`; }
@@ -396,23 +392,6 @@ async function runKBQuery() {
 }
 
 // ===== STEP 4: Tools =====
-async function runNewsTool() {
-  const q = document.getElementById('tool-news-q').value.trim();
-  if (!q) return;
-  try {
-    const d = await api('/api/news', { query: q, summarize: true });
-    let h = `<div class="stats"><div class="stat">关键词 <strong>${escHtml(d.keyword)}</strong></div><div class="stat">数量 <strong>${d.total_found}</strong></div>`;
-    if (d.meta_stored > 0) h += `<div class="stat"><span class="tag tag-ok">✓ ${d.meta_stored} 条元数据</span> (累计 ${d.meta_total})</div>`;
-    h += '</div>';
-    updateMetaStatus(d.meta_total);
-    if (d.summary) h += `<div class="card" style="margin-top:8px"><h3>AI 摘要</h3><div style="font-size:13px;line-height:1.6">${escHtml(d.summary)}</div></div>`;
-    if (d.headlines && d.headlines.length) {
-      d.headlines.slice(0, 8).forEach(item => { h += `<div class="news-item"><h4>${escHtml(item.title)}</h4><div class="meta">${escHtml(item.source)} · ${escHtml(item.publish_time)}</div></div>`; });
-    }
-    document.getElementById('tool-news-result').innerHTML = h;
-  } catch(e) { document.getElementById('tool-news-result').innerHTML = `<span class="tag tag-fail">${escHtml(e.message)}</span>`; }
-}
-
 async function runKlineTool() {
   const q = document.getElementById('tool-kline-q').value.trim();
   if (!q) return;
@@ -434,32 +413,6 @@ async function runKlineTool() {
     if (d.analysis) h += `<div style="margin-top:12px;padding:10px;background:var(--bg);border-radius:6px;font-size:13px;line-height:1.7;white-space:pre-wrap">${escHtml(d.analysis)}</div>`;
     resultDiv.innerHTML = h;
   } catch(e) { resultDiv.innerHTML = `<span class="tag tag-fail">${escHtml(e.message)}</span>`; }
-}
-
-async function runSlotTool() {
-  const q = document.getElementById('tool-slot-q').value.trim();
-  if (!q) return;
-  try {
-    const d = await api('/api/slot', { query: q, template: document.getElementById('tool-slot-tpl').value });
-    const sf = d.slot_fill;
-    document.getElementById('tool-slot-result').innerHTML = `<div class="stats"><div class="stat">槽位 <strong>${sf.filled_slots}/${sf.total_slots}</strong></div><div class="stat">耗时 <strong>${sf.elapsed_ms}ms</strong></div></div><div class="result" style="margin-top:8px;font-size:13px">${escHtml(sf.rendered)}</div>`;
-  } catch(e) { document.getElementById('tool-slot-result').innerHTML = `<span class="tag tag-fail">${escHtml(e.message)}</span>`; }
-}
-
-async function runScoreTool() {
-  const q = document.getElementById('tool-score-q').value.trim();
-  if (!q) return;
-  try {
-    const d = await api('/api/score', { query: q, top_k: 5 });
-    let h = '';
-    if (d.scorecard && d.scorecard.stages) {
-      h += '<div class="pipeline-stages" style="padding:8px">';
-      d.scorecard.stages.forEach(s => { const pct = (s.score*100).toFixed(0); h += `<div class="stage-item"><div class="stage-name" style="font-size:10px">${s.name}</div><div class="stage-time" style="font-size:12px;color:${scoreColor(s.score)}">${pct}%</div></div>`; });
-      h += '</div>';
-    }
-    if (d.results) d.results.forEach(r => { h += `<div style="font-size:12px;margin-top:4px;color:${scoreColor(r.score)}">[${r.score.toFixed(3)}] ${escHtml(r.text.slice(0,80))}</div>`; });
-    document.getElementById('tool-score-result').innerHTML = h;
-  } catch(e) { document.getElementById('tool-score-result').innerHTML = `<span class="tag tag-fail">${escHtml(e.message)}</span>`; }
 }
 
 // ===== STEP 5: Smart Analysis =====

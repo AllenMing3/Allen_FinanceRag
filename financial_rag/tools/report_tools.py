@@ -104,8 +104,9 @@ def synthesize_report(
         if isinstance(report_json, dict) and report_json.get("summary"):
             from financial_rag.guard.reflector import HallucinationGuard
             guard = HallucinationGuard()
-            source_texts = [s.get("text", "")[:200] for s in sources if isinstance(s, dict)]
-            check_result = guard.precheck(report_json["summary"], source_texts)
+            # precheck expects List[Dict] with "text" key — pass source dicts, not strings
+            source_dicts = [s for s in sources if isinstance(s, dict)]
+            check_result = guard.precheck(report_json["summary"], source_dicts)
     
         return {
             "report": report_json,

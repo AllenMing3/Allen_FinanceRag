@@ -156,7 +156,7 @@
         <h3 style="margin:0">📰 新闻抓取</h3>
         <span class="tag tag-warn" style="font-size:11px">→ 元数据 · 不进入知识库</span>
       </div>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">从同花顺 / 新浪 / 东方财富拉取实时新闻，仅作为查询时的上下文补充</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">从同花顺 / 新浪 / 东方财富拉取实时新闻标题，存入元数据供查询时作为上下文补充。<strong style="color:var(--text2)">不做分析，不进入知识库。</strong></p>
       <div class="form-row">
         <input class="input" id="ingest-news-q" placeholder="主题: AI、茅台、降准..." />
         <select class="input" id="ingest-news-count" style="flex:none;width:80px">
@@ -232,8 +232,8 @@
   <!-- ========== STEP 5: SMART ANALYSIS ========== -->
   <div class="panel" id="panel-analyze">
     <div class="card" style="margin-bottom:20px">
-      <h3>📰 新闻解读 <span class="tag tag-info" style="font-size:11px;margin-left:4px">粘贴新闻 → 结构化解析 → 利好利空研判</span></h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">粘贴一段新闻，系统会：<strong style="color:var(--accent)">① 抽取指标和实体</strong> → <strong style="color:var(--accent)">② 结合 KB 上下文</strong> → <strong style="color:var(--accent)">③ 给出利好/利空/中性</strong></p>
+      <h3>📰 新闻解读 <span class="tag tag-info" style="font-size:11px;margin-left:4px">粘贴新闻全文 → 结构化解析 → 利好利空研判</span></h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">粘贴一段新闻全文，系统会：<strong style="color:var(--accent)">① 抽取指标和实体</strong> → <strong style="color:var(--accent)">② 结合知识库上下文</strong> → <strong style="color:var(--accent)">③ 给出利好/利空/中性研判</strong>（与“新闻抓取”不同：这里分析全文内容，不是只拉标题）</p>
       <textarea class="input" id="analyze-news-text" rows="5" placeholder="粘贴新闻全文..." style="width:100%;min-height:100px;resize:vertical;font-size:13px;line-height:1.6"></textarea>
       <div class="form-row" style="margin-top:10px">
         <input class="input" id="analyze-news-q" placeholder="补充说明（可选）" />
@@ -268,15 +268,6 @@
   <div class="panel" id="panel-tools">
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="source-card">
-        <h3><span class="icon">📰</span> 新闻搜索 <span class="tag tag-warn" style="font-size:11px;margin-left:4px">元数据收集</span></h3>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">抓取实时新闻标题，作为查询时的上下文补充（不进入知识库）</p>
-        <div class="form-row">
-          <input class="input" id="tool-news-q" placeholder="搜索主题" />
-          <button class="btn btn-primary btn-sm" onclick="runNewsTool()">搜索</button>
-        </div>
-        <div id="tool-news-result" style="max-height:400px;overflow-y:auto"></div>
-      </div>
-      <div class="source-card">
         <h3><span class="icon">📈</span> K线技术分析 <span class="tag tag-info" style="font-size:11px;margin-left:4px">AnalysisAgent</span></h3>
         <p style="font-size:12px;color:var(--text2);margin-bottom:10px">技术指标分析：MACD / RSI / KDJ / 布林带，支持日K/周K</p>
         <div class="form-row">
@@ -290,27 +281,6 @@
           <button class="btn btn-primary btn-sm" onclick="runKlineTool()">分析</button>
         </div>
         <div id="tool-kline-result" style="max-height:500px;overflow-y:auto"></div>
-      </div>
-      <div class="source-card">
-        <h3><span class="icon">🧩</span> 槽位填充 <span class="tag tag-info" style="font-size:11px;margin-left:4px">SlotFiller</span></h3>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">模板化结构化报告生成，通过 LLM 并行填充各槽位</p>
-        <div class="form-row">
-          <input class="input" id="tool-slot-q" placeholder="查询" />
-          <select class="input" id="tool-slot-tpl" style="flex:none;width:120px">
-            <option value="quick_qa">Quick QA</option><option value="financial_report">Financial</option><option value="deep_analysis">Deep</option>
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="runSlotTool()">填充</button>
-        </div>
-        <div id="tool-slot-result" style="max-height:400px;overflow-y:auto"></div>
-      </div>
-      <div class="source-card">
-        <h3><span class="icon">📊</span> 检索链路诊断 <span class="tag tag-info" style="font-size:11px;margin-left:4px">ScoreCard</span></h3>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">纯检索质量诊断：BM25 + Vector + RRF 融合分数 + 各阶段评分</p>
-        <div class="form-row">
-          <input class="input" id="tool-score-q" placeholder="查询 (纯检索打分)" />
-          <button class="btn btn-primary btn-sm" onclick="runScoreTool()">打分</button>
-        </div>
-        <div id="tool-score-result" style="max-height:400px;overflow-y:auto"></div>
       </div>
     </div>
   </div>
