@@ -663,16 +663,15 @@ async function refreshLearningHistory() {
     let h = `<div style="font-size:12px;color:var(--text2);margin-bottom:10px">已积累 <strong>${d.count}</strong> 条分析结论</div>`;
     h += '<div style="display:flex;flex-direction:column;gap:8px">';
     for (const item of d.history) {
-      const type = item.source.startsWith('analysis:news') ? '📰 新闻解读' : '🔍 话题调研';
-      const verdictColor = item.assessment.includes('利好') ? '#0d8a3e' : item.assessment.includes('利空') ? '#d93025' : '#666';
-      const topic = item.source.replace(/^analysis:(news|topic):/, '');
+      const type = (item.analysis_type || '').startsWith('news') ? '📰 新闻解读' : '🔍 话题调研';
+      const verdictColor = (item.assessment || '').includes('利好') ? '#0d8a3e' : (item.assessment || '').includes('利空') ? '#d93025' : '#666';
+      const topic = item.topic || '未知话题';
       h += `<div style="padding:10px 12px;background:var(--bg2);border-radius:8px;font-size:13px">`;
       h += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">`;
       h += `<span style="font-weight:600">${type}：${escHtml(topic)}</span>`;
-      h += `<span style="font-size:11px;color:${verdictColor};font-weight:600">${escHtml(item.assessment)}</span>`;
+      h += `<span style="font-size:11px;color:${verdictColor};font-weight:600">${escHtml(item.assessment || '')}</span>`;
       h += `</div>`;
-      h += `<div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.preview.slice(0, 120))}</div>`;
-      h += `<div style="font-size:10px;color:var(--text2);margin-top:4px">⏱️ ${escHtml(item.timestamp)}</div>`;
+      h += `<div style="font-size:10px;color:var(--text2);margin-top:4px">⏱️ ${escHtml(item.timestamp || '')}</div>`;
       h += `</div>`;
     }
     h += '</div>';
