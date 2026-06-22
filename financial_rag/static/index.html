@@ -44,35 +44,35 @@
         <h3 style="font-size:14px;color:var(--accent2);margin-bottom:6px">📐 4-Agent 多智能体 RAG 系统</h3>
         <p style="font-size:12px;color:var(--text2);margin:0;line-height:1.7">
           用户查询 → <strong>CoordinatorAgent</strong> 分类意图 → <strong>IngestionAgent</strong> 摄取数据 / <strong>AnalysisAgent</strong> 分析抽取 → <strong>ScoringAgent</strong> 质量校验<br>
-          所有 LLM 调用经 LLMCaller 保护层（重试 + 缓存 + JSON 约束），检索走 HybridRetriever（BM25 + Vector + RRF 融合）
+          所有 Agent 只做编排决策，重活委托给 Function Calling 工具。LLM 调用经 LLMCaller 保护层（重试 + 缓存 + JSON 约束），检索走 HybridRetriever（BM25 + Vector + RRF 融合）
         </p>
       </div>
 
-      <!-- Core Agent Chain -->
+      <!-- Agent Chain -->
       <div>
-        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">CORE AGENT CHAIN</h3>
+        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">AGENT CHAIN — 意图驱动的多 Agent 调度</h3>
         <div class="agent-row">
           <div class="agent-card">
             <span class="agent-phase tag tag-info">Step 1</span>
             <div class="agent-icon">🧭</div>
             <div class="agent-name">CoordinatorAgent</div>
-            <div class="agent-role">意图分类 + Agent 链选择。解析用户查询，识别意图（kline / event / report / general），选择对应执行链。</div>
-            <div class="agent-io"><strong>输入:</strong> 用户查询<br><strong>输出:</strong> intent + agent_chain + 路由元数据</div>
+            <div class="agent-role">意图分类 + Agent 链选择。解析用户查询，识别 5 种意图（kline / event_impact / report / news / general），选择对应执行链。</div>
+            <div class="agent-io"><strong>工具:</strong> classify_query_intent, select_agent_chain<br><strong>输出:</strong> intent + agent_chain + 路由元数据</div>
           </div>
           <div class="agent-arrow">→</div>
           <div class="agent-card">
             <span class="agent-phase tag tag-ok">Step 2</span>
             <div class="agent-icon">📥</div>
             <div class="agent-name">IngestionAgent</div>
-            <div class="agent-role">数据加载与预处理。解析 JSONL/TXT/JSON 文件，调用 TextPreprocessor 清洗、切片、相关性过滤、文档分类。</div>
-            <div class="agent-io"><strong>输入:</strong> 原始文本/文件路径<br><strong>输出:</strong> 标准化文档 + 元数据</div>
+            <div class="agent-role">数据加载与预处理。JSONL/TXT/JSON 摄取 + TextPreprocessor 清洗切片 + 相关性过滤 + DataOrchestrator 并行编排。</div>
+            <div class="agent-io"><strong>工具:</strong> extract_document_metadata, detect_document_type<br><strong>输出:</strong> 标准化文档 + 元数据</div>
           </div>
           <div class="agent-arrow">→</div>
           <div class="agent-card" style="border-color:#7c3aed">
             <span class="agent-phase" style="background:rgba(124,58,237,.15);color:#7c3aed;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">Step 3</span>
             <div class="agent-icon">🧠</div>
             <div class="agent-name">AnalysisAgent</div>
-            <div class="agent-role">统一分析引擎。按 intent 路由：指标抽取 + 实体识别 + K线技术分析 + 事件影响评估 + 报告生成。</div>
+            <div class="agent-role">统一分析引擎。按 intent 路由工具链：<br>• kline → analyze_kline + generate_kline_analysis<br>• event_impact → fetch_date_events + assess_event_impact<br>• report/news → extract_metrics + extract_entities<br>• 最终统一调用 synthesize_report</div>
             <div class="agent-io"><strong>输入:</strong> 路由任务 + 上下文文档<br><strong>输出:</strong> metrics / entities / report / kline_analysis</div>
           </div>
           <div class="agent-arrow">→</div>
@@ -81,8 +81,34 @@
             <div class="agent-icon">🛡️</div>
             <div class="agent-name">ScoringAgent</div>
             <div class="agent-role">质量校验与幻觉防护。HallucinationGuard 6 层校验 + PipelineScoreCard 各阶段打分。</div>
-            <div class="agent-io"><strong>输入:</strong> 分析结果 + 来源文档<br><strong>输出:</strong> 评分报告 + 引用验证 + 最终回答</div>
+            <div class="agent-io"><strong>工具:</strong> evaluate_pipeline_quality, check_hallucination, generate_score_report<br><strong>输出:</strong> 评分报告 + 引用验证 + 最终回答</div>
           </div>
+        </div>
+      </div>
+
+      <!-- Routing chains -->
+      <div style="margin-top:16px;padding:12px 16px;background:var(--bg2);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.8">
+        <strong style="color:var(--text1)">🔀 路由链 (AgentRouter)</strong><br>
+        <code>kline</code> → [AnalysisAgent, ScoringAgent] &nbsp;|&nbsp;
+        <code>event_impact</code> → [AnalysisAgent, ScoringAgent]<br>
+        <code>report</code> / <code>news</code> / <code>general</code> → [IngestionAgent, AnalysisAgent, ScoringAgent]<br>
+        <span style="color:var(--text2)">置信度 &lt; 0.4 时自动前置 IngestionAgent 做数据预处理</span>
+      </div>
+
+      <!-- Pipeline (standalone) -->
+      <div style="margin-top:16px;padding:12px 16px;background:var(--bg2);border-radius:8px">
+        <h3 style="font-size:13px;color:var(--text1);margin-bottom:8px">⚙️ 5-Phase Pipeline（/api/pipeline 独立路径）</h3>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px">
+          <span class="df-node df-data">Query</span><span class="df-arrow">→</span>
+          <span class="df-node df-agent">① Fetch</span><span class="df-arrow">→</span>
+          <span class="df-node df-agent">② Index</span><span class="df-arrow">→</span>
+          <span class="df-node df-agent">③ Process</span><span class="df-arrow">→</span>
+          <span class="df-node df-agent">④ Output</span><span class="df-arrow">→</span>
+          <span class="df-node df-agent">⑤ Evolve</span><span class="df-arrow">→</span>
+          <span class="df-node df-data">Response</span>
+        </div>
+        <div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.6">
+          Fetch=新闻元数据拉取 · Index=HybridRetriever 检索 · Process=LLM 分析抽取 · Output=SlotFiller 结构化 · Evolve=ScoreCard 评分
         </div>
       </div>
 
