@@ -189,8 +189,9 @@ class TestAnalysisHelpers:
 
     def test_heuristic_assessment_positive(self):
         from financial_rag.services.analysis import _heuristic_assessment
+        text = "公司营收实现大幅增长，获得重大融资突破"
         metrics = {"revenue": {"value": "50亿", "yoy_growth": 36}}
-        assessment, structured = _heuristic_assessment("financial_report", metrics, {})
+        assessment, structured = _heuristic_assessment(text, "financial_report", metrics, {})
         assert assessment in ("bullish", "neutral")
         assert isinstance(structured, dict)
         assert "impact" in structured
@@ -198,8 +199,9 @@ class TestAnalysisHelpers:
 
     def test_heuristic_assessment_negative(self):
         from financial_rag.services.analysis import _heuristic_assessment
+        text = "公司面临亏损下滑风险，遭遇制裁暴跌"
         metrics = {"revenue": {"value": "10亿", "yoy_growth": -30}}
-        assessment, structured = _heuristic_assessment("financial_report", metrics, {})
+        assessment, structured = _heuristic_assessment(text, "financial_report", metrics, {})
         assert assessment in ("bearish", "neutral")
         assert isinstance(structured, dict)
 

@@ -794,22 +794,26 @@ def _save_analysis_to_kb(topic: str, assessment: str, analysis: str, analysis_ty
         },
     }
     with _state_lock:
-        # Deduplicate: remove previous analysis for same topic+type
+        # Deduplicate: remove previous analysis for same topic+type (prefix match)
         prefix = f"analysis:{analysis_type}:{topic[:20]}"
         _state["kb_docs"] = [
             d for d in _state["kb_docs"]
-            if d.get("meta", {}).get("source", "") != prefix
+            if not d.get("meta", {}).get("source", "").startswith(prefix)
         ]
         _state["kb_docs"].append(doc)
         _save_kb(_state["kb_docs"])
-        # Rebuild index if built
+        # Incremental index: add single doc instead of full rebuild
         if _state.get("kb_built"):
             try:
-                _state["retriever"].clear()
-                _state["retriever"].index(_state["kb_docs"], precompute_embeddings=True)
-                _state["retriever"].save_index(_INDEX_PATH)
+                _state["retriever"].add([doc], use_chunker=True)
             except Exception:
-                pass
+                # Fallback: full rebuild if incremental fails
+                try:
+                    _state["retriever"].clear()
+                    _state["retriever"].index(_state["kb_docs"], precompute_embeddings=True)
+                    _state["retriever"].save_index(_INDEX_PATH)
+                except Exception:
+                    pass
     # Record in learning history (append-only log)
     record = _append_learning_record(
         topic=topic, assessment=assessment,

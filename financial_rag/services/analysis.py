@@ -62,7 +62,7 @@ def analyze_news_text(
     if llm:
         assessment, structured, confidence = _llm_news_assessment(llm, text, doc_type, metrics_clean, entities_clean, kb_sources)
     else:
-        assessment, structured = _heuristic_assessment(doc_type, metrics_clean, entities_clean)
+        assessment, structured = _heuristic_assessment(text, doc_type, metrics_clean, entities_clean)
         confidence = ""
 
     # Extract plain-text analysis from structured dict
@@ -218,22 +218,39 @@ def _search_kb(retriever, query: str, kb_built: bool, min_score: float = 0.4) ->
 def _parse_verdict(text: str) -> str:
     """Extract bullish/bearish/neutral from LLM response text.
 
-    Handles: 利好, 偏利好, 轻微利好, 利空, 偏利空, etc.
+    Handles: 利好, 偏利好, 轻微利好, 利空, 偏利空, 看多, 看空, etc.
+    Uses last-mentioned keyword for more accurate parsing in mixed-sentiment text.
     """
-    if "利空" in text:
+    bullish_keywords = ["利好", "看多", "偏多", "积极", "乐观"]
+    bearish_keywords = ["利空", "看空", "偏空", "消极", "悲观"]
+
+    # Find last occurrence of each type — final verdict usually appears last
+    last_bull_pos = -1
+    last_bear_pos = -1
+    for kw in bullish_keywords:
+        pos = text.rfind(kw)
+        if pos > last_bull_pos:
+            last_bull_pos = pos
+    for kw in bearish_keywords:
+        pos = text.rfind(kw)
+        if pos > last_bear_pos:
+            last_bear_pos = pos
+
+    if last_bear_pos > last_bull_pos and last_bear_pos >= 0:
         return "bearish"
-    elif "利好" in text:
+    elif last_bull_pos > last_bear_pos and last_bull_pos >= 0:
         return "bullish"
     return "neutral"
 
 
 def _extract_confidence(text: str) -> str:
     """Extract confidence level from LLM response."""
-    if "置信度】高" in text or "置信度: 高" in text:
+    # Support both half-width colon (:), full-width colon (：), and bracket (】)
+    if any(p in text for p in ["置信度】高", "置信度: 高", "置信度：高", "高置信"]):
         return "high"
-    elif "置信度】低" in text or "置信度: 低" in text:
+    elif any(p in text for p in ["置信度】低", "置信度: 低", "置信度：低", "低置信"]):
         return "low"
-    elif "置信度】中" in text or "置信度: 中" in text:
+    elif any(p in text for p in ["置信度】中", "置信度: 中", "置信度：中", "中置信"]):
         return "medium"
     return ""
 
@@ -497,10 +514,14 @@ def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_s
         return "unknown", {"analysis": f"LLM 分析失败: {e}", "verdict": "unknown"}, ""
 
 
-def _heuristic_assessment(doc_type: str, metrics: dict, entities: dict) -> tuple:
+def _heuristic_assessment(text: str, doc_type: str, metrics: dict, entities: dict) -> tuple:
     """Rule-based fallback when LLM is unavailable — returns structured dict."""
-    positive = ["增长", "突破", "融资", "发布", "升级", "创新高", "超预期"]
-    negative = ["下降", "亏损", "裁员", "下滑", "风险", "制裁", "暴跌"]
+    positive_kw = ["增长", "突破", "融资", "发布", "升级", "创新高", "超预期", "回暖", "获批", "盈利"]
+    negative_kw = ["下降", "亏损", "裁员", "下滑", "风险", "制裁", "暴跌", "违规", "退市", "预警"]
+
+    # Scan actual text for positive/negative keywords
+    pos_hits = sum(1 for kw in positive_kw if kw in text)
+    neg_hits = sum(1 for kw in negative_kw if kw in text)
 
     lines = [f"文档类型: {doc_type}"]
     companies_list = []
@@ -521,13 +542,13 @@ def _heuristic_assessment(doc_type: str, metrics: dict, entities: dict) -> tuple
             yoy = v.get("yoy_growth")
             if yoy and isinstance(yoy, (int, float)):
                 if yoy > 20:
-                    positive.append(f"{k}增长{yoy}%")
+                    pos_hits += 1
                     signal_list.append({"signal": f"{k}同比增长{yoy}%", "severity": 3, "type": "positive"})
                 elif yoy < -20:
-                    negative.append(f"{k}下降{abs(yoy)}%")
+                    neg_hits += 1
                     signal_list.append({"signal": f"{k}同比下降{abs(yoy)}%", "severity": 3, "type": "negative"})
 
-    score = len(positive) - len(negative)
+    score = pos_hits - neg_hits
     if score > 1:
         assessment = "bullish"
     elif score < -1:

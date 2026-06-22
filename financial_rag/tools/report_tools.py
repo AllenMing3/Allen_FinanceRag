@@ -149,9 +149,15 @@ def _fallback_report(query, sources, metrics, entities) -> Dict:
     companies = []
     for e in entities:
         if isinstance(e, dict) and e.get("type") == "company":
-            name = e.get("data", {}).get("name", "")
-            if name:
-                companies.append(name)
+            data = e.get("data", {})
+            if isinstance(data, dict):
+                name = data.get("name", "")
+                if name:
+                    companies.append(name)
+            elif isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict) and item.get("name"):
+                        companies.append(item["name"])
 
     return {
         "report": {

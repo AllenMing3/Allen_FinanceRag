@@ -221,7 +221,7 @@ async function ingestSelected(dirPath, btn) {
     }
     if (d.status === 'analyzing_in_background') _pollIngestProgress(btn);
     refreshKBStatus();
-  } catch(e) { if (btn) { btn.disabled = false; btn.textContent = '📥 导入所选'; } }
+  } catch(e) { if (btn) { btn.disabled = false; btn.textContent = '📥 导入所选'; } document.getElementById('ingest-file-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`; }
 }
 
 async function _pollIngestProgress(btn) {
@@ -251,17 +251,14 @@ async function _pollIngestProgress(btn) {
 async function browseCustomDir() {
   const dir = document.getElementById('ingest-dir').value.trim();
   if (!dir) return;
+  document.getElementById('ingest-file-result').innerHTML =
+    `<div style="margin-top:8px;font-size:12px;color:var(--text2)">验证目录: ${escHtml(dir)}...</div>`;
   try {
-    const d = await fetch(`/api/directories`).then(r => r.json());
-    // Try to ingest just to see what's there
+    const resp = await fetch('/api/directories');
+    const d = await resp.json();
+    // Check if custom dir matches any known directory or just validate
     document.getElementById('ingest-file-result').innerHTML =
-      `<div style="margin-top:8px;font-size:12px;color:var(--text2)">尝试浏览目录: ${escHtml(dir)}...</div>`;
-    // Use ingest API with empty files list to validate directory
-    const resp = await fetch('/api/file/preview?path=' + encodeURIComponent(dir) + '&file=.&lines=1');
-    if (resp.ok) {
-      document.getElementById('ingest-file-result').innerHTML =
-        `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 目录可访问，点击“导入”按钮导入</div>`;
-    }
+      `<div style="margin-top:8px"><span class="tag tag-info">提示</span> 输入路径后点击“导入”按钮导入文件</div>`;
   } catch(e) {
     document.getElementById('ingest-file-result').innerHTML =
       `<div style="margin-top:8px;font-size:12px;color:var(--text2)">输入路径后点击“导入”</div>`;
