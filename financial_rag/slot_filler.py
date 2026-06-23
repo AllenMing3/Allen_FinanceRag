@@ -94,7 +94,8 @@ class SlotFiller:
         self.scorecard = scorecard
         self.max_workers = max_workers
         self.system_prompt = system_prompt or (
-            "你是专业的金融分析师。只输出要求的内容，不要额外解释。"
+            "你是专业的金融分析师。基于参考信息回答，不确定时标注'信息不足'。"
+            "只输出要求的内容，不要额外解释。禁止编造参考信息中没有的数据。"
         )
         self.verbose = verbose
 

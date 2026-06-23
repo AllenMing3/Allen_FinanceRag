@@ -24,6 +24,7 @@ from financial_rag.api.app_state import (
 )
 from financial_rag.api.models import (
     AnalyzeNewsRequest, AnalyzeTopicRequest, NewsRequest, KlineRequest,
+    ChatFollowupRequest, CreateSessionRequest,
 )
 from financial_rag.api.kb_router import _save_analysis_to_kb
 
@@ -84,6 +85,33 @@ async def api_analyze_news(req: AnalyzeNewsRequest):
                 f"entities_keys={list(result.get('entities', {}).keys())}, "
                 f"metrics_keys={list(result.get('metrics', {}).keys())}")
 
+    # Auto-create conversation session
+    cm = _state.get("conversation_manager")
+    if cm:
+        topic = req.query or ""
+        if not topic:
+            entities = result.get("entities", {})
+            companies = entities.get("companies", [])
+            if companies:
+                first = companies[0]
+                topic = first.get("name", "") if isinstance(first, dict) else str(first)
+            if not topic:
+                topic = result.get("doc_type", "") or "news"
+        session_id = cm.create_session(
+            session_type="news",
+            title=topic[:50],
+            initial_analysis=result.get("analysis", ""),
+            context={
+                "news_text": text,
+                "structured": result.get("structured", {}),
+                "metrics": result.get("metrics", {}),
+                "entities": result.get("entities", {}),
+                "kb_sources": result.get("kb_sources", []),
+                "assessment": result.get("assessment", ""),
+                "confidence": result.get("confidence", ""),
+            },
+        )
+        result["session_id"] = session_id
     # Continuous learning: save analysis conclusion to KB
     if result.get("assessment") and result.get("analysis"):
         # Extract meaningful topic name from entities or query
@@ -124,6 +152,24 @@ async def api_analyze_topic(req: AnalyzeTopicRequest):
     logger.info(f"[API] /analyze/topic: assessment={result.get('assessment')}, "
                 f"news_count={result.get('news_count')}, kb_sources={len(result.get('kb_sources', []))}")
 
+    # Auto-create conversation session
+    cm = _state.get("conversation_manager")
+    if cm:
+        session_id = cm.create_session(
+            session_type="topic",
+            title=topic[:50],
+            initial_analysis=result.get("analysis", ""),
+            context={
+                "topic": topic,
+                "structured": result.get("structured", {}),
+                "metrics": result.get("metrics", {}),
+                "entities": result.get("entities", {}),
+                "kb_sources": result.get("kb_sources", []),
+                "assessment": result.get("assessment", ""),
+                "confidence": result.get("confidence", ""),
+            },
+        )
+        result["session_id"] = session_id
     # Continuous learning: save analysis conclusion to KB
     if result.get("assessment") and result.get("analysis"):
         _save_analysis_to_kb(topic, result["assessment"], str(result["analysis"]), "topic",
@@ -272,3 +318,74 @@ async def api_kline(req: KlineRequest):
         "indicators": data.get("indicators", {}),
         "analysis": data.get("analysis", ""),
     }
+
+
+# ===================== Conversation / Chat Endpoints =====================
+
+
+@router.get("/api/chat/sessions")
+async def api_chat_list_sessions():
+    """List all conversation sessions"""
+    await asyncio.to_thread(_ensure_init)
+    cm = _state.get("conversation_manager")
+    if not cm:
+        raise HTTPException(500, "ConversationManager not initialized")
+    return {"sessions": cm.list_sessions()}
+
+
+@router.post("/api/chat/sessions")
+async def api_chat_create_session(req: CreateSessionRequest):
+    """Create a new conversation session"""
+    await asyncio.to_thread(_ensure_init)
+    cm = _state.get("conversation_manager")
+    if not cm:
+        raise HTTPException(500, "ConversationManager not initialized")
+    session_id = cm.create_session(
+        session_type=req.session_type,
+        title=req.title or "新会话",
+        initial_analysis=req.initial_analysis,
+        context=req.context,
+    )
+    return {"session_id": session_id}
+
+
+@router.get("/api/chat/sessions/{session_id}")
+async def api_chat_get_session(session_id: str):
+    """Get session details with message history"""
+    await asyncio.to_thread(_ensure_init)
+    cm = _state.get("conversation_manager")
+    if not cm:
+        raise HTTPException(500, "ConversationManager not initialized")
+    session = cm.get_session(session_id)
+    if not session:
+        raise HTTPException(404, f"会话不存在: {session_id}")
+    return session.to_dict()
+
+
+@router.delete("/api/chat/sessions/{session_id}")
+async def api_chat_delete_session(session_id: str):
+    """Delete a conversation session"""
+    await asyncio.to_thread(_ensure_init)
+    cm = _state.get("conversation_manager")
+    if not cm:
+        raise HTTPException(500, "ConversationManager not initialized")
+    if not cm.delete_session(session_id):
+        raise HTTPException(404, f"会话不存在: {session_id}")
+    return {"ok": True}
+
+
+@router.post("/api/chat/followup")
+async def api_chat_followup(req: ChatFollowupRequest):
+    """Send a follow-up message and get LLM response"""
+    await asyncio.to_thread(_ensure_init)
+    if not _state.get("has_key"):
+        raise HTTPException(400, "追问需要 DASHSCOPE_API_KEY")
+    cm = _state.get("conversation_manager")
+    if not cm:
+        raise HTTPException(500, "ConversationManager not initialized")
+    if not cm.get_session(req.session_id):
+        raise HTTPException(404, f"会话不存在: {req.session_id}")
+
+    logger.info(f"[API] /chat/followup: session={req.session_id}, message={req.message[:80]!r}")
+    result = cm.followup(req.session_id, req.message, _state["llm"])
+    return result

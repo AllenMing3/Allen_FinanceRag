@@ -12,6 +12,7 @@ Agent 只做编排决策，所有评分逻辑委托给 tools:
 - generate_score_report: 评分报告生成
 """
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any
 
 from financial_rag.core.base import BaseAgent, AgentContext, AgentResult
@@ -57,33 +58,43 @@ class ScoringAgent(BaseAgent):
                 "agent_name": finding.get("stage", "unknown"),
             })
 
-        # Step 1: 委托工具 — Pipeline 各阶段打分
-        pipeline_scores = self.call_tool(
-            "evaluate_pipeline_quality",
-            fetched_data=fetched_data,
-            retrieved_items=retrieved_items,
-            agent_results=agent_results if agent_results else None,
-            fill_stats=fill_stats,
-            fetch_elapsed_ms=metadata.get("fetch_elapsed_ms", 0),
-            index_elapsed_ms=metadata.get("index_elapsed_ms", 0),
-            process_elapsed_ms=metadata.get("process_elapsed_ms", 0),
-            output_elapsed_ms=metadata.get("output_elapsed_ms", 0),
-        )
-
-        # Step 2: 委托工具 — 防幻觉校验
-        hallucination_check = {}
+        # 构建防幻觉校验的 source_items
+        source_items = []
         if context.final_answer:
-            source_items = []
             for item in retrieved_items:
                 if isinstance(item, dict) and item.get("text"):
                     source_items.append({"text": item["text"]})
-            hallucination_check = self.call_tool(
+
+        # Parallel: evaluate_pipeline_quality ‖ check_hallucination (no data dependency)
+        def _evaluate():
+            return self.call_tool(
+                "evaluate_pipeline_quality",
+                fetched_data=fetched_data,
+                retrieved_items=retrieved_items,
+                agent_results=agent_results if agent_results else None,
+                fill_stats=fill_stats,
+                fetch_elapsed_ms=metadata.get("fetch_elapsed_ms", 0),
+                index_elapsed_ms=metadata.get("index_elapsed_ms", 0),
+                process_elapsed_ms=metadata.get("process_elapsed_ms", 0),
+                output_elapsed_ms=metadata.get("output_elapsed_ms", 0),
+            )
+
+        def _check_hallucination():
+            if not context.final_answer:
+                return {}
+            return self.call_tool(
                 "check_hallucination",
                 output_text=context.final_answer,
                 source_items=source_items if source_items else None,
             )
 
-        # Step 3: 委托工具 — 生成评分报告
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            f_eval = ex.submit(_evaluate)
+            f_hall = ex.submit(_check_hallucination)
+            pipeline_scores = f_eval.result()
+            hallucination_check = f_hall.result()
+
+        # Sequential: generate_score_report (depends on both parallel results)
         report_result = self.call_tool(
             "generate_score_report",
             pipeline_scores=pipeline_scores,

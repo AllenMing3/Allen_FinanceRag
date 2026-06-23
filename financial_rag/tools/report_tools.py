@@ -185,7 +185,7 @@ SYNTHESIZE_REPORT_TOOL = FunctionDef(
             "query": {"type": "string", "description": "用户查询", "default": ""},
             "sources": {"type": "array", "description": "源数据列表"},
             "metrics": {"type": "object", "description": "抽取的财务指标"},
-            "entities": {"type": "array", "description": "抽取的实体列表"},
+            "entities": {"type": "object", "description": "抽取的实体（字典，键为实体类别，值为实体列表）"},
         },
         "required": [],
     },

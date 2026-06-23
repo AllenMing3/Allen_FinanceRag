@@ -137,26 +137,34 @@ class AnalysisAgent(BaseAgent):
         if not date and not keyword:
             return {"error": "缺少日期或关键词", "stage": "event_impact"}
 
-        # 获取事件
-        try:
-            events_data = self.call_tool("fetch_date_events", date=date, keyword=keyword)
-        except Exception as e:
-            logger.warning(f"事件获取失败: {e}")
-            return {"error": str(e), "events": [], "stage": "event_impact"}
-
-        events = events_data.get("events", [])
-        if not events:
-            return {"date": date, "events": [], "stage": "event_impact"}
-
-        # 可选 K 线上下文
-        kline_context = None
-        if stock_code:
+        # Parallel: fetch events + kline context simultaneously
+        def _fetch_events():
             try:
-                kline_context = self.call_tool(
+                return self.call_tool("fetch_date_events", date=date, keyword=keyword)
+            except Exception as e:
+                logger.warning(f"事件获取失败: {e}")
+                return {"events": []}
+
+        def _fetch_kline():
+            if not stock_code:
+                return None
+            try:
+                return self.call_tool(
                     "fetch_kline_context", stock_code=stock_code, date=date, window_days=10,
                 )
             except Exception as e:
                 logger.warning(f"K线上下文获取失败: {e}")
+                return None
+
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            f_events = ex.submit(_fetch_events)
+            f_kline = ex.submit(_fetch_kline)
+            events_data = f_events.result()
+            kline_context = f_kline.result()
+
+        events = events_data.get("events", [])
+        if not events:
+            return {"date": date, "events": [], "stage": "event_impact"}
 
         # 影响评估
         try:
@@ -215,7 +223,13 @@ class AnalysisAgent(BaseAgent):
             data={"structured": structured, "analysis": analysis_text, "markdown": markdown},
             context_updates={
                 "final_answer": markdown,
-                "intermediate_findings": [{"stage": "deep_news", "success": success}],
+                "intermediate_findings": [{
+                    "stage": "deep_news",
+                    "success": success,
+                    "verdict": structured.get("verdict", "N/A"),
+                    "confidence": structured.get("confidence", "N/A"),
+                    "analysis_length": len(analysis_text),
+                }],
                 "metadata": {
                     "analysis_mode": "deep_news",
                     "verdict": structured.get("verdict", "N/A"),
@@ -257,7 +271,13 @@ class AnalysisAgent(BaseAgent):
             data={"structured": structured, "analysis": analysis_text, "markdown": markdown},
             context_updates={
                 "final_answer": markdown,
-                "intermediate_findings": [{"stage": "deep_topic", "success": success}],
+                "intermediate_findings": [{
+                    "stage": "deep_topic",
+                    "success": success,
+                    "verdict": structured.get("verdict", "N/A"),
+                    "confidence": structured.get("confidence", "N/A"),
+                    "analysis_length": len(analysis_text),
+                }],
                 "metadata": {
                     "analysis_mode": "deep_topic",
                     "verdict": structured.get("verdict", "N/A"),
@@ -443,8 +463,10 @@ class AnalysisAgent(BaseAgent):
             stage = f.get("stage", "unknown")
             if stage == "coordination":
                 continue
+            import json as _json
             text = f"分析结果 ({stage}): " + ", ".join(
-                f"{k}={v}" for k, v in f.items() if k != "stage"
+                f"{k}={_json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v}"
+                for k, v in f.items() if k != "stage"
             )
             documents.append({"text": text, "meta": {"source": stage}})
         if final_answer and final_answer.strip():

@@ -80,6 +80,9 @@ def extract_financial_metrics(text: str) -> Dict[str, Any]:
             few_shot = FEW_SHOT_EXAMPLES.get("metrics_extraction", "")
             if few_shot:
                 system_prompt += f"\n\n以下是一些示例供参考：\n{few_shot}"
+            few_shot_bad = FEW_SHOT_EXAMPLES.get("metrics_extraction_bad", "")
+            if few_shot_bad:
+                system_prompt += f"\n\n以下是错误示范，请避免：\n{few_shot_bad}"
 
             user_prompt = FINANCIAL_METRICS_EXTRACTION_PROMPT.format(text=prompt_text)
             caller = LLMCaller(llm)
@@ -231,6 +234,9 @@ def extract_entities(text: str) -> Dict[str, Any]:
             few_shot = FEW_SHOT_EXAMPLES.get("entity_extraction", "")
             if few_shot:
                 system_prompt += f"\n\n以下是一些示例供参考：\n{few_shot}"
+            few_shot_bad = FEW_SHOT_EXAMPLES.get("entity_extraction_bad", "")
+            if few_shot_bad:
+                system_prompt += f"\n\n以下是错误示范，请避免：\n{few_shot_bad}"
 
             user_prompt = ENTITY_EXTRACTION_PROMPT.format(text=prompt_text)
             caller = LLMCaller(llm)
@@ -307,6 +313,9 @@ def extract_document_metadata(text: str) -> Dict[str, str]:
             few_shot = FEW_SHOT_EXAMPLES.get("metadata_extraction", "")
             if few_shot:
                 system_prompt += f"\n\n以下是一些示例供参考：\n{few_shot}"
+            few_shot_bad = FEW_SHOT_EXAMPLES.get("metadata_extraction_bad", "")
+            if few_shot_bad:
+                system_prompt += f"\n\n以下是错误示范，请避免：\n{few_shot_bad}"
 
             user_prompt = METADATA_EXTRACTION_PROMPT.format(text=prompt_text)
             caller = LLMCaller(llm)

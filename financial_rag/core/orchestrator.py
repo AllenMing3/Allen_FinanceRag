@@ -262,7 +262,7 @@ class AgentOrchestrator:
                         current.update(v)
                     # list 属性做 extend（如 intermediate_findings 累积各 Agent 结果）
                     elif isinstance(current, list) and isinstance(v, list):
-                        current.extend(v)
+                        setattr(self.context, k, list(current) + list(v))
                     else:
                         setattr(self.context, k, v)
                 else:

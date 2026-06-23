@@ -62,3 +62,15 @@ class AnalyzeNewsRequest(BaseModel):
 class AnalyzeTopicRequest(BaseModel):
     topic: str
     max_news: int = 20
+
+
+class ChatFollowupRequest(BaseModel):
+    session_id: str
+    message: str
+
+
+class CreateSessionRequest(BaseModel):
+    session_type: str = "news"  # "news" | "topic"
+    title: str = ""
+    initial_analysis: str = ""
+    context: dict = {}

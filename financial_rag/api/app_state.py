@@ -119,6 +119,10 @@ def _ensure_init():
         _state["kb_path"] = _KB_PATH
         _state["meta_store"] = _load_meta()
 
+        # Conversation manager
+        from financial_rag.services.conversation import ConversationManager
+        _state["conversation_manager"] = ConversationManager()
+
         # KB 状态摘要日志
         kb_docs = _state["kb_docs"]
         source_counts = {}
