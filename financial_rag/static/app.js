@@ -3,6 +3,7 @@
 // ===== State =====
 let kbDocs = [];
 let kbBuilt = false;
+let chatSessionId = null;  // Current active chat session
 
 // ===== Navigation =====
 document.querySelectorAll('.flow-step').forEach(el => {
@@ -547,6 +548,8 @@ async function analyzeNews() {
     h += '</div>';
     document.getElementById('analyze-news-result').innerHTML = h;
     if (d.saved_to_kb) refreshLearningHistory();
+    // Auto-open chat session
+    if (d.session_id) openChat(d.session_id);
   } catch(e) { document.getElementById('analyze-news-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`; }
   hideLoading('analyze-news-loading');
 }
@@ -645,6 +648,8 @@ async function analyzeTopic() {
     h += '</div>';
     document.getElementById('analyze-topic-result').innerHTML = h;
     if (d.saved_to_kb) refreshLearningHistory();
+    // Auto-open chat session
+    if (d.session_id) openChat(d.session_id);
   } catch(e) { document.getElementById('analyze-topic-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`; }
   clearInterval(progressTimer);
   hideLoading('analyze-topic-loading');
@@ -787,3 +792,131 @@ fetch('/api/config').then(r=>r.json()).then(d => {
   refreshKBManager();
   loadDirBrowser();
 }).catch(() => {});
+
+// ===== Chat / Conversation =====
+
+async function openChat(sessionId) {
+  chatSessionId = sessionId;
+  const section = document.getElementById('chatSection');
+  section.style.display = 'block';
+  // Load session messages
+  try {
+    const d = await fetch(`/api/chat/sessions/${sessionId}`).then(r => r.json());
+    renderChatMessages(d.messages || []);
+    loadChatSessions();  // Refresh sidebar
+  } catch(e) {
+    console.error('Failed to load chat session:', e);
+  }
+  document.getElementById('chatFollowupInput').focus();
+}
+
+function renderChatMessages(messages) {
+  const el = document.getElementById('chatMessages');
+  if (!messages.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:40px;font-size:13px">开始追问吧 💬</div>';
+    return;
+  }
+  let h = '';
+  messages.forEach(msg => {
+    const cls = msg.role === 'user' ? 'user' : 'assistant';
+    const content = cls === 'assistant' ? renderMarkdown(msg.content) : escHtml(msg.content);
+    h += `<div class="chat-msg ${cls}">${content}`;
+    if (msg.timestamp) h += `<div class="msg-time">${msg.timestamp}</div>`;
+    h += '</div>';
+  });
+  el.innerHTML = h;
+  el.scrollTop = el.scrollHeight;
+}
+
+function renderMarkdown(text) {
+  // Simple markdown: bold, headers, code, blockquote, lists
+  return escHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/^&gt; (.+)$/gm, '<div style="border-left:3px solid var(--accent);padding-left:10px;color:var(--text2);margin:6px 0">$1</div>')
+    .replace(/^- (.+)$/gm, '<div style="padding:2px 0">• $1</div>')
+    .replace(/\n/g, '<br>');
+}
+
+async function loadChatSessions() {
+  try {
+    const d = await fetch('/api/chat/sessions').then(r => r.json());
+    const list = d.sessions || [];
+    const el = document.getElementById('chatSessionList');
+    if (!list.length) {
+      el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:16px;font-size:11px">尚无会话<br>分析新闻或话题后自动创建</div>';
+      return;
+    }
+    let h = '';
+    list.forEach(s => {
+      const active = s.id === chatSessionId ? 'active' : '';
+      const typeClass = s.type === 'news' ? 'news' : 'topic';
+      const typeLabel = s.type === 'news' ? '新闻' : '话题';
+      h += `<div class="chat-session-item ${active}" onclick="openChat('${s.id}')">`;
+      h += `<span class="chat-session-type ${typeClass}">${typeLabel}</span>`;
+      h += `<span class="session-title">${escHtml(s.title)}</span>`;
+      h += `<span class="session-del" onclick="event.stopPropagation();deleteChatSession('${s.id}')">×</span>`;
+      h += '</div>';
+    });
+    el.innerHTML = h;
+  } catch(e) {
+    console.error('Failed to load sessions:', e);
+  }
+}
+
+async function deleteChatSession(id) {
+  if (!confirm('确定删除这个会话？')) return;
+  try {
+    await fetch(`/api/chat/sessions/${id}`, { method: 'DELETE' });
+    if (chatSessionId === id) {
+      chatSessionId = null;
+      document.getElementById('chatMessages').innerHTML = '';
+      document.getElementById('chatSection').style.display = 'none';
+    }
+    loadChatSessions();
+  } catch(e) {
+    console.error('Delete failed:', e);
+  }
+}
+
+async function sendFollowup() {
+  if (!chatSessionId) return;
+  const input = document.getElementById('chatFollowupInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  // Append user message
+  const messagesEl = document.getElementById('chatMessages');
+  // Remove empty state if present
+  if (messagesEl.querySelector('div[style*="text-align:center"]')) messagesEl.innerHTML = '';
+  messagesEl.innerHTML += `<div class="chat-msg user">${escHtml(msg)}</div>`;
+
+  // Show loading
+  messagesEl.innerHTML += `<div class="chat-msg loading" id="chatLoading"><span class="spinner"></span> 分析中...</div>`;
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  // Disable input
+  input.disabled = true;
+  document.getElementById('chatSendBtn').disabled = true;
+
+  try {
+    const d = await api('/api/chat/followup', { session_id: chatSessionId, message: msg });
+    // Remove loading
+    const loading = document.getElementById('chatLoading');
+    if (loading) loading.remove();
+    // Append assistant response
+    const now = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    messagesEl.innerHTML += `<div class="chat-msg assistant">${renderMarkdown(d.answer)}<div class="msg-time">${now}${d.elapsed_ms ? ` · ${(d.elapsed_ms/1000).toFixed(1)}s` : ''}</div></div>`;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  } catch(e) {
+    const loading = document.getElementById('chatLoading');
+    if (loading) loading.remove();
+    messagesEl.innerHTML += `<div class="chat-msg assistant" style="color:var(--danger)">❌ ${escHtml(e.message)}</div>`;
+  }
+  input.disabled = false;
+  document.getElementById('chatSendBtn').disabled = false;
+  input.focus();
+}

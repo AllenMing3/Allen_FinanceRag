@@ -457,7 +457,13 @@ class PipelineScheduler:
             if result.agent_exec_result:
                 for ar in result.agent_exec_result.agent_results:
                     if ar.success and ar.data:
-                        agent_text = str(ar.data) if not isinstance(ar.data, str) else ar.data
+                        if isinstance(ar.data, dict):
+                            # Prefer rendered markdown > message > skip dict repr
+                            agent_text = ar.data.get("markdown", "") or ar.message or ""
+                        elif isinstance(ar.data, str):
+                            agent_text = ar.data
+                        else:
+                            agent_text = str(ar.data)
                         if agent_text.strip():
                             context_docs.append(f"【{ar.agent_name}分析】\n{agent_text}")
                 if result.agent_exec_result.final_output:

@@ -281,6 +281,28 @@
       <div class="loading" id="analyze-topic-loading"><div class="spinner"></div><p>正在抓取新闻并综合研判...</p></div>
       <div id="analyze-topic-result"></div>
     </div>
+
+    <!-- Chat / Follow-up Section (hidden until session active) -->
+    <div class="card" id="chatSection" style="display:none;margin-bottom:20px">
+      <div style="display:flex;gap:16px;height:100%">
+        <!-- Session Sidebar -->
+        <div class="chat-sidebar" id="chatSidebar">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <span style="font-size:13px;font-weight:600">💬 会话</span>
+            <button class="btn btn-secondary btn-sm" onclick="loadChatSessions()" style="padding:2px 8px;font-size:11px">刷新</button>
+          </div>
+          <div id="chatSessionList"></div>
+        </div>
+        <!-- Chat Area -->
+        <div class="chat-main">
+          <div class="chat-messages" id="chatMessages"></div>
+          <div class="chat-input-row">
+            <input class="input" id="chatFollowupInput" placeholder="追问细节、相关问题、其他角度..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendFollowup()}" />
+            <button class="btn btn-primary btn-sm" onclick="sendFollowup()" id="chatSendBtn">发送</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <h3 style="margin:0">📖 学习历史 <span class="tag tag-info" style="font-size:11px;margin-left:4px">系统从分析中积累的知识</span></h3>

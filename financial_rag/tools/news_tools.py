@@ -161,8 +161,13 @@ def _extract_keywords(llm, query: str) -> List[str]:
         resp = caller.call(
             f"用户问：{query}\n\n"
             f"请提取用于搜索财经新闻的2-4个具体关键词。\n"
-            f"要求：只提取具体的公司名、产品名、人名、事件名，不要提取“AI”“科技”“行业”等宽泛词。\n"
-            f"只输出逗号分隔的关键词，不要其他内容。",
+            f"<rules>\n"
+            f"1. 只提取查询中明确出现的实体（公司名、产品名、人名、事件名）\n"
+            f"2. 不要联想扩展（如查询说'茅台'不要扩展为'茅台五粮液'）\n"
+            f"3. 不要提取'AI''科技''行业'等宽泛词\n"
+            f"4. 如果查询本身就是具体公司名，直接输出该公司名\n"
+            f"5. 只输出逗号分隔的关键词，不要其他内容\n"
+            f"</rules>",
             max_tokens=40,
         )
         raw = [k.strip() for k in resp.content.replace("\n", "").replace("、", ",").split(",") if k.strip()]
@@ -198,7 +203,13 @@ def _generate_summary(llm, headlines: List[Dict], topic: str) -> str:
         )
         caller = LLMCaller(llm)
         resp = caller.call(
-            f"以下是关于{topic}的最新财经新闻标题。请用300字以内做摘要，概括主要动态和趋势：\n\n{hl_text}",
+            f"以下是关于{topic}的最新财经新闻标题。请用300字以内做摘要。\n\n"
+            f"<instructions>\n"
+            f"分析框架：按时间线梳理 → 识别关键事件 → 概括趋势方向\n"
+            f"要求：覆盖主要事件 + 有时间线感 + 有趋势判断\n"
+            f"禁止：不要添加新闻标题中没有的信息，不要简单重复标题\n"
+            f"</instructions>\n\n"
+            f"新闻标题：\n{hl_text}",
             max_tokens=400,
         )
         return resp.content
