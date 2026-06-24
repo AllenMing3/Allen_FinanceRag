@@ -56,9 +56,7 @@ function updateMetaStatus(count) {
   document.getElementById('metaStatus').textContent = `元数据: ${count}`;
 }
 
-function showKBStorage(path, size, built) {
-  // Legacy compat — redirect to dashboard update
-}
+function showKBStorage() {}
 
 function updateKBDashboard(data) {
   const docs = data.doc_count || 0;
@@ -77,7 +75,7 @@ function updateKBDashboard(data) {
 function renderDocList(docs) {
   const el = document.getElementById('docList');
   if (!docs || !docs.length) {
-    el.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>知识库为空</p><div class="hint">先在「数据摄取」步骤导入数据</div></div>';
+    el.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>知识库为空</p><div class="hint">先在「数据管理」导入数据</div></div>';
     return;
   }
   let h = '';
@@ -316,7 +314,7 @@ async function buildKB() {
   try {
     const d = await api('/api/build', {});
     kbBuilt = true;
-    document.getElementById('buildCount').textContent = d.doc_count;
+    if (document.getElementById('buildCount')) document.getElementById('buildCount').textContent = d.doc_count;
     let h = `<div class="stats">
       <div class="stat">文档数 <strong>${d.doc_count}</strong></div>
       <div class="stat">BM25 <strong>${d.bm25_terms || '-'} terms</strong></div>
@@ -344,7 +342,7 @@ async function clearKB() {
   kbDocs = []; kbBuilt = false;
   updateKBStatus(0); updateMetaStatus(0); renderDocList([]); refreshKBManager();
   updateKBDashboard({doc_count:0, kb_built:false, file_size_kb:0, meta_count:0});
-  document.getElementById('buildCount').textContent = '0';
+  if (document.getElementById('buildCount')) document.getElementById('buildCount').textContent = '0';
   document.getElementById('build-result').innerHTML = '';
   document.getElementById('query-result').innerHTML = '';
 }
