@@ -339,7 +339,7 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `scoring_agent.py` | Quality scoring → `call_tool(evaluate_pipeline_quality, check_hallucination, generate_score_report)` |
 | `utils.py` | Shared: `build_news_context()` |
 
-### `financial_rag/tools/` — 28 Registered Tools across 9 Modules
+### `financial_rag/tools/` — 27 Registered Tools across 9 Modules
 
 | File | Tools | Role |
 |------|-------|------|
@@ -352,7 +352,7 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `coordinator_tools.py` | 2 | Classify query intent, select agent chain |
 | `report_tools.py` | 1 | Synthesize report (LLM-driven or heuristic fallback) |
 | `analysis_tools.py` | 2 | Deep analysis: `analyze_news_deep` (wraps services/analysis.py for multi-dim impact), `analyze_topic_deep` (sub-topics, key players, sentiment trend) |
-| `__init__.py` | — | `create_financial_registry()` — registers all 28 tools; re-exports `STOCK_MAP` |
+| `__init__.py` | — | `create_financial_registry()` — registers all 27 tools; re-exports `STOCK_MAP` |
 
 ### `financial_rag/retrievers/` — Modular Retrieval Stack
 
@@ -394,9 +394,9 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 
 | File | Role |
 |------|------|
-| `index.html` | Web UI structure (302 lines) |
-| `styles.css` | Dark theme styling (155 lines) |
-| `app.js` | Frontend logic + API interaction (737 lines) |
+| `index.html` | Web UI structure (273 lines) |
+| `styles.css` | Dark theme styling (209 lines) |
+| `app.js` | Frontend logic + API interaction (920 lines) |
 
 ---
 
@@ -412,7 +412,7 @@ python -m financial_rag.main pipeline "茅台走势" -v              # → kline
 python -m financial_rag.main pipeline "2024-06-01 发生了什么"    # → event_impact chain
 
 # Function Calling
-python -m financial_rag.main toolcall -l                  # list all 26 tools
+python -m financial_rag.main toolcall -l                  # list all 27 tools
 python -m financial_rag.main toolcall "商汤科技营收增长" -v
 
 # News / KLine / Slot / Score

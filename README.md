@@ -12,17 +12,17 @@
 
 <p align="center">
   <img src="docs/screenshots/agent_architecture.png" alt="Agent Architecture" width="100%">
-  <em>Four-agent chain with intent-based routing and automatic chain selection</em>
+  <em>4-agent chain: Coordinator → Ingestion → Analysis → Scoring, with intent-based routing</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/analysis.png" alt="Analysis" width="100%">
-  <em>News interpretation, topic research, and accumulated learning history</em>
+  <img src="docs/screenshots/analysis.png" alt="Smart Query" width="100%">
+  <em>RAG retrieval with hybrid search + K-line technical analysis in one unified query panel</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/kb_management.png" alt="Knowledge Base" width="100%">
-  <em>Knowledge base status, hybrid indexing, and keyword-based source management</em>
+  <img src="docs/screenshots/kb_management.png" alt="Data Management" width="100%">
+  <em>Knowledge base management: import files, build indexes (BM25 + Embedding + RRF), search and delete by keyword</em>
 </p>
 
 ---
@@ -31,7 +31,7 @@
 
 **Intent-aware routing.** The same word "Apple" routes to K-line analysis for stock price queries, event impact scoring for acquisition news, or report synthesis for earnings data — decided by the Coordinator agent, not the user.
 
-**Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 28 registered tools across 9 modules. Agents stay thin and testable.
+**Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 27 registered tools across 9 modules. Agents stay thin and testable.
 
 **Every chain ends with a quality gate.** The Scoring agent runs a 6-layer hallucination check and pipeline quality evaluation before any result reaches the user. No silent failures.
 
