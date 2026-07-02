@@ -47,6 +47,7 @@ def parse_json_from_text(text: str) -> Optional[Dict]:
     """从 LLM 响应文本中提取 JSON 对象 — 兼容裸 JSON / Markdown 代码块。
 
     这是共享工具，替代各 tool 文件中重复的 _parse_json_from_text()。
+    使用平衡括号匹配而非贪婪 regex，避免跨多个 JSON 对象误匹配。
     """
     if not text:
         return None
@@ -59,14 +60,52 @@ def parse_json_from_text(text: str) -> Optional[Dict]:
         except (json.JSONDecodeError, ValueError):
             pass
 
-    # 尝试最外层 {}
-    for pattern in [r'\{[\s\S]*\}', r'\{[^{}]*\}']:
-        match = re.search(pattern, text)
-        if match:
-            try:
-                return json.loads(match.group())
-            except (json.JSONDecodeError, ValueError):
-                continue
+    # 平衡括号匹配：找到第一个 { 然后用计数器找对应的 }
+    result = _extract_balanced_json(text)
+    if result is not None:
+        return result
+
+    return None
+
+
+def _extract_balanced_json(text: str) -> Optional[Dict]:
+    """用平衡括号算法提取第一个完整的 JSON 对象"""
+    start = text.find('{')
+    if start < 0:
+        return None
+
+    depth = 0
+    in_string = False
+    escape_next = False
+
+    for i in range(start, len(text)):
+        ch = text[i]
+
+        if escape_next:
+            escape_next = False
+            continue
+
+        if ch == '\\' and in_string:
+            escape_next = True
+            continue
+
+        if ch == '"' and not escape_next:
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                candidate = text[start:i + 1]
+                try:
+                    return json.loads(candidate)
+                except (json.JSONDecodeError, ValueError):
+                    return None
 
     return None
 

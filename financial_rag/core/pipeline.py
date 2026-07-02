@@ -435,12 +435,18 @@ class PipelineScheduler:
     def _phase_output(
         self, query: str, result: PipelineResult, template: Any = None
     ) -> PipelineResult:
-        """槽位填充输出"""
+        """槽位填充输出 — 仅在 Phase 3 未生成有效输出时运行"""
         t0 = time.time()
 
         if not self.config.enable_slot_output or not self.filler:
             if self.config.verbose:
                 print("[Pipeline] 阶段4: 输出 — 跳过 (未启用)")
+            return result
+
+        # Phase 3 Agent 已生成有效输出时，不再用槽位覆盖
+        if result.final_output and len(result.final_output.strip()) > 50:
+            if self.config.verbose:
+                print(f"[Pipeline] 阶段4: 输出 — 跳过 (Agent 已生成 {len(result.final_output)} 字输出)")
             return result
 
         if self.config.verbose:

@@ -99,6 +99,10 @@ class SlotFiller:
         )
         self.verbose = verbose
 
+        # 使用 LLMCaller 包装，获得重试 + 缓存 + 输入长度校验
+        from financial_rag.llm.caller import LLMCaller
+        self._caller = LLMCaller(llm, cache_ttl=120)
+
     # ===================== 主入口 =====================
 
     def fill(
@@ -394,16 +398,18 @@ class SlotFiller:
             except Exception:
                 pass  # 流式失败，回退
 
-        # 回退：非流式 + TTFT 预估
-        response = self.llm.chat(
+        # 回退：非流式 + LLMCaller（带重试/缓存/长度校验）
+        t_call = time.time()
+        response = self._caller.call(
             messages=prompt,
             system=system,
             max_tokens=max_tokens,
         )
         content = response.content.strip()
         token_count = response.usage.get('total_tokens', max(1, len(content)))
-        # 首 token 延迟预估（总耗时 * 系数）
-        ttft_ms = token_count * self.TTFT_ESTIMATE_RATIO * 30  # 经验公式
+        total_ms = (time.time() - t_call) * 1000
+        # 首 token 延迟：无流式时用经验估算（总耗时的 20~40%）
+        ttft_ms = total_ms * 0.3 if total_ms > 0 else 0.0
 
         return content, ttft_ms, token_count
 
