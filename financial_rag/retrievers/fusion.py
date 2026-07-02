@@ -10,8 +10,14 @@
 - FusionStats: 融合统计信息
 - hybrid_fusion(): 统一入口，按策略名选择算法
 """
+import hashlib
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+
+def _doc_hash(text: str) -> str:
+    """稳定的文档标识 — MD5 前 16 字符，避免 Python hash() 碰撞"""
+    return hashlib.md5(text.encode("utf-8", errors="replace")).hexdigest()[:16]
 
 
 @dataclass
@@ -73,7 +79,7 @@ def rrf_fusion(
         scores = {}
         for r in results:
             text = r.get("text", "")
-            doc_idx = hash(text)
+            doc_idx = _doc_hash(text)
             rank = r.get("rank", 1)
             rrf_scores[doc_idx] = rrf_scores.get(doc_idx, 0) + weight / (rrf_k + rank)
             ranks[doc_idx] = rank
@@ -133,7 +139,7 @@ def _linear_fusion(
 
         for r in results:
             text = r.get("text", "")
-            doc_idx = hash(text)
+            doc_idx = _doc_hash(text)
             norm_score = (r.get("score", 0) - min_s) / score_range
             doc_scores[doc_idx] = doc_scores.get(doc_idx, 0) + weight * norm_score
             doc_map[doc_idx] = r
@@ -185,7 +191,7 @@ def _weighted_rrf_fusion(
 
         for r in results:
             text = r.get("text", "")
-            doc_idx = hash(text)
+            doc_idx = _doc_hash(text)
             rank = r.get("rank", 1)
             norm_score = (r.get("score", 0) - min_s) / score_range
             combined = alpha / (rrf_k + rank) + (1 - alpha) * norm_score

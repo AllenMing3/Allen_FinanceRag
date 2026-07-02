@@ -81,17 +81,25 @@ class BM25Engine:
 
     @staticmethod
     def _fallback_tokenize(text: str) -> List[str]:
-        """回退分词: 中文双字滑窗 + 英文按单词"""
+        """回退分词: 中文 trigram + 完整段，英文按单词
+    
+        改进: 用 trigram(3字)替代 bigram(2字)，减少无意义碎片 token。
+        例: "营业收入" → ["营业收", "业收入", "营业收入"]
+        """
         raw = re.findall(
-            r'[a-zA-Z]+|[\u4e00-\u9fff]+|\d+(?:\.\d+)?[%％]?', text.lower()
+            r'[a-zA-Z]+|[\u4e00-\u9fff]+|\d+(?:\.\d+)?[%\uff05]?', text.lower()
         )
         tokens = []
         for seg in raw:
-            if re.match(r'^[\u4e00-\u9fff]+$', seg) and len(seg) > 1:
-                for j in range(len(seg) - 1):
-                    tokens.append(seg[j:j + 2])
-                if len(seg) <= 6:
+            if re.match(r'^[\u4e00-\u9fff]+$', seg):
+                # 中文段: 始终保留完整段 (<= 8字)
+                if 2 <= len(seg) <= 8:
                     tokens.append(seg)
+                # >= 4字: 生成 trigram 滑窗，提升匹配精度
+                if len(seg) >= 4:
+                    for j in range(len(seg) - 2):
+                        tokens.append(seg[j:j + 3])
+                # 2-3字: 已经作为完整段保留，不再生成子串
             else:
                 tokens.append(seg)
         return tokens

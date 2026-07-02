@@ -269,13 +269,18 @@ class PipelineScheduler:
             print(f"[Pipeline] 阶段2: 索引 — 数据入RAG库 + 混合检索 ({mode})...")
 
         try:
-            # 将阶段1获取的数据转为文档
+            # 将阶段1获取的数据转为文档 + 文本清洗
+            from financial_rag.retrievers.preprocessor import TextPreprocessor
+            _preprocessor = TextPreprocessor(dedup_paragraphs=True, remove_boilerplate=True)
+
             docs = []
             if result.fetched_data:
                 for item in result.fetched_data:
                     title = item.get("title", "")
                     content = item.get("content", "")
                     text = f"{title}\n{content}" if title else content
+                    # 清洗: 去 HTML/URL/样板/重复段落
+                    text = _preprocessor.process(text)
                     meta = {
                         "source": item.get("source", "rss"),
                         "publish_time": item.get("publish_time", ""),

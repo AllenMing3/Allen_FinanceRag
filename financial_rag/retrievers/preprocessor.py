@@ -96,8 +96,8 @@ class TextPreprocessor:
         collapse_repeated: bool = True,
         collapse_whitespace: bool = True,
         strip: bool = True,
-        dedup_paragraphs: bool = False,
-        remove_boilerplate: bool = False,
+        dedup_paragraphs: bool = True,
+        remove_boilerplate: bool = True,
     ):
         self._steps: List[Callable[[str, CleanStats], str]] = []
         if remove_html:
