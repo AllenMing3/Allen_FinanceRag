@@ -9,9 +9,16 @@ Functions:
     analyze_topic_research — search topic → fetch news + KB + LLM verdict
 """
 import logging
+import re
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# 模块级预编译正则 — 情绪关键词一次扫描替代多次 `kw in text`
+_POSITIVE_KW = ["增长", "突破", "融资", "发布", "升级", "创新高", "超预期", "回暖", "获批", "盈利"]
+_NEGATIVE_KW = ["下降", "亏损", "裁员", "下滑", "风险", "制裁", "暴跌", "违规", "退市", "预警"]
+_POSITIVE_RE = re.compile("|".join(re.escape(k) for k in _POSITIVE_KW))
+_NEGATIVE_RE = re.compile("|".join(re.escape(k) for k in _NEGATIVE_KW))
 
 
 # ---------------------------------------------------------------------------
@@ -602,12 +609,9 @@ Step 1: 新闻聚类 → Step 2: 提取各子话题情绪 → Step 3: 找反向�
 
 def _heuristic_assessment(text: str, doc_type: str, metrics: dict, entities: dict) -> tuple:
     """Rule-based fallback when LLM is unavailable — returns structured dict."""
-    positive_kw = ["增长", "突破", "融资", "发布", "升级", "创新高", "超预期", "回暖", "获批", "盈利"]
-    negative_kw = ["下降", "亏损", "裁员", "下滑", "风险", "制裁", "暴跌", "违规", "退市", "预警"]
-
-    # Scan actual text for positive/negative keywords
-    pos_hits = sum(1 for kw in positive_kw if kw in text)
-    neg_hits = sum(1 for kw in negative_kw if kw in text)
+    # 用预编译正则一次扫描替代 20 次 `kw in text`
+    pos_hits = len(_POSITIVE_RE.findall(text))
+    neg_hits = len(_NEGATIVE_RE.findall(text))
 
     lines = [f"文档类型: {doc_type}"]
     companies_list = []

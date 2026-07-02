@@ -10,6 +10,7 @@ V1 能力:
 """
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
@@ -17,6 +18,18 @@ from financial_rag.tools.core import FunctionDef
 from financial_rag.llm.caller import LLMCaller
 
 logger = logging.getLogger(__name__)
+
+# 模块级预编译正则 — 事件情绪一次扫描
+_BULLISH_KW = [
+    "增长", "上涨", "突破", "利好", "新高", "超预期", "获批", "盈利",
+    "扩大", "景气", "回暖", "涨停", "买入", "增持", "推荐",
+]
+_BEARISH_KW = [
+    "下跌", "下降", "利空", "亏损", "违规", "处罚", "减持", "风险",
+    "退市", "暴跌", "跌停", "下调", "预警", "诉讼",
+]
+_BULLISH_RE = re.compile("|".join(re.escape(k) for k in _BULLISH_KW))
+_BEARISH_RE = re.compile("|".join(re.escape(k) for k in _BEARISH_KW))
 
 # 事件影响分析 system prompt（之前缺失，现补充）
 _EVENT_IMPACT_SYSTEM = """你是一位专业金融事件分析师。基于提供的新闻事件和可选的K线数据，客观评估每个事件对目标股票或板块的影响。
@@ -298,20 +311,12 @@ def assess_event_impact(
 
 def _fallback_assess(events: List[Dict]) -> Dict:
     """无 LLM 时的规则化评估"""
-    bullish_keywords = [
-        "增长", "上涨", "突破", "利好", "新高", "超预期", "获批", "盈利",
-        "扩大", "景气", "回暖", "涨停", "买入", "增持", "推荐",
-    ]
-    bearish_keywords = [
-        "下跌", "下降", "利空", "亏损", "违规", "处罚", "减持", "风险",
-        "退市", "暴跌", "跌停", "下调", "预警", "亏损", "诉讼",
-    ]
-
     assessments = []
     for e in events:
         text = e.get("title", "") + " " + e.get("content", "")[:200]
-        bull_score = sum(1 for kw in bullish_keywords if kw in text)
-        bear_score = sum(1 for kw in bearish_keywords if kw in text)
+        # 预编译正则一次扫描替代 30 次 `kw in text`
+        bull_score = len(_BULLISH_RE.findall(text))
+        bear_score = len(_BEARISH_RE.findall(text))
 
         if bull_score > bear_score:
             impact = "bullish"

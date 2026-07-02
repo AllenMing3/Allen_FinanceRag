@@ -105,51 +105,57 @@ def extract_financial_metrics(text: str) -> Dict[str, Any]:
     return _regex_fallback_metrics(text)
 
 
+# ===================== 指标键名映射表 (模块级，供 _normalize_metric_keys 使用) =====================
+
+_METRIC_KEY_MAP = {
+    # === 财务指标 ===
+    "revenue": ["revenue", "营业收入", "营收", "营业总收入", "总营收"],
+    "net_income": ["net_income", "净利润", "归属净利润", "归母净利润"],
+    "gross_margin": ["gross_margin", "毛利率", "综合毛利率"],
+    "rd_expense": ["rd_expense", "研发费用", "研发投入", "研发支出"],
+    "arr": ["arr", "年度经常性收入", "ARR", "Annual Recurring Revenue"],
+    # === 算力指标 ===
+    "gpu_count": ["gpu_count", "GPU数量", "GPU数", "芯片数量"],
+    "training_cluster_size": ["training_cluster_size", "训练集群规模",
+                               "训练集群", "集群规模"],
+    "inference_cost_per_token": ["inference_cost_per_token", "推理成本",
+                                  "每token成本", "推理单价"],
+    "compute_utilization": ["compute_utilization", "算力利用率", "GPU利用率"],
+    # === 模型指标 ===
+    "model_params": ["model_params", "参数量", "模型参数", "模型规模"],
+    "context_window": ["context_window", "上下文窗口", "上下文长度",
+                       "context length"],
+    "inference_latency": ["inference_latency", "推理延迟", "推理时延",
+                          "响应延迟"],
+    "benchmark_score": ["benchmark_score", "benchmark分数", "评测分数",
+                        "benchmark"],
+    # === 商业指标 ===
+    "api_calls": ["api_calls", "API调用量", "API调用", "日均调用量",
+                  "月均调用量"],
+    "customer_count": ["customer_count", "客户数", "客户数量",
+                       "企业客户数", "付费客户"],
+    "dau": ["dau", "DAU", "日活跃用户", "日活跃用户数", "日活"],
+    "mau": ["mau", "MAU", "月活跃用户", "月活跃用户数", "月活"],
+}
+
+# 预构建 all-aliases set，O(1) 查找未映射键
+_ALL_METRIC_ALIASES = set()
+for _aliases in _METRIC_KEY_MAP.values():
+    _ALL_METRIC_ALIASES.update(_aliases)
+
+
 def _normalize_metric_keys(raw_metrics: Dict) -> Dict[str, Any]:
     """将 LLM 返回的中文/混合键名标准化为英文键名 — AI 行业指标体系"""
-    key_map = {
-        # === 财务指标 ===
-        "revenue": ["revenue", "营业收入", "营收", "营业总收入", "总营收"],
-        "net_income": ["net_income", "净利润", "归属净利润", "归母净利润"],
-        "gross_margin": ["gross_margin", "毛利率", "综合毛利率"],
-        "rd_expense": ["rd_expense", "研发费用", "研发投入", "研发支出"],
-        "arr": ["arr", "年度经常性收入", "ARR", "Annual Recurring Revenue"],
-        # === 算力指标 ===
-        "gpu_count": ["gpu_count", "GPU数量", "GPU数", "芯片数量"],
-        "training_cluster_size": ["training_cluster_size", "训练集群规模",
-                                   "训练集群", "集群规模"],
-        "inference_cost_per_token": ["inference_cost_per_token", "推理成本",
-                                      "每token成本", "推理单价"],
-        "compute_utilization": ["compute_utilization", "算力利用率", "GPU利用率"],
-        # === 模型指标 ===
-        "model_params": ["model_params", "参数量", "模型参数", "模型规模"],
-        "context_window": ["context_window", "上下文窗口", "上下文长度",
-                           "context length"],
-        "inference_latency": ["inference_latency", "推理延迟", "推理时延",
-                              "响应延迟"],
-        "benchmark_score": ["benchmark_score", "benchmark分数", "评测分数",
-                            "benchmark"],
-        # === 商业指标 ===
-        "api_calls": ["api_calls", "API调用量", "API调用", "日均调用量",
-                      "月均调用量"],
-        "customer_count": ["customer_count", "客户数", "客户数量",
-                           "企业客户数", "付费客户"],
-        "dau": ["dau", "DAU", "日活跃用户", "日活跃用户数", "日活"],
-        "mau": ["mau", "MAU", "月活跃用户", "月活跃用户数", "月活"],
-    }
-
     normalized = {}
-    for eng_key, aliases in key_map.items():
+    for eng_key, aliases in _METRIC_KEY_MAP.items():
         for alias in aliases:
             if alias in raw_metrics:
                 normalized[eng_key] = raw_metrics[alias]
                 break
 
-    # 保留未映射的其他指标
+    # 保留未映射的其他指标 (O(1) lookup via precomputed set)
     for k, v in raw_metrics.items():
-        if k not in normalized and not any(
-            k in aliases for aliases in key_map.values()
-        ):
+        if k not in normalized and k not in _ALL_METRIC_ALIASES:
             normalized[k] = v
 
     return normalized
@@ -389,6 +395,56 @@ def _regex_fallback_metadata(text: str) -> Dict[str, str]:
 
 # ===================== Tool 4: 文档类型检测 =====================
 
+# 文档类型关键词集合 (模块级预构建，避免每次调用重建)
+_DOC_TECH = frozenset([
+    "arXiv", "论文", "技术报告", "benchmark", "评测",
+    "消融实验", "ablation", "消融", "数据集", "训练策略",
+    "模型架构", "transformer", "attention", "MoE",
+])
+_DOC_PRODUCT = frozenset([
+    "正式发布", "重磅发布", "全新上线", "全新发布",
+    "新版本", "V2", "V3", "2.0", "3.0",
+    "API开放", "开放调用", "公测", "内测",
+])
+_DOC_FUNDING = frozenset([
+    "融资", "轮", "领投", "跟投", "估值",
+    "A轮", "B轮", "C轮", "Pre-IPO", "天使轮",
+    "投资方", "投后估值",
+])
+_DOC_INDUSTRY = frozenset([
+    "行业报告", "市场分析", "赛道", "竞争格局",
+    "市场规模", "渗透率", "行业趋势", "白皮书",
+])
+_DOC_FINANCIAL = frozenset([
+    "营业收入", "净利润", "每股收益", "毛利率", "ROE",
+    "经营活动现金流", "资产负债表", "利润表", "现金流量表",
+    "归属于上市公司股东", "基本每股收益",
+])
+_DOC_POLICY_SRC = frozenset([
+    "中国人民银行", "央行", "证监会", "银保监会", "财政部",
+    "发改委", "工信部", "科技部", "网信办",
+])
+_DOC_POLICY_KW = frozenset([
+    "下调", "上调", "利率", "监管", "行政处罚",
+    "暂行办法", "通知", "决定", "规范",
+])
+_DOC_RESEARCH = frozenset([
+    "评级", "目标价", "买入", "卖出", "增持", "减持",
+    "研报", "研究报告", "盈利预测",
+])
+_DOC_NEWS = frozenset([
+    "报道", "记者", "据悉", "消息人士",
+    "分析人士", "最新消息", "快讯", "独家",
+])
+
+# 合并所有关键词，编译为单个正则做一次全文扫描
+_ALL_DOC_KEYWORDS = (
+    _DOC_TECH | _DOC_PRODUCT | _DOC_FUNDING | _DOC_INDUSTRY
+    | _DOC_FINANCIAL | _DOC_POLICY_SRC | _DOC_POLICY_KW
+    | _DOC_RESEARCH | _DOC_NEWS
+)
+_DOC_TYPE_RE = re.compile("|".join(re.escape(kw) for kw in sorted(_ALL_DOC_KEYWORDS, key=len, reverse=True)))
+
 def detect_document_type(text: str) -> str:
     """基于关键词检测文档类型（覆盖传统财报 + AI 行业文档）。
 
@@ -397,89 +453,40 @@ def detect_document_type(text: str) -> str:
     """
     if not text or not text.strip():
         return "其他"
-
+    
+    # 用预编译正则做多模式一次扫描，替代 10 次关键词循环
+    _hits = _DOC_TYPE_RE.findall(text)
+    hit_set = set(_hits)
+    
+    def _count(kw_set):
+        return len(hit_set & kw_set)
+    
     # === AI 行业特有文档类型 ===
-
-    # 技术报告 / 研究论文
-    tech_keywords = [
-        "arXiv", "论文", "技术报告", "benchmark", "评测",
-        "消融实验", "ablation", "消融", "数据集", "训练策略",
-        "模型架构", "transformer", "attention", "MoE",
-    ]
-    if sum(1 for kw in tech_keywords if kw in text) >= 2:
+    if _count(_DOC_TECH) >= 2:
         return "技术报告"
-
-    # 产品发布
-    product_keywords = [
-        "正式发布", "重磅发布", "全新上线", "全新发布",
-        "新版本", "V2", "V3", "2.0", "3.0",
-        "API开放", "开放调用", "公测", "内测",
-    ]
-    if sum(1 for kw in product_keywords if kw in text) >= 2:
+    if _count(_DOC_PRODUCT) >= 2:
         return "产品发布"
-
-    # 融资公告
-    funding_keywords = [
-        "融资", "轮", "领投", "跟投", "估值",
-        "A轮", "B轮", "C轮", "Pre-IPO", "天使轮",
-        "投资方", "投后估值",
-    ]
-    if sum(1 for kw in funding_keywords if kw in text) >= 2:
+    if _count(_DOC_FUNDING) >= 2:
         return "融资公告"
-
-    # 行业分析
-    industry_keywords = [
-        "行业报告", "市场分析", "赛道", "竞争格局",
-        "市场规模", "渗透率", "行业趋势", "白皮书",
-    ]
-    if sum(1 for kw in industry_keywords if kw in text) >= 2:
+    if _count(_DOC_INDUSTRY) >= 2:
         return "行业分析"
-
-    # === 传统财报类型 (保留兼容) ===
-
-    # 财报/年报特征
-    financial_keywords = [
-        "营业收入", "净利润", "每股收益", "毛利率", "ROE",
-        "经营活动现金流", "资产负债表", "利润表", "现金流量表",
-        "归属于上市公司股东", "基本每股收益",
-    ]
-    if sum(1 for kw in financial_keywords if kw in text) >= 3:
+    
+    # === 传统财报类型 ===
+    if _count(_DOC_FINANCIAL) >= 3:
         return "年报"
-
-    # 季报
     if re.search(r'第?\s*[一二三1-3]\s*季度?报告|Q[1-3]\s*报告', text):
         return "季报"
-
-    # 政策文件
-    policy_sources = [
-        "中国人民银行", "央行", "证监会", "银保监会", "财政部",
-        "发改委", "工信部", "科技部", "网信办",
-    ]
-    if any(kw in text for kw in policy_sources):
+    if _count(_DOC_POLICY_SRC) >= 1:
         return "政策文件"
-    policy_keywords = [
-        "下调", "上调", "利率", "监管", "行政处罚",
-        "暂行办法", "通知", "决定", "规范",
-    ]
-    if sum(1 for kw in policy_keywords if kw in text) >= 2:
+    if _count(_DOC_POLICY_KW) >= 2:
         return "政策文件"
-
-    # 公告
     if re.search(r'(公告|通知|声明|决定)\s*(编号|第|如下)', text):
         return "公告"
-
-    # 研究报告
-    research_keywords = [
-        "评级", "目标价", "买入", "卖出", "增持", "减持",
-        "研报", "研究报告", "盈利预测",
-    ]
-    if sum(1 for kw in research_keywords if kw in text) >= 2:
+    if _count(_DOC_RESEARCH) >= 2:
         return "研究报告"
-
-    # 新闻特征 (兜底)
-    news_keywords = ["报道", "记者", "据悉", "消息人士",
-                     "分析人士", "最新消息", "快讯", "独家"]
-    if any(kw in text for kw in news_keywords) or len(text) > 100:
+    
+    # 新闻特征 (兆底)
+    if _count(_DOC_NEWS) >= 1 or len(text) > 100:
         return "新闻报道"
 
     return "其他"

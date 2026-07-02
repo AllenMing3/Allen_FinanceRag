@@ -49,14 +49,17 @@ def fetch_news_report(
 
     # 按关键词过滤（二次过滤，RSS 有时返回宽泛结果）
     filter_kw = filter_keywords or keyword
+    # 拆分关键词提到循环外，避免每个 item 重复 split
+    kw_parts = [kw.strip() for kw in filter_kw.replace("、", ",").replace("，", ",").split(",") if kw.strip()]
+    kw_parts = [p for p in kw_parts if len(p) >= 2]
+
     filtered = []
     for item in items:
         title = item.get("title", "")
         content = item.get("content", "")
         text = title + " " + content
-        # 分词式匹配：关键词拆分为多个子词，至少匹配一个
-        kw_parts = [kw.strip() for kw in filter_kw.replace("、", ",").replace("，", ",").split(",") if kw.strip()]
-        if any(p in text for p in kw_parts if len(p) >= 2):
+        # 分词式匹配：至少匹配一个子词
+        if any(p in text for p in kw_parts):
             filtered.append(item)
         elif not kw_parts:
             filtered.append(item)
