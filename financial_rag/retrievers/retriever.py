@@ -45,6 +45,7 @@ class HybridRetriever:
         tokenizer: Any = None,
         chunker: Any = None,
         parser: Any = None,
+        chroma_persist_dir: Optional[str] = None,
     ):
         cfg = config or {}
         self.rrf_k = cfg.get("rrf_k", 60)
@@ -58,7 +59,10 @@ class HybridRetriever:
 
         # 子引擎
         self._bm25 = BM25Engine(tokenizer=tokenizer)
-        self._vector = VectorEngine(embedder=embedder, tokenizer=tokenizer)
+        self._vector = VectorEngine(
+            embedder=embedder, tokenizer=tokenizer,
+            chroma_persist_dir=chroma_persist_dir,
+        )
 
         # 内部状态
         self.documents: List[Dict] = []
@@ -76,16 +80,18 @@ class HybridRetriever:
         self.documents = documents
         self._bm25.build(documents)
 
-        # 预计算 embedding
+        # 预计算 embedding + 索引到 Chroma
         if precompute_embeddings and self._vector.has_embedding:
             texts = [d.get("text", "") for d in documents]
             logger.info(f"预计算 {len(texts)} 个文档的 embedding...")
             all_embeddings = []
-            for i in range(0, len(texts), 10):
+            for i in range(0, len(texts), 25):
                 all_embeddings.extend(
-                    self.embedder.embed_documents(texts[i:i + 10])
+                    self.embedder.embed_documents(texts[i:i + 25])
                 )
             self.doc_embeddings = all_embeddings
+            # 索引到 Chroma (ANN 索引)
+            self._vector.index(documents, all_embeddings)
             logger.info(f"Embedding 预计算完成，维度: {len(all_embeddings[0]) if all_embeddings else 0}")
         else:
             self.doc_embeddings = None
@@ -104,16 +110,19 @@ class HybridRetriever:
         self.documents.extend(documents)
         self._bm25.build(self.documents)
 
-        # Bug fix: 增量添加时也计算新文档的 embeddings
-        if self.embedder and self.doc_embeddings is not None:
+        # 增量添加时也计算新文档的 embeddings + 索引到 Chroma
+        if self.embedder and self._vector.has_embedding:
             texts = [d.get("text", "") for d in documents]
             new_embeddings = []
-            for i in range(0, len(texts), 10):
+            for i in range(0, len(texts), 25):
                 new_embeddings.extend(
-                    self.embedder.embed_documents(texts[i:i + 10])
+                    self.embedder.embed_documents(texts[i:i + 25])
                 )
-            self.doc_embeddings.extend(new_embeddings)
-            logger.info(f"增量 embedding: +{len(new_embeddings)} 篇")
+            # Chroma 增量索引
+            self._vector.add(documents, new_embeddings)
+            if self.doc_embeddings is not None:
+                self.doc_embeddings.extend(new_embeddings)
+            logger.info(f"增量 embedding + Chroma: +{len(new_embeddings)} 篇")
 
     # ===================== 检索 =====================
 
@@ -289,13 +298,17 @@ class HybridRetriever:
         return results, card
 
     def remove(self, indices: List[int]):
-        """Remove documents by index positions without rebuilding embeddings.
+        """Remove documents by index positions.
 
-        Filters out docs + their embeddings, then rebuilds BM25 (cheap).
+        Filters out docs, removes from Chroma, rebuilds BM25.
         """
         if not indices:
             return
         remove_set = set(indices)
+        # 从 Chroma 中删除
+        removed_docs = [d for i, d in enumerate(self.documents) if i in remove_set]
+        self._vector.remove(removed_docs)
+        # 从内存中过滤
         self.documents = [d for i, d in enumerate(self.documents) if i not in remove_set]
         if self.doc_embeddings is not None:
             self.doc_embeddings = [
@@ -309,26 +322,44 @@ class HybridRetriever:
         self.documents = []
         self.doc_embeddings = None
         self._bm25.clear()
+        self._vector.clear()
         logger.info("HybridRetriever: 索引已清空")
 
     def save_index(self, path: str):
-        """持久化索引"""
+        """持久化索引 (Chroma 自动持久化向量，此处只保存文档 + 配置)"""
         persistence.save_index(
-            path, self.documents, self.doc_embeddings,
+            path, self.documents, doc_embeddings=None,
             config={"rrf_k": self.rrf_k, "bm25_weight": self.bm25_weight,
                      "vector_weight": self.vector_weight},
         )
 
     def load_index(self, path: str):
-        """加载索引"""
+        """加载索引 (Chroma 自动加载向量，此处只加载文档 + 配置)"""
         data = persistence.load_index(path)
         self.documents = data["documents"]
-        self.doc_embeddings = data.get("doc_embeddings")
         cfg = data.get("config", {})
         self.rrf_k = cfg.get("rrf_k", self.rrf_k)
         self.bm25_weight = cfg.get("bm25_weight", self.bm25_weight)
         self.vector_weight = cfg.get("vector_weight", self.vector_weight)
         self._bm25.build(self.documents)
+
+        # 如果 Chroma 已有持久化数据，会自动加载
+        # 否则，如果有 embedder，重新计算 embedding 并索引到 Chroma
+        if self._vector.has_embedding and not self._vector._chroma_indexed:
+            texts = [d.get("text", "") for d in self.documents]
+            if texts:
+                logger.info(f"加载后重建 Chroma 索引: {len(texts)} 篇文档...")
+                all_embeddings = []
+                for i in range(0, len(texts), 25):
+                    all_embeddings.extend(
+                        self.embedder.embed_documents(texts[i:i + 25])
+                    )
+                self.doc_embeddings = all_embeddings
+                self._vector.index(self.documents, all_embeddings)
+                logger.info(f"Chroma 索引重建完成，维度: {len(all_embeddings[0]) if all_embeddings else 0}")
+        else:
+            # Chroma 自动加载了向量，不需要 doc_embeddings
+            self.doc_embeddings = data.get("doc_embeddings")
 
 
 # ===================== jieba 分词器工厂 =====================

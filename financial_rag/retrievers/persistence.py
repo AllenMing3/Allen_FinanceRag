@@ -80,13 +80,16 @@ def save_index(
         "version": INDEX_VERSION,
         "doc_count": len(documents),
         "documents": documents,
-        "doc_embeddings": doc_embeddings,
         "config": config,
         "metadata": {
             "created_at": datetime.now().isoformat(),
             "avg_doc_length": avg_len,
         },
     }
+
+    # Chroma 管理向量时不保存 embeddings，否则保留 (向后兼容)
+    if doc_embeddings is not None:
+        data["doc_embeddings"] = doc_embeddings
 
     # 序列化 JSON
     json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
@@ -199,7 +202,7 @@ def get_index_info(path: str) -> IndexInfo:
         version=data.get("version", 1),
         doc_count=data.get("doc_count", len(data.get("documents", []))),
         file_size_mb=size_mb,
-        has_embeddings=bool(data.get("doc_embeddings")),
+        has_embeddings=bool(data.get("doc_embeddings")),  # Chroma 管理时为 False
         created_at=metadata.get("created_at", ""),
         avg_doc_length=metadata.get("avg_doc_length", 0),
         config=data.get("config", {}),
