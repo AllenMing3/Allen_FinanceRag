@@ -44,11 +44,16 @@ def analyze_news_text(
 
     logger.info(f"[analyze_news] 开始: text={len(text)}字, query={query!r}, kb_built={kb_built}, llm={'yes' if llm else 'no'}")
 
-    # 1. Structured extraction
+    # 1. Structured extraction (parallel: metrics + entities)
     doc_type = detect_document_type(text)
-    metrics = extract_financial_metrics(text=text)
-    entities = extract_entities(text=text)
-    logger.info(f"[analyze_news] 抽取完成: doc_type={doc_type}, "
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as _ex:
+        _f_metrics = _ex.submit(extract_financial_metrics, text=text)
+        _f_entities = _ex.submit(extract_entities, text=text)
+        metrics = _f_metrics.result()
+        entities = _f_entities.result()
+    logger.info(f"[analyze_news] 抽取完成(并行): doc_type={doc_type}, "
                 f"metrics_keys={list(metrics.keys())}, entities_keys={list(entities.keys())}")
 
     metrics_clean = {k: v for k, v in metrics.items() if not k.startswith("_")}

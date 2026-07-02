@@ -525,56 +525,7 @@ def generate_search_queries(
     metrics = metrics or {}
     entities = entities or {}
 
-    llm = _get_llm()
-
-    # --- 主路径: LLM ---
-    if llm:
-        try:
-            text_summary = text[:2000] if text else ""
-
-            # 构造指标摘要
-            metric_lines = []
-            for k, v in metrics.items():
-                if k.startswith("_"):
-                    continue
-                if isinstance(v, dict):
-                    metric_lines.append(f"{k}: {v.get('value', '?')} {v.get('unit', '')}")
-                else:
-                    metric_lines.append(f"{k}: {v}")
-            metrics_summary = "\n".join(metric_lines) if metric_lines else "无"
-
-            # 构造实体摘要
-            entity_lines = []
-            for comp in entities.get("companies", []):
-                if isinstance(comp, dict):
-                    entity_lines.append(f"公司: {comp.get('name', '?')}")
-            for fig in entities.get("financial_figures", []):
-                if isinstance(fig, dict):
-                    entity_lines.append(
-                        f"{fig.get('label', '数据')}: {fig.get('value', '?')} {fig.get('unit', '')}"
-                    )
-            entities_summary = "\n".join(entity_lines) if entity_lines else "无"
-
-            user_prompt = _QUERY_GEN_PROMPT.format(
-                text_summary=text_summary,
-                metrics_summary=metrics_summary,
-                entities_summary=entities_summary,
-            )
-            caller = LLMCaller(llm)
-            result = caller.call_json(
-                user_prompt,
-                system=_QUERY_GEN_SYSTEM,
-                max_tokens=512,
-                temperature=0.0,
-            )
-            if result and isinstance(result, list):
-                queries = [str(q) for q in result if q]
-                if queries:
-                    return queries[:5]
-        except Exception as e:
-            logger.warning(f"[generate_search_queries] LLM 失败: {e}")
-
-    # --- 兜底: 基于已有指标生成 2 个通用查询 ---
+    # 纯模板生成 — LLM 调用已移除（产出查询在当前流程中未用于实际检索）
     return _fallback_queries(metrics, entities)
 
 

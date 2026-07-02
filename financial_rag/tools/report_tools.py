@@ -99,18 +99,10 @@ def synthesize_report(
             )
             report_json = {"summary": response.content.strip(), "key_findings": [], "title": query}
     
-        # HallucinationGuard 预检
-        check_result = {}
-        if isinstance(report_json, dict) and report_json.get("summary"):
-            from financial_rag.guard.reflector import HallucinationGuard
-            guard = HallucinationGuard()
-            # precheck expects List[Dict] with "text" key — pass source dicts, not strings
-            source_dicts = [s for s in sources if isinstance(s, dict)]
-            check_result = guard.precheck(report_json["summary"], source_dicts)
-    
+        # 幻觉检查已移至 Pipeline Phase 5 (ScoringAgent)，此处不再重复 precheck
         return {
             "report": report_json,
-            "hallucination_check": check_result,
+            "hallucination_check": {},
             "method": "llm",
         }
     except Exception as e:
