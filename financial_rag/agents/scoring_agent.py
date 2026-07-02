@@ -104,6 +104,11 @@ class ScoringAgent(BaseAgent):
 
         report = report_result.get("report", "评分报告生成失败")
 
+        # Build user-visible hallucination report from guard
+        hallucination_report = ""
+        if isinstance(hallucination_check, dict):
+            hallucination_report = hallucination_check.get("report", "")
+
         # Derive success from execution (did scoring complete?) not from scores themselves
         grade = pipeline_scores.get("grade", "N/A") if isinstance(pipeline_scores, dict) else "N/A"
         hallucination_risk = hallucination_check.get("risk", "unknown") if isinstance(hallucination_check, dict) else "unknown"
@@ -118,13 +123,15 @@ class ScoringAgent(BaseAgent):
                 "pipeline_scores": pipeline_scores,
                 "hallucination_check": hallucination_check,
                 "report": report,
+                "hallucination_report": hallucination_report,
                 "any_agent_failed": any_agent_failed,
             },
             context_updates={
                 "metadata": {
                     "scoring_report": report,
-                    "hallucination_risk": hallucination_check.get("risk", "unknown"),
-                    "pipeline_grade": pipeline_scores.get("grade", "N/A"),
+                    "hallucination_risk": hallucination_check.get("risk", "unknown") if isinstance(hallucination_check, dict) else "unknown",
+                    "hallucination_report": hallucination_report,
+                    "pipeline_grade": pipeline_scores.get("grade", "N/A") if isinstance(pipeline_scores, dict) else "N/A",
                 },
             },
         )

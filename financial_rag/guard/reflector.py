@@ -203,148 +203,334 @@ class ReflectionLoop(ABC):
         return self.state.synthesis or "无法生成回答"
 
 
-# ===================== 六层防幻觉中间件 =====================
+# ===================== 四层防幻觉中间件 =====================
+
+def _tokenize_zh(text: str) -> List[str]:
+    """jieba 分词，无 jieba 时回退到按字分"""
+    try:
+        import jieba
+        return [w for w in jieba.cut(text) if len(w.strip()) > 1]
+    except ImportError:
+        return [c for c in text if c.strip()]
+
+
+# 常见停用词（功能词、标点、虚词）
+_STOP_WORDS = frozenset(
+    "的 了 在 是 我 有 和 就 不 人 都 一 一个 上 也 很 到 说 要 去 你 会 着 "
+    "没有 看 好 自己 这 他 她 它 们 那 被 从 以 对 而 与 及 或 但 还 其 之 "
+    "为 于 把 向 让 给 用 过 能 可 应 将 所 如 果 因 此 等 且 已 又 再 更 最".split()
+)
+
+# 数字+单位 正则（匹配 "50.3亿元"、"20%"、"2024年" 等）
+_NUM_UNIT_RE = re.compile(
+    r'(\d+(?:\.\d+)?)\s*([%％万亿元亿万美元美元美刀港元港币人民币块个台套条家万人人次份月年日季])?',
+    re.UNICODE,
+)
+
 
 class HallucinationGuard:
     """
-    六层递进式防幻觉校验
+    四层防幻觉校验 — 每层做实，分数透明
 
-    L1: 来源验证 — 每个断言必须能追溯到检索源
-    L2: 一致性检查 — 回答内部不矛盾
-    L3: 事实核查 — 关键数字/日期与来源一致
-    L4: 完整性检查 — 是否遗漏来源中的关键信息
-    L5: 引用准确性 — 是否有明确的引用标记
-    L6: 综合评分 — 加权汇总输出总分
+    L1: 来源锚定 — jieba 分词 + token 重叠率，逐句追溯到检索源
+    L2: 数值一致 — 提取 answer 中的「数字+单位」对，交叉比对 source
+    L3: 引用完整 — [N] 标记存在且 N 对应有效来源
+    L4: 结构规范 — 输出是否包含预期段落（摘要/要点/风险等）
 
-    所有维度与领域无关 — 纯文本逻辑检查
+    接口向后兼容: check() / precheck() / format_report()
     """
 
     LAYER_WEIGHTS = {
-        "L1_source_verification": 0.25,
-        "L2_consistency":          0.15,
-        "L3_fact_check":           0.20,
-        "L4_completeness":         0.15,
-        "L5_citation_accuracy":    0.15,
-        "L6_overall":              0.10,
+        "L1_source_grounding": 0.35,
+        "L2_numerical_fidelity": 0.25,
+        "L3_citation_integrity": 0.20,
+        "L4_structure_compliance": 0.20,
     }
+
+    # 来源锚定阈值：句子 token 与某 source 重叠 >= 此值视为"锚定"
+    GROUNDING_THRESHOLD = 0.15
 
     def __init__(self, threshold: float = 0.6):
         self.threshold = threshold
 
-    def check(self, answer: str, sources: List[Dict]) -> Dict:
-        """执行六层全量检查"""
-        checks = {}
-        checks["L1_source_verification"] = self._l1_source_verification(answer, sources)
-        checks["L2_consistency"] = self._l2_consistency(answer)
-        checks["L3_fact_check"] = self._l3_fact_check(answer, sources)
-        checks["L4_completeness"] = self._l4_completeness(answer, sources)
-        checks["L5_citation_accuracy"] = self._l5_citation_accuracy(answer, sources)
-        checks["L6_overall"] = self._l6_compute_overall(checks)
+    # ================== 公共接口 ==================
 
-        passed = checks["L6_overall"]["score"] >= self.threshold
+    def check(self, answer: str, sources: List[Dict]) -> Dict:
+        """执行四层全量检查"""
+        checks = {}
+        checks["L1_source_grounding"] = self._l1_source_grounding(answer, sources)
+        checks["L2_numerical_fidelity"] = self._l2_numerical_fidelity(answer, sources)
+        checks["L3_citation_integrity"] = self._l3_citation_integrity(answer, sources)
+        checks["L4_structure_compliance"] = self._l4_structure_compliance(answer)
+        checks["overall"] = self._compute_overall(checks)
+
+        overall_score = checks["overall"]["score"]
+        passed = overall_score >= self.threshold
         return {
             "passed": passed,
-            "overall_score": checks["L6_overall"]["score"],
-            "risk": self._risk_level(checks["L6_overall"]["score"], checks),
+            "overall_score": overall_score,
+            "risk": self._risk_level(overall_score, checks),
             "checks": checks,
-            "unverified": self._collect_unverified(checks),
+            "unverified": checks.get("L1_source_grounding", {}).get("unanchored", []),
+            "report": self.format_report(overall_score, checks),
         }
 
     def precheck(self, answer: str, sources: List[Dict]) -> Dict:
-        """快速预检（仅 L1 + L3）"""
-        l1 = self._l1_source_verification(answer, sources)
-        l3 = self._l3_fact_check(answer, sources)
-        score = l1["score"] * 0.6 + l3["score"] * 0.4
+        """快速预检（仅 L1 + L2）"""
+        l1 = self._l1_source_grounding(answer, sources)
+        l2 = self._l2_numerical_fidelity(answer, sources)
+        score = l1["score"] * 0.6 + l2["score"] * 0.4
         return {"quick_score": score, "warning": score < 0.5}
 
-    # ---------- L1: 来源验证 ----------
-    def _l1_source_verification(self, answer: str, sources: List[Dict]) -> Dict:
-        if not sources:
-            return {"score": 0.0, "passed": False, "unverified": [answer[:100]]}
-        sentences = [s.strip() for s in re.split(r'[。！？\n]', answer) if len(s.strip()) > 10]
-        all_text = " ".join(s.get("text", "") for s in sources).lower()
+    # ================== L1: 来源锚定 ==================
 
-        verified, unverified = 0, []
+    def _l1_source_grounding(self, answer: str, sources: List[Dict]) -> Dict:
+        """每个声明是否能追溯到某篇 source"""
+        if not sources:
+            return {"score": 0.0, "passed": False,
+                    "anchored": 0, "total": 0, "unanchored": []}
+
+        # 预处理: 对每篇 source 做 jieba 分词
+        source_tokens_list = []
+        for s in sources:
+            text = s.get("text", "")
+            tokens = set(_tokenize_zh(text)) - _STOP_WORDS
+            source_tokens_list.append(tokens)
+
+        # 逐句检查
+        sentences = [s.strip() for s in re.split(r'[。！？\n]', answer)
+                     if len(s.strip()) > 8]
+        if not sentences:
+            return {"score": 1.0, "passed": True,
+                    "anchored": 0, "total": 0, "unanchored": []}
+
+        anchored, unanchored = 0, []
         for sent in sentences:
-            words = set(re.findall(r'\w+', sent.lower()))
-            if len(words) < 3:
+            sent_tokens = set(_tokenize_zh(sent)) - _STOP_WORDS
+            if len(sent_tokens) < 2:
+                anchored += 1  # 太短的跳过
                 continue
-            if sum(1 for w in words if w in all_text) / len(words) >= 0.3:
-                verified += 1
+
+            # 找最佳匹配的 source
+            best_overlap = 0.0
+            for src_tokens in source_tokens_list:
+                if not src_tokens:
+                    continue
+                overlap = len(sent_tokens & src_tokens) / len(sent_tokens)
+                best_overlap = max(best_overlap, overlap)
+
+            if best_overlap >= self.GROUNDING_THRESHOLD:
+                anchored += 1
             else:
-                unverified.append(sent[:80])
-        total = max(verified + len(unverified), 1)
-        return {"score": verified / total, "passed": verified / total >= 0.6,
-                "verified": verified, "unverified": unverified}
+                unanchored.append(sent[:80])
 
-    # ---------- L2: 一致性 ----------
-    def _l2_consistency(self, answer: str) -> Dict:
-        pairs = [("增长", "下降"), ("盈利", "亏损"), ("增加", "减少"),
-                 ("上升", "下跌"), ("利好", "利空")]
-        sentences = re.split(r'[。！？\n]', answer)
-        contradictions = []
-        for a, b in pairs:
-            if any(a in s for s in sentences) and any(b in s for s in sentences):
-                contradictions.append(f"同时提及'{a}'和'{b}'")
-        score = 1.0 - min(0.5, len(contradictions) * 0.1)
-        return {"score": score, "passed": score >= 0.8, "contradictions": contradictions}
+        total = len(sentences)
+        ratio = anchored / total if total > 0 else 1.0
+        return {
+            "score": ratio,
+            "passed": ratio >= 0.6,
+            "anchored": anchored,
+            "total": total,
+            "unanchored": unanchored,
+        }
 
-    # ---------- L3: 事实核查 ----------
-    def _l3_fact_check(self, answer: str, sources: List[Dict]) -> Dict:
+    # ================== L2: 数值一致性 ==================
+
+    def _l2_numerical_fidelity(self, answer: str, sources: List[Dict]) -> Dict:
+        """answer 中的数字是否能在 source 中找到"""
         if not sources:
-            return {"score": 0.0, "passed": False}
-        numbers = re.findall(r'\b\d{2,}(?:\.\d+)?[%％]?\b', answer)
-        all_text = " ".join(s.get("text", "") for s in sources)
-        verified = sum(1 for n in numbers if n in all_text)
-        total = max(len(numbers), 1)
-        return {"score": verified / total, "passed": verified / total >= 0.5,
-                "facts_total": total, "facts_verified": verified}
+            # 没有 source 时，answer 里有数字就是问题
+            ans_nums = self._extract_numbers(answer)
+            return {"score": 0.0 if ans_nums else 1.0,
+                    "passed": not bool(ans_nums),
+                    "verified": 0, "total": len(ans_nums), "unmatched": ans_nums}
 
-    # ---------- L4: 完整性 ----------
-    def _l4_completeness(self, answer: str, sources: List[Dict]) -> Dict:
-        if not sources or len(sources) < 2:
-            return {"score": 0.8, "passed": True}
-        covered = 0
-        for src in sources[:5]:
-            text = src.get("text", "")
-            first_sent = re.split(r'[。！？\n]', text)[0][:50]
-            words = set(re.findall(r'\w+', first_sent.lower()))
-            if words and sum(1 for w in words if w in answer.lower()) / len(words) >= 0.3:
-                covered += 1
-        score = covered / len(sources[:5]) if sources else 1.0
-        return {"score": score, "passed": score >= 0.5}
+        all_source_text = " ".join(s.get("text", "") for s in sources)
+        src_nums = set(self._extract_numbers(all_source_text))
+        ans_nums = self._extract_numbers(answer)
 
-    # ---------- L5: 引用准确性 ----------
-    def _l5_citation_accuracy(self, answer: str, sources: List[Dict]) -> Dict:
-        if not sources:
-            return {"score": 0.0, "passed": False}
-        has_ref = bool(re.findall(r'\[(?:ref-)?\d+\]', answer))
-        has_marker = any(m in answer for m in ["来源", "引用", "参考", "根据", "数据显示"])
-        score = 0.9 if has_ref else (0.7 if has_marker else 0.3)
-        return {"score": score, "passed": score >= 0.5, "has_citations": has_ref or has_marker}
+        if not ans_nums:
+            return {"score": 1.0, "passed": True,
+                    "verified": 0, "total": 0, "unmatched": []}
 
-    # ---------- L6: 综合 ----------
-    def _l6_compute_overall(self, checks: Dict) -> Dict:
+        verified = sum(1 for n in ans_nums if n in src_nums)
+        unmatched = [n for n in ans_nums if n not in src_nums]
+        ratio = verified / len(ans_nums)
+        return {
+            "score": ratio,
+            "passed": ratio >= 0.5,
+            "verified": verified,
+            "total": len(ans_nums),
+            "unmatched": unmatched[:5],
+        }
+
+    @staticmethod
+    def _extract_numbers(text: str) -> List[str]:
+        """提取数字（含单位），返回标准化字符串列表"""
+        matches = _NUM_UNIT_RE.findall(text)
+        results = []
+        for num_str, unit in matches:
+            # 标准化: 去掉末尾的 .0
+            try:
+                num = float(num_str)
+                normalized = str(int(num)) if num == int(num) else num_str
+            except ValueError:
+                normalized = num_str
+            results.append(f"{normalized}{unit}")
+        return results
+
+    # ================== L3: 引用完整性 ==================
+
+    def _l3_citation_integrity(self, answer: str, sources: List[Dict]) -> Dict:
+        """检查 [N] 引用标记是否存在且对应有效来源"""
+        # 找所有 [N] 标记
+        citations = re.findall(r'\[(\d+)\]', answer)
+        if not citations:
+            # 没有 [N] 标记 — 检查是否有文字引用
+            has_text_ref = any(m in answer for m in
+                               ["来源", "引用", "参考", "根据", "数据显示",
+                                "据报", "资料", "报告"])
+            score = 0.6 if has_text_ref else 0.2
+            return {"score": score, "passed": score >= 0.5,
+                    "citations_found": 0, "valid": 0, "invalid": 0,
+                    "has_text_reference": has_text_ref}
+
+        n_sources = len(sources)
+        valid, invalid = 0, 0
+        for c in citations:
+            idx = int(c)
+            if 1 <= idx <= n_sources:
+                valid += 1
+            else:
+                invalid += 1
+
+        total = valid + invalid
+        ratio = valid / total if total > 0 else 0.0
+        # 有正确引用给基础分，invalid 扣分
+        score = ratio * 0.9 + (0.1 if total >= 2 else 0.0)
+        score = min(1.0, score)
+        return {
+            "score": score,
+            "passed": score >= 0.5,
+            "citations_found": total,
+            "valid": valid,
+            "invalid": invalid,
+        }
+
+    # ================== L4: 结构规范性 ==================
+
+    def _l4_structure_compliance(self, answer: str) -> Dict:
+        """输出是否包含预期的结构段落"""
+        # 期望的结构标记（Markdown 标题 或 常见关键词段）
+        expected_sections = [
+            (r'(?:^|\n)#+\s*(?:摘要|概述|总结|Summary|Overview)', "摘要/概述"),
+            (r'(?:^|\n)#+\s*(?:要点|关键|发现|Key|Finding)', "要点/发现"),
+            (r'(?:^|\n)#+\s*(?:分析|Analysis|详情)', "分析/详情"),
+            (r'(?:^|\n)#+\s*(?:风险|注意|提示|Risk|Warning|Caution)', "风险/提示"),
+        ]
+
+        found = []
+        missing = []
+        for pattern, name in expected_sections:
+            if re.search(pattern, answer, re.IGNORECASE):
+                found.append(name)
+            else:
+                missing.append(name)
+
+        # 至少有 2 个结构段落算合格
+        ratio = len(found) / len(expected_sections)
+        score = min(1.0, ratio + 0.2) if len(found) >= 2 else ratio
+        return {
+            "score": score,
+            "passed": score >= 0.5,
+            "found_sections": found,
+            "missing_sections": missing,
+        }
+
+    # ================== 综合 + 格式化 ==================
+
+    def _compute_overall(self, checks: Dict) -> Dict:
         total = 0.0
-        details = {}
         for layer, w in self.LAYER_WEIGHTS.items():
             if layer in checks:
-                score = checks[layer].get("score", 0)
-                total += score * w
-                details[layer] = score
-        return {"score": total, "passed": total >= self.threshold, "details": details}
+                total += checks[layer].get("score", 0) * w
+        return {"score": total, "passed": total >= self.threshold}
 
-    # ---------- 辅助 ----------
     def _risk_level(self, score: float, checks: Dict) -> str:
-        uv = sum(len(checks.get(k, {}).get("unverified", [])) for k in checks)
-        if score >= 0.8 and uv == 0:
+        unanchored = len(checks.get("L1_source_grounding", {}).get("unanchored", []))
+        if score >= 0.8 and unanchored == 0:
             return "low"
-        elif score >= 0.6 and uv <= 1:
+        elif score >= 0.6 and unanchored <= 2:
             return "medium"
         return "high"
 
-    def _collect_unverified(self, checks: Dict) -> List[str]:
-        result = []
-        for k in checks:
-            result.extend(checks[k].get("unverified", []))
-        return list(set(result))
+    def format_report(self, overall_score: float, checks: Dict) -> str:
+        """生成用户可见的评分卡片 — 嵌入最终输出"""
+        # 等级
+        if overall_score >= 0.9:
+            grade = "A"
+        elif overall_score >= 0.8:
+            grade = "B"
+        elif overall_score >= 0.65:
+            grade = "C"
+        elif overall_score >= 0.5:
+            grade = "D"
+        else:
+            grade = "F"
+
+        lines = [f"\n---\n📊 **质量评分**: {grade} ({overall_score:.0%})"]
+
+        # L1
+        l1 = checks.get("L1_source_grounding", {})
+        l1_score = l1.get("score", 0)
+        anchored = l1.get("anchored", 0)
+        total = l1.get("total", 0)
+        lines.append(f"├ 来源锚定: {l1_score:.0%} — {anchored}/{total} 句有来源支撑")
+
+        # L2
+        l2 = checks.get("L2_numerical_fidelity", {})
+        l2_score = l2.get("score", 0)
+        verified = l2.get("verified", 0)
+        l2_total = l2.get("total", 0)
+        lines.append(f"├ 数值一致: {l2_score:.0%} — {verified}/{l2_total} 个数字与来源匹配")
+
+        # L3
+        l3 = checks.get("L3_citation_integrity", {})
+        l3_score = l3.get("score", 0)
+        valid = l3.get("valid", 0)
+        cit_total = l3.get("citations_found", 0)
+        if cit_total > 0:
+            lines.append(f"├ 引用完整: {l3_score:.0%} — {valid}/{cit_total} 个引用标记正确")
+        elif l3.get("has_text_reference"):
+            lines.append(f"├ 引用完整: {l3_score:.0%} — 有文字引用（无 [N] 标记）")
+        else:
+            lines.append(f"├ 引用完整: {l3_score:.0%} — 无引用标记")
+
+        # L4
+        l4 = checks.get("L4_structure_compliance", {})
+        l4_score = l4.get("score", 0)
+        found = l4.get("found_sections", [])
+        lines.append(f"└ 结构规范: {l4_score:.0%} — 包含 {len(found)}/4 个结构段落")
+
+        # 警告
+        warnings = []
+        unanchored = l1.get("unanchored", [])
+        if unanchored:
+            for s in unanchored[:3]:
+                warnings.append(f"无来源: \"{s}\"")
+        unmatched = l2.get("unmatched", [])
+        if unmatched:
+            warnings.append(f"数值无来源: {', '.join(unmatched[:3])}")
+        invalid = l3.get("invalid", 0)
+        if invalid:
+            warnings.append(f"{invalid} 个引用标记指向不存在的来源")
+        missing = l4.get("missing_sections", [])
+        if missing:
+            warnings.append(f"缺少段落: {', '.join(missing)}")
+
+        if warnings:
+            lines.append("\n⚠️ **警告**:")
+            for w in warnings:
+                lines.append(f"  - {w}")
+
+        return "\n".join(lines)

@@ -3,156 +3,95 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Financial RAG</title>
+<title>FinRAG</title>
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
 
 <!-- Top bar -->
 <div class="topbar">
-  <div class="logo">Financial RAG <small>v2.1</small></div>
+  <div class="logo">FinRAG</div>
   <div class="kb-badge" id="kbBadge"><span class="dot dot-off"></span> <span id="kbStatus">未构建知识库</span></div>
   <div class="kb-badge" id="metaBadge" style="background:rgba(255,217,61,.1)"><span style="font-size:14px">📰</span> <span id="metaStatus">元数据: 0</span></div>
-  <div class="mock-badge" id="mockBadge"><span class="mock-dot"></span> MOCK 模式 · 数据为模拟</div>
+  <div class="mock-badge" id="mockBadge"><span class="mock-dot"></span> MOCK</div>
   <div class="spacer"></div>
   <div class="model-info" id="modelInfo">Loading...</div>
 </div>
 
 <!-- Pipeline flow navigation -->
 <div class="pipeline-flow">
-  <div class="flow-step" data-panel="agents"><span class="step-icon">🤖</span> <span class="step-label">Agent 架构<span class="step-sub">System overview</span></span></div>
+  <div class="flow-step" data-panel="overview"><span class="step-icon">🤖</span> <span class="step-label">系统概览<span class="step-sub">Architecture</span></span></div>
   <span class="flow-arrow">|</span>
-  <div class="flow-step" data-panel="ingest"><span class="step-icon">📥</span> <span class="step-label">导入数据 <span class="step-count" id="ingestCount">0</span><span class="step-sub">Files/News → KB</span></span></div>
+  <div class="flow-step" data-panel="data"><span class="step-icon">📚</span> <span class="step-label">数据管理 <span class="step-count" id="ingestCount">0</span><span class="step-sub">Import / Build / Manage</span></span></div>
   <span class="flow-arrow">→</span>
-  <div class="flow-step" data-panel="build"><span class="step-icon">🏗️</span> <span class="step-label">构建知识库 <span class="step-count" id="buildCount">0</span><span class="step-sub">Index + Embed</span></span></div>
+  <div class="flow-step active" data-panel="query"><span class="step-icon">🔍</span> <span class="step-label">智能查询 <span class="step-count" id="queryCount">0</span><span class="step-sub">RAG + K-line</span></span></div>
   <span class="flow-arrow">→</span>
-  <div class="flow-step active" data-panel="query"><span class="step-icon">🔍</span> <span class="step-label">RAG 查询 <span class="step-count" id="queryCount">0</span><span class="step-sub">Search + Retrieve</span></span></div>
-  <span class="flow-arrow">→</span>
-  <div class="flow-step" data-panel="analyze"><span class="step-icon">🧠</span> <span class="step-label">智能分析<span class="step-sub">News/Topic → Verdict</span></span></div>
-  <span class="flow-arrow">→</span>
-  <div class="flow-step" data-panel="tools"><span class="step-icon">🔧</span> <span class="step-label">分析工具<span class="step-sub">K-line / News / Score</span></span></div>
+  <div class="flow-step" data-panel="analyze"><span class="step-icon">🧠</span> <span class="step-label">深度分析<span class="step-sub">News / Topic / Follow-up</span></span></div>
 </div>
 
 <div class="main">
 <div class="content">
 
-  <!-- ========== AGENT ARCHITECTURE ========== -->
-  <div class="panel" id="panel-agents">
+  <!-- ========== SYSTEM OVERVIEW ========== -->
+  <div class="panel" id="panel-overview">
     <div class="agent-flow">
-      <!-- System overview -->
       <div style="margin-bottom:16px;padding:12px 16px;background:rgba(78,205,196,.06);border:1px solid rgba(78,205,196,.15);border-radius:8px">
-        <h3 style="font-size:14px;color:var(--accent2);margin-bottom:6px">📐 4-Agent 多智能体 RAG 系统</h3>
-        <p style="font-size:12px;color:var(--text2);margin:0;line-height:1.7">
-          用户查询 → <strong>CoordinatorAgent</strong> 分类意图 → <strong>IngestionAgent</strong> 摄取数据 / <strong>AnalysisAgent</strong> 分析抽取 → <strong>ScoringAgent</strong> 质量校验<br>
-          所有 Agent 只做编排决策，重活委托给 Function Calling 工具。LLM 调用经 LLMCaller 保护层（重试 + 缓存 + JSON 约束），检索走 HybridRetriever（BM25 + Vector + RRF 融合）
+        <p style="font-size:13px;color:var(--text2);margin:0;line-height:1.7">
+          FinRAG 是一个意图驱动的多智能体 RAG 系统。用户输入自然语言查询，系统自动识别意图、选择合适的 Agent 链执行分析，并在最终输出前进行质量校验和幻觉检测。
         </p>
       </div>
 
-      <!-- Agent Chain -->
       <div>
-        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">AGENT CHAIN — 意图驱动的多 Agent 调度</h3>
+        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">4-AGENT 协作链</h3>
         <div class="agent-row">
           <div class="agent-card">
             <span class="agent-phase tag tag-info">Step 1</span>
             <div class="agent-icon">🧭</div>
-            <div class="agent-name">CoordinatorAgent</div>
-            <div class="agent-role">意图分类 + Agent 链选择。解析用户查询，识别 5 种意图（kline / event_impact / report / news / general），选择对应执行链。</div>
-            <div class="agent-io"><strong>工具:</strong> classify_query_intent, select_agent_chain<br><strong>输出:</strong> intent + agent_chain + 路由元数据</div>
+            <div class="agent-name">Coordinator</div>
+            <div class="agent-role">意图分类 + Agent 链选择。解析用户查询，识别意图类型（K线 / 事件影响 / 报告 / 新闻 / 通用），选择对应执行链。</div>
           </div>
           <div class="agent-arrow">→</div>
           <div class="agent-card">
             <span class="agent-phase tag tag-ok">Step 2</span>
             <div class="agent-icon">📥</div>
-            <div class="agent-name">IngestionAgent</div>
-            <div class="agent-role">数据加载与预处理。JSONL/TXT/JSON 摄取 + TextPreprocessor 清洗切片 + 相关性过滤 + DataOrchestrator 并行编排。</div>
-            <div class="agent-io"><strong>工具:</strong> extract_document_metadata, detect_document_type<br><strong>输出:</strong> 标准化文档 + 元数据</div>
+            <div class="agent-name">Ingestion</div>
+            <div class="agent-role">数据加载与预处理。文件摄取、文本清洗切片、相关性过滤，将原始数据转为可检索的知识库文档。</div>
           </div>
           <div class="agent-arrow">→</div>
           <div class="agent-card" style="border-color:#7c3aed">
             <span class="agent-phase" style="background:rgba(124,58,237,.15);color:#7c3aed;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">Step 3</span>
             <div class="agent-icon">🧠</div>
-            <div class="agent-name">AnalysisAgent</div>
-            <div class="agent-role">统一分析引擎。按 intent 路由工具链：<br>• kline → analyze_kline + generate_kline_analysis<br>• event_impact → fetch_date_events + assess_event_impact<br>• report/news → extract_metrics + extract_entities<br>• 最终统一调用 synthesize_report</div>
-            <div class="agent-io"><strong>输入:</strong> 路由任务 + 上下文文档<br><strong>输出:</strong> metrics / entities / report / kline_analysis</div>
+            <div class="agent-name">Analysis</div>
+            <div class="agent-role">统一分析引擎。按意图路由到不同工具链：K线技术分析、事件影响评估、报告合成、新闻深度解读。</div>
           </div>
           <div class="agent-arrow">→</div>
           <div class="agent-card" style="border-color:var(--danger)">
             <span class="agent-phase" style="background:rgba(255,99,99,.12);color:var(--danger);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">Step 4</span>
             <div class="agent-icon">🛡️</div>
-            <div class="agent-name">ScoringAgent</div>
-            <div class="agent-role">质量校验与幻觉防护。HallucinationGuard 6 层校验 + PipelineScoreCard 各阶段打分。</div>
-            <div class="agent-io"><strong>工具:</strong> evaluate_pipeline_quality, check_hallucination, generate_score_report<br><strong>输出:</strong> 评分报告 + 引用验证 + 最终回答</div>
+            <div class="agent-name">Scoring</div>
+            <div class="agent-role">质量校验与幻觉防护。6 层校验 + 各阶段打分，确保输出结果可信、可引用。</div>
           </div>
         </div>
       </div>
 
-      <!-- Routing chains -->
       <div style="margin-top:16px;padding:12px 16px;background:var(--bg2);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.8">
-        <strong style="color:var(--text1)">🔀 路由链 (AgentRouter)</strong><br>
-        <code>kline</code> → [AnalysisAgent, ScoringAgent] &nbsp;|&nbsp;
-        <code>event_impact</code> → [AnalysisAgent, ScoringAgent]<br>
-        <code>report</code> / <code>news</code> / <code>general</code> → [IngestionAgent, AnalysisAgent, ScoringAgent]<br>
-        <span style="color:var(--text2)">置信度 &lt; 0.4 时自动前置 IngestionAgent 做数据预处理</span>
-      </div>
-
-      <!-- Pipeline (standalone) -->
-      <div style="margin-top:16px;padding:12px 16px;background:var(--bg2);border-radius:8px">
-        <h3 style="font-size:13px;color:var(--text1);margin-bottom:8px">⚙️ 5-Phase Pipeline（/api/pipeline 独立路径）</h3>
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px">
-          <span class="df-node df-data">Query</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">① Fetch</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">② Index</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">③ Process</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">④ Output</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">⑤ Evolve</span><span class="df-arrow">→</span>
-          <span class="df-node df-data">Response</span>
-        </div>
-        <div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.6">
-          Fetch=新闻元数据拉取 · Index=HybridRetriever 检索 · Process=LLM 分析抽取 · Output=SlotFiller 结构化 · Evolve=ScoreCard 评分
-        </div>
-      </div>
-
-      <!-- Data flow summary -->
-      <div class="dataflow-card">
-        <h3>🔄 数据流</h3>
-        <div class="dataflow-line">
-          <span class="df-node df-data">文件</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">IngestionAgent</span><span class="df-arrow">→</span>
-          <span class="df-node df-store">Knowledge Base</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">HybridRetriever</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">AnalysisAgent</span><span class="df-arrow">→</span>
-          <span class="df-node df-data">回答</span>
-        </div>
-        <div class="dataflow-line">
-          <span class="df-node df-data">新闻</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">News Collector</span><span class="df-arrow">→</span>
-          <span class="df-node df-store">Metadata (上下文)</span>
-          <span class="df-arrow" style="opacity:.3">···</span>
-          <span style="font-size:12px;color:var(--text2)">查询时补充注入</span>
-        </div>
-        <div class="dataflow-line">
-          <span class="df-node df-data">粘贴新闻 / 话题</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">AnalysisAgent</span><span class="df-arrow">→</span>
-          <span class="df-node df-store">KB Context</span><span class="df-arrow">→</span>
-          <span class="df-node df-data" style="background:rgba(232,121,249,.15);color:#e879f9">利好/利空/中性</span>
-        </div>
-        <div class="dataflow-line">
-          <span class="df-node df-data">股票代码</span><span class="df-arrow">→</span>
-          <span class="df-node df-agent">AnalysisAgent (K线)</span><span class="df-arrow">→</span>
-          <span class="df-node df-data">技术分析 (不存储)</span>
-        </div>
+        <strong style="color:var(--text1)">🔀 意图路由示例</strong><br>
+        “茅台走势” → K线分析链 &nbsp;|&nbsp;
+        “收购是利好还是利空” → 事件影响链<br>
+        “财报分析” / “最新AI动态” → 完整分析链（摄取 + 分析 + 评分）<br>
+        <span style="color:var(--text2)">用户只需输入问题，系统自动决定执行路径</span>
       </div>
     </div>
   </div>
 
-  <!-- ========== STEP 1: INGEST ========== -->
-  <div class="panel" id="panel-ingest">
+  <!-- ========== DATA MANAGEMENT ========== -->
+  <div class="panel" id="panel-data">
     <div class="card" style="margin-bottom:20px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
         <h3 style="margin:0">📁 文件导入</h3>
         <span class="tag tag-ok" style="font-size:11px">→ 知识库</span>
       </div>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">导入的文件经 <strong style="color:var(--accent)">IngestionAgent + TextPreprocessor + DataOrchestrator</strong> 分析后进入知识库，用于后续 RAG 检索</p>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">导入的文件经分析后进入知识库，用于后续 RAG 检索</p>
       <!-- Analysis mode toggle -->
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:8px 12px;background:var(--bg2);border-radius:8px">
         <span style="font-size:12px;font-weight:600">分析模式：</span>
@@ -182,7 +121,7 @@
         <h3 style="margin:0">📰 新闻抓取</h3>
         <span class="tag tag-warn" style="font-size:11px">→ 元数据 · 不进入知识库</span>
       </div>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">从同花顺 / 新浪 / 东方财富拉取实时新闻标题，存入元数据供查询时作为上下文补充。<strong style="color:var(--text2)">不做分析，不进入知识库。</strong></p>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">从同花顺 / 新浪 / 东方财富拉取实时新闻标题，存入元数据供查询时作为上下文补充。<strong style="color:var(--text2)">不做分析，不进入知识库。</strong></p>
       <div class="form-row">
         <input class="input" id="ingest-news-q" placeholder="主题: AI、茅台、降准..." />
         <select class="input" id="ingest-news-count" style="flex:none;width:80px">
@@ -196,10 +135,7 @@
       <div id="ingest-news-result"></div>
     </div>
 
-  </div>
-
-  <!-- ========== STEP 2: BUILD KB ========== -->
-  <div class="panel" id="panel-build">
+    <!-- KB Build + Manage (merged) -->
     <div class="card" id="kbDashboard" style="margin-bottom:16px;border-color:rgba(78,205,196,.3)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <h3 style="margin:0">📚 KB Status</h3>
@@ -214,7 +150,7 @@
     </div>
     <div class="card">
       <h3>🏗️ 知识库构建 <span class="tag tag-info" style="font-size:11px;margin-left:4px">BM25 + Embedding + RRF</span></h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">将已摄取的文档进行 <strong style="color:var(--accent)">BM25索引 → Embedding向量 → RRF融合排序</strong></p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">将已摄取的文档进行索引构建，支持混合检索</p>
       <div class="form-row">
         <button class="btn btn-primary" onclick="buildKB()">构建索引</button>
         <button class="btn btn-secondary" onclick="clearKB()">清空知识库</button>
@@ -238,11 +174,11 @@
     </div>
     <div class="card">
       <h3>📚 知识库内容 <span class="tag tag-info" id="kbDocCount">0 篇文档</span></h3>
-      <div class="doc-list" id="docList"><div class="empty-state"><div class="icon">📭</div><p>知识库为空</p><div class="hint">先在「数据摄取」步骤导入数据</div></div></div>
+      <div class="doc-list" id="docList"><div class="empty-state"><div class="icon">📭</div><p>知识库为空</p><div class="hint">先在「数据管理」导入数据</div></div></div>
     </div>
   </div>
 
-  <!-- ========== STEP 3: QUERY (RAG) ========== -->
+  <!-- ========== SMART QUERY ========== -->
   <div class="panel active" id="panel-query">
     <div class="query-box">
       <input class="input" id="query-input" placeholder="基于知识库查询，如：商汤科技2024年营收多少？" />
@@ -251,15 +187,32 @@
       </select>
       <button class="btn btn-primary" onclick="runKBQuery()">查询</button>
     </div>
-    <div class="loading" id="query-loading"><div class="spinner"></div><p>RAG 检索中 (BM25 + Vector → RRF → Rerank)...</p></div>
+    <div class="loading" id="query-loading"><div class="spinner"></div><p>RAG 检索中...</p></div>
     <div id="query-result"></div>
+
+    <!-- K-line Tool (integrated) -->
+    <div class="card" style="margin-top:24px">
+      <h3>📈 K线技术分析</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">输入股票名称或代码，查看 MACD / RSI / KDJ / 布林带等技术指标</p>
+      <div class="form-row">
+        <input class="input" id="tool-kline-q" placeholder="股票名称或代码" />
+        <select class="input" id="tool-kline-days" style="flex:none;width:80px">
+          <option value="30">30天</option><option value="60" selected>60天</option><option value="120">120天</option>
+        </select>
+        <select class="input" id="tool-kline-period" style="flex:none;width:80px">
+          <option value="daily">日K</option><option value="weekly">周K</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="runKlineTool()">分析</button>
+      </div>
+      <div id="tool-kline-result" style="max-height:500px;overflow-y:auto"></div>
+    </div>
   </div>
 
-  <!-- ========== STEP 5: SMART ANALYSIS ========== -->
+  <!-- ========== DEEP ANALYSIS ========== -->
   <div class="panel" id="panel-analyze">
     <div class="card" style="margin-bottom:20px">
       <h3>📰 新闻解读 <span class="tag tag-info" style="font-size:11px;margin-left:4px">粘贴新闻全文 → 结构化解析 → 利好利空研判</span></h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">粘贴一段新闻全文，系统会：<strong style="color:var(--accent)">① 抽取指标和实体</strong> → <strong style="color:var(--accent)">② 结合知识库上下文</strong> → <strong style="color:var(--accent)">③ 给出利好/利空/中性研判</strong>（与“新闻抓取”不同：这里分析全文内容，不是只拉标题）</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">粘贴新闻全文，系统自动抽取指标实体、结合知识库上下文，给出利好/利空/中性研判</p>
       <textarea class="input" id="analyze-news-text" rows="5" placeholder="粘贴新闻全文..." style="width:100%;min-height:100px;resize:vertical;font-size:13px;line-height:1.6"></textarea>
       <div class="form-row" style="margin-top:10px">
         <input class="input" id="analyze-news-q" placeholder="补充说明（可选）" />
@@ -270,7 +223,7 @@
     </div>
     <div class="card">
       <h3>🔍 话题调研 <span class="tag tag-info" style="font-size:11px;margin-left:4px">输入话题 → 抓新闻 → 综合研判</span></h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">输入话题，系统会：<strong style="color:var(--accent)">① 抓取新闻</strong> → <strong style="color:var(--accent)">② 查询 KB</strong> → <strong style="color:var(--accent)">③ 综合研判</strong></p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">输入话题，系统自动抓取新闻、查询知识库、综合研判</p>
       <div class="form-row">
         <input class="input" id="analyze-topic-input" placeholder="话题：如 DeepSeek、半导体..." />
         <select class="input" id="analyze-topic-count" style="flex:none;width:80px">
@@ -309,27 +262,6 @@
         <button class="btn btn-secondary btn-sm" onclick="refreshLearningHistory()">刷新</button>
       </div>
       <div id="learningHistoryList"><div class="empty-state" style="padding:16px"><div class="icon">🧠</div><p>尚未积累学习记录</p><div class="hint">每次新闻解读或话题调研的结论会自动存入知识库，供未来分析参考</div></div></div>
-    </div>
-  </div>
-
-  <!-- ========== STEP 6: TOOLS ========== -->
-  <div class="panel" id="panel-tools">
-    <div style="display:flex;flex-direction:column;gap:16px">
-      <div class="source-card">
-        <h3><span class="icon">📈</span> K线技术分析 <span class="tag tag-info" style="font-size:11px;margin-left:4px">AnalysisAgent</span></h3>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:10px">技术指标分析：MACD / RSI / KDJ / 布林带，支持日K/周K</p>
-        <div class="form-row">
-          <input class="input" id="tool-kline-q" placeholder="股票名称或代码" />
-          <select class="input" id="tool-kline-days" style="flex:none;width:80px">
-            <option value="30">30天</option><option value="60" selected>60天</option><option value="120">120天</option>
-          </select>
-          <select class="input" id="tool-kline-period" style="flex:none;width:80px">
-            <option value="daily">日K</option><option value="weekly">周K</option>
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="runKlineTool()">分析</button>
-        </div>
-        <div id="tool-kline-result" style="max-height:500px;overflow-y:auto"></div>
-      </div>
     </div>
   </div>
 

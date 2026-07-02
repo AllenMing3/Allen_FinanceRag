@@ -576,6 +576,10 @@ class PipelineScheduler:
                     check.get("overall_score", 1.0),
                     details={"risk": check.get("risk", "low")},
                 )
+                # 将评分卡片追加到最终输出 — 用户可见
+                report = check.get("report", "")
+                if report:
+                    result.final_output = result.final_output + "\n" + report
 
         except Exception as e:
             self._logger.warning(f"阶段5 进化失败: {e}")

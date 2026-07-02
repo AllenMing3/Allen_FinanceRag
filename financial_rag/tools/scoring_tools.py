@@ -117,7 +117,8 @@ def check_hallucination(output_text: str, source_items: List = None) -> Dict:
         "overall_score": result.get("overall_score", 1.0),
         "risk": result.get("risk", "low"),
         "checks": result.get("checks", {}),
-        "warnings": result.get("warnings", []),
+        "report": result.get("report", ""),
+        "unverified": result.get("unverified", []),
     }
 
 
@@ -148,26 +149,19 @@ def generate_score_report(
             lines.append(f"- {s['stage']}: {bar} {s['score']:.0%} ({s['elapsed_ms']:.0f}ms)")
         lines.append("")
 
-    # 防幻觉校验
+    # 防幻觉校验 — 直接使用 guard 生成的格式报告
     if hallucination_check:
-        lines.append("### 防幻觉校验")
-        risk = hallucination_check.get("risk", "unknown")
-        risk_emoji = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(risk, "❓")
-        lines.append(f"风险等级: {risk_emoji} {risk}")
-        score = hallucination_check.get("overall_score", 1.0)
-        lines.append(f"可信度: {score:.0%}")
-
-        checks = hallucination_check.get("checks", {})
-        if checks:
-            for name, detail in checks.items():
-                s = detail.get("score", 0) if isinstance(detail, dict) else 0
-                lines.append(f"- {name}: {s:.0%}")
-
-        warnings = hallucination_check.get("warnings", [])
-        if warnings:
-            lines.append(f"\n⚠️ {len(warnings)} 条警告:")
-            for w in warnings[:5]:
-                lines.append(f"  - {w}")
+        guard_report = hallucination_check.get("report", "")
+        if guard_report:
+            lines.append(guard_report)
+        else:
+            # fallback: 旧格式
+            lines.append("\n### 防幻觉校验")
+            risk = hallucination_check.get("risk", "unknown")
+            risk_emoji = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(risk, "❓")
+            lines.append(f"风险等级: {risk_emoji} {risk}")
+            score = hallucination_check.get("overall_score", 1.0)
+            lines.append(f"可信度: {score:.0%}")
 
     report_text = "\n".join(lines)
     return {"report": report_text, "pipeline_scores": pipeline_scores, "hallucination_check": hallucination_check}
