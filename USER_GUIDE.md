@@ -34,7 +34,7 @@ python -m financial_rag.main web
 | **系统概览** | 架构展示 | 查看 4 Agent 协作链 | Coordinator → Ingestion → Analysis → Scoring，意图路由示例 |
 | **数据管理** | 导入数据 | 搜索新闻（如 "AI人工智能"） | 收集元数据，辅助后续文件解析。新闻**不进知识库** |
 | **数据管理** | 导入数据 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库（后台 LLM 分析 + 进度显示） |
-| **数据管理** | 构建索引 | 点击「构建索引」 | BM25 + 向量双通道索引（TextChunker 自动切分） |
+| **数据管理** | 构建索引 | 点击「构建索引」 | BM25 + ChromaDB 向量双通道索引（jieba trigram 分词 + TextChunker 自动切分，Chroma 持久化到 `data/knowledge_base/chroma/`） |
 | **数据管理** | 管理知识库 | 按来源/关键词搜索删除 | 查看各来源文档数，一键删除匹配关键词的文档 |
 | **智能查询** | RAG 查询 | 输入问题 | AgentRouter **自动路由** → 检索知识库 → LLM 回答（带引用和分数明细） |
 | **智能查询** | K线分析 | 输入股票代码或名称 | 生成 MACD/RSI/KDJ/布林带技术分析报告 |
@@ -187,7 +187,8 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 - Agent 只做编排决策（`call_tool()`），不包含任何业务逻辑
 - 所有业务能力实现在 tools 层
 - 每条链都以 ScoringAgent 结尾，确保输出质量
-- 所有 LLM 调用经过 LLMCaller 保护层（重试 + JSON 解析 + 缓存 + 防幻觉约束）
+- 所有 LLM 调用经过 LLMCaller 保护层（重试 + 平衡括号 JSON 解析 + 缓存 + 防幻觉约束）
+- 防幻觉校验为 4 层透明检查：来源锚定（jieba 分词重叠）、数值一致、引用完整、结构规范
 
 ---
 
@@ -205,4 +206,4 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 
 **服务端启动慢** — 首次启动会在后台线程初始化知识库和组件（`_ensure_init()`），服务立即接受请求，若初始化未完成则端点会等待。
 
-**知识库删除后重建索引慢** — 已优化：按关键词/来源删除时使用 `HybridRetriever.remove()` 过滤文档+向量，仅重建 BM25，无需全量重建 embedding。
+**知识库删除后重建索引慢** — 已优化：按关键词/来源删除时使用 `HybridRetriever.remove()` 过滤文档 + 同步删除 ChromaDB 中对应向量，仅重建 BM25，无需全量重建 embedding。

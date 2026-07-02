@@ -13,7 +13,7 @@
 - **K线分析**：输入股票代码 → 技术指标计算 + LLM 趋势研判
 - **知识库管理**：文件导入/索引/去重/持久化，支持增量学习
 
-技术栈：**FastAPI + DashScope (Qwen) + 自研 HybridRetriever (BM25 + Vector + RRF) + 4 Agent 协作**。
+技术栈：**FastAPI + DashScope (Qwen) + ChromaDB (ANN) + 自研 HybridRetriever (BM25 + ChromaDB + RRF) + 4 Agent 协作**。
 
 ---
 
@@ -69,7 +69,7 @@
 
 ## Q5: RRF（Reciprocal Rank Fusion）融合是怎么做的？
 
-**背景**：混合检索 = BM25（关键词匹配）+ 向量检索（语义相似）。两个检索器返回的文档排序不同，需要融合。
+**背景**：混合检索 = BM25（关键词匹配）+ ChromaDB ANN（语义相似）。两个检索器返回的文档排序不同，需要融合。
 
 **实现**：
 ```
@@ -90,7 +90,7 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 **方案：LLMCaller 统一调用层**（commit `ac9c94e`）：
 - **自动重试**：超时/5xx 错误自动重试 2 次，指数退避
 - **响应缓存**：相同输入缓存结果（TTL 5分钟），减少 API 消耗
-- **JSON 解析**：`call_json()` 方法自动尝试 JSON 解析，失败后 fallback 到正则提取
+- **JSON 解析**：`call_json()` 方法自动尝试 JSON 解析，用平衡括号匹配算法处理嵌套对象，失败后 fallback 到正则提取
 - **统一接口**：所有 LLM 调用都经过 LLMCaller，不直接调 DashScope SDK
 
 **设计原则**：工具层（`tools/`）不关心 LLM 怎么调，只通过注入的 `_llm_ref` 获取结果。
@@ -99,15 +99,18 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ## Q7: 防幻觉（Hallucination Guard）怎么做的？
 
-**六层防护**（`guard/reflector.py`）：
-1. **L1 来源验证**：输出中的关键声明是否有检索来源支撑
-2. **L2 一致性检查**：数值是否与源数据一致（不能编造数字）
-3. **L3 事实核查**：实体关系是否正确（如"茅台营收"不能张冠李戴）
-4. **L4 完整性**：是否遗漏了重要维度
-5. **L5 引用准确**：引用标记 `[1][2]` 是否对应正确来源
-6. **L6 综合评分**：加权总分，输出 risk 等级（low/medium/high）
+**四层透明校验**（`guard/reflector.py`），每层做实、分数可见：
 
-**集成点**：ScoringAgent 在最终评分时调用 `check_hallucination` 工具，风险等级写入 context metadata。
+1. **L1 来源锚定**（weight 0.35）：jieba 分词后逐句检查 token 重叠率，每句能否追溯到某篇检索源。阈值 0.15。
+2. **L2 数值一致**（weight 0.25）：提取 answer 中的「数字+单位」对，交叉比对 source 中是否有相同数字。防止编造营收/增长等关键数据。
+3. **L3 引用完整**（weight 0.20）：`[N]` 标记存在且 N 对应有效来源编号。防止“伪引用”。
+4. **L4 结构规范**（weight 0.20）：输出是否包含预期段落（摘要/要点/风险等）。
+
+**用户可见**：每层的得分、通过/未通过、未锚定的句子都会出现在最终输出的防幻觉报告中，不是藏在 metadata 里。
+
+**集成点**：ScoringAgent 在 Phase 5 (Evolve) 调用 `check_hallucination` 工具，评分卡 + 防幻觉报告一起写入最终输出。
+
+**为什么从 6 层改成 4 层**：原来的 6 层有几层是“凑数”的（完整性、事实核查）——它们和 L1 来源锚定高度重叠，且检查逻辑不够具体。重写后每层有明确的检查目标和独立的分数，而不是“看起来层数多但实际效果含糊”。
 
 ---
 
@@ -161,10 +164,10 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 | 阶段 | 评分维度 |
 |---|---|
 | 数据获取 | 是否获取到数据、数据条数 |
-| RAG 检索 | BM25/Vector 命中率、RRF 共识度、Rerank 高相关比例 |
+| RAG 检索 | BM25/ChromaDB 命中率、RRF 共识度、Rerank 高相关比例 |
 | Multi-Agent | 各 Agent 成功率、工具调用成功率 |
 | 槽位输出 | 模板填充率 |
-| 防幻觉 | 六层校验综合分 |
+| 防幻觉 | 四层透明校验（来源锚定 + 数值一致 + 引用完整 + 结构规范） |
 
 最终输出加权总分 + 等级（A/B/C/D/F）+ 最薄弱 3 个环节的诊断建议。
 
@@ -277,6 +280,59 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ---
 
+## Q19: 向量检索为什么用 ChromaDB？
+
+**问题**：原来的向量检索是内存全量 cosine 相似度——文档少时还行，文档多了线性扫描越来越慢。
+
+**决策**：引入 ChromaDB 作为向量数据库：
+- **HNSW ANN 索引**：近似最近邻搜索，不用全量算 cosine
+- **PersistentClient**：向量持久化到磁盘（`data/knowledge_base/chroma/`），服务重启不用重新 embed
+- **内容哈希 MD5 ID**：每个文档用 `md5(content[:200])` 作为稳定 ID，跨 add/remove 操作不变
+- **删除同步**：`HybridRetriever.remove()` 同时删除内存 docs + ChromaDB 中对应 ID 的向量，不用全量重建
+
+**回退机制**：
+- 无 API Key → VectorEngine 退化为 Jaccard 相似度（不需要 embedding）
+- 有 API Key 但 ChromaDB 初始化失败 → brute-force cosine 回退
+
+---
+
+## Q20: 中文检索效果不好怎么办？
+
+**问题**：BM25 用 jieba bigram 分词，粒度太粗，中文检索精度不够。
+
+**解决**：
+- **Trigram 分词**：jieba 切分后，≥4 字的中文片段进一步拆成 trigram，保留 2-8 字的完整 segment。更细的 token 粒度让 BM25 召回更准
+- **索引前清洗**：`TextPreprocessor` 去模板化文本 + 段落去重，默认开启
+- **MD5 稳定 ID**：融合时用 `md5(content)` 替代 Python 内置 `hash()`（重启后值变），保证 RRF 去重结果稳定
+
+**效果**：中文检索相关性明显提升，重复文档问题彻底解决。
+
+---
+
+## Q21: 性能优化做了哪些？
+
+**审计驱动**：不是凭感觉优化，而是先审计全代码库，找出“暴力”模式再定点修复。
+
+| 优化项 | 原来 | 现在 | 文件 |
+|---|---|---|---|
+| 关键词扫描 | `for kw in list: if kw in text` O(n×m) | 预编译 `re.compile()` + `findall()` O(n) | `analysis.py`, `extraction_tools.py` |
+| 文档类型检测 | ~100 次 `kw in text` 循环 | 单次 regex 扫描 + frozenset 交集 | `extraction_tools.py` |
+| 指标别名排除 | O(n×m×k) 三层嵌套循环 | O(1) set 查找 | `extraction_tools.py` |
+| 抽取并行化 | 指标抽取 + 实体抽取串行 | `ThreadPoolExecutor(2)` 并行 | `analysis_agent.py` |
+| Pipeline 跳过 | Phase 4 槽位填充始终执行 | Agent 已生成 >50 字时跳过 SlotFiller | `pipeline.py` |
+
+**原则**：所有预编译/预计算放在模块级别（import 时执行一次），函数调用时零开销。
+
+---
+
+## Q22: LLM 调用层还做了什么优化？
+
+**平衡括号 JSON 解析**：原来 `call_json()` 用贪婪正则提取 JSON，遇到嵌套对象会截断。改用平衡括号匹配算法，正确处理字符串内的转义字符和嵌套 `{}`，解析成功率明显提升。
+
+**SlotFiller 也走 LLMCaller**：槽位填充的 LLM 调用之前是裸调 `llm.chat()`，没有重试/缓存/输入校验。统一后所有 LLM 调用都经过 LLMCaller，TTFT 也从固定公式改为实测延迟。
+
+---
+
 ## 关键数字（面试时可引用）
 
 | 指标 | 数据 |
@@ -286,7 +342,7 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 | 注册工具 | 27 个，跨 9 个模块 |
 | 测试覆盖 | 507 tests（21 个测试文件） |
 | 知识库文档 | ~500+ 篇（去重后） |
-| 检索延迟 | BM25 < 50ms，Vector < 200ms |
-| 全链路评分 | 6 层防护 + 5 阶段打分 |
+| 检索延迟 | BM25 < 50ms，ChromaDB ANN < 200ms |
+| 全链路评分 | 4 层防幻觉 + 5 阶段打分 |
 | API 架构 | 4 个 FastAPI Router（KB / Ingest / Analysis / Query） |
 | 意图路由 | 5 种意图（kline / event_impact / report / news / general） |

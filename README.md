@@ -33,11 +33,11 @@
 
 **Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 27 registered tools across 9 modules. Agents stay thin and testable.
 
-**Every chain ends with a quality gate.** The Scoring agent runs a 6-layer hallucination check and pipeline quality evaluation before any result reaches the user. No silent failures.
+**Every chain ends with a quality gate.** The Scoring agent runs a 4-layer hallucination check (source grounding, numerical fidelity, citation integrity, structure compliance) and pipeline quality evaluation before any result reaches the user. No silent failures.
 
-**Hybrid retrieval that actually works.** BM25 + 1024-dim vector embeddings + RRF fusion + qwen3-rerank reranking + metadata filtering — five signals combined instead of relying on any single one.
+**Hybrid retrieval that actually works.** BM25 + ChromaDB ANN vector search (1024-dim) + RRF fusion + qwen3-rerank reranking + metadata filtering — five signals combined instead of relying on any single one.
 
-**LLM calls never fail silently.** `LLMCaller` wraps every LLM invocation with retry, JSON parsing with fallback, response caching, and anti-hallucination constraints — one unified layer for the entire system.
+**LLM calls never fail silently.** `LLMCaller` wraps every LLM invocation with retry, balanced-bracket JSON parsing, response caching, and anti-hallucination constraints — one unified layer for the entire system.
 
 **507 tests, zero API keys.** All tests pass in under 5 seconds using mocked data sources. LLM and embedding stay real in tests — only external APIs are mocked.
 
@@ -65,7 +65,7 @@
                              │
 ┌──────────┬─────────────────┬─────────────────────────────────┐
 │ Retrieval│ Data APIs       │ LLM Layer                        │
-│ BM25+Vec │ Tushare         │ LLMCaller (retry+cache+JSON)    │
+│ BM25+Chroma│ Tushare         │ LLMCaller (retry+cache+JSON)    │
 │ RRF+Rerank│ 10jqka/Eastmoney│ ModelRouter (4 tiers, Qwen)    │
 └──────────┴─────────────────┴─────────────────────────────────┘
 ```
@@ -97,7 +97,8 @@ The user types a natural language question. The system decides everything else.
 | Rerank | qwen3-rerank (fallback to RRF score) |
 | Backend | FastAPI + 4 async routers |
 | Data APIs | Tushare, 10jqka, Sina, EastMoney |
-| Retrieval | BM25 + Vector + RRF + TextChunker + QueryParser |
+| Retrieval | BM25 + ChromaDB (ANN) + RRF + TextChunker + QueryParser |
+| Vector DB | ChromaDB (HNSW ANN, cosine distance, persistent storage) |
 | Testing | pytest — 507 tests across 21 files |
 
 ---

@@ -9,9 +9,9 @@
 | **Route** | `core/agent_router.py` | Intent classification (5 domains), agent chain selection, metadata extraction (date/stock) |
 | **Coordinate** | `core/orchestrator.py` | Register agents, decide execution order, pass context. Metadata merge (not replace), list extend |
 | **Data Orchestrate** | `core/data_orchestrator.py` | Multi-pool text management: TextPreprocessor → DocTypeClassifier → KnowledgePool routing, cross-pool search |
-| **Schedule** | `core/pipeline.py` | 5-phase pipeline: Fetch → Index → Process (AgentRouter) → Output → Evolve |
-| **Indexer** | `core/indexer.py` | 4-stage retrieval: Clean → Extract → Retrieve → Verify. BM25 + Vector + RRF fusion |
-| **Reflect** | `core/reflector.py` | ReAct loop (Think → Act → Observe → Judge) + 6-layer anti-hallucination guard |
+| **Schedule** | `core/pipeline.py` | 5-phase pipeline: Fetch → Index → Process (AgentRouter) → Output (SlotFiller, skippable) → Evolve (Scoring + HallucinationGuard) |
+| **Indexer** | `core/indexer.py` | 4-stage retrieval: Clean → Extract → Retrieve → Verify. BM25 + ChromaDB + RRF fusion |
+| **Reflect** | `guard/reflector.py` | ReAct loop (Think → Act → Observe → Judge) + 4-layer anti-hallucination guard (source grounding, numerical fidelity, citation integrity, structure compliance) |
 | **Score** | `core/scorer.py` | Full-pipeline scorecard: phase coverage, hallucination, citation density, answer relevance |
 
 ---
@@ -36,8 +36,8 @@
   └────────┬────────┘  └──┬─────┬───┘
            │              │     │
      context         ┌────▼──┐ ┌▼──────┐
-     injection       │ BM25  │ │Vector │
-                     │ Index │ │1024-d │
+     injection       │ BM25  │ │Chroma │
+                     │ Index │ │DB ANN │
                      └───┬───┘ └──┬────┘
                          │        │
                     ┌────▼────────▼────┐
@@ -204,10 +204,12 @@ All LLM calls in tools are wrapped by `LLMCaller` for robustness — no bare `ll
 | Capability | Description |
 |------------|-------------|
 | **Retry** | Exponential backoff (0.5s → 1s → 2s) on transient errors |
-| **Structured JSON** | `call_json()` auto-retries on parse failure, appends JSON output hint |
+| **Structured JSON** | `call_json()` auto-retries on parse failure, balanced bracket parsing (handles nested strings/escapes), appends JSON output hint |
 | **Caching** | Hash-based response cache with configurable TTL |
 | **Input Validation** | Max-length check before sending to API |
 | **Anti-Hallucination** | Default system constraints: no fabricated data, no speculation |
+
+SlotFiller also uses `LLMCaller` for retry + caching + input validation. Pipeline Phase 4 (Output/SlotFiller) is **skipped** when Phase 3 (Agent) already produced >50 chars of output — no redundant template filling.
 
 ```python
 from financial_rag.llm import LLMCaller, get_caller
@@ -240,13 +242,13 @@ text = caller.call("Generate summary", temperature=0.3)
 
 | Mode | Condition | Chain |
 |------|-----------|-------|
-| Local only | No API Key | BM25 + Jaccard → RRF |
-| With Embedding | API Key set | BM25 + Vector (1024-dim) → RRF |
-| Full pipeline | API Key active | BM25 + Vector → RRF → qwen3-rerank |
+| Local only | No API Key | BM25 + Jaccard (in VectorEngine) → RRF |
+| With Embedding | API Key set | BM25 + ChromaDB ANN (1024-dim) → RRF |
+| Full pipeline | API Key active | BM25 + ChromaDB ANN → RRF → qwen3-rerank |
 
-`HybridRetriever` also applies `TextChunker` (split + overlap + metadata tagging) at index time and metadata filtering at query time.
+`HybridRetriever` also applies `TextChunker` (split + overlap + metadata tagging) at index time and metadata filtering at query time. ChromaDB `PersistentClient` stores vectors on disk (`data/knowledge_base/chroma/`); content-hash MD5 document IDs ensure stable identity across add/remove operations.
 
-**Efficient deletion:** `HybridRetriever.remove(indices)` filters out docs + their embeddings and rebuilds only BM25 (cheap), avoiding a full `clear() + index()` cycle when deleting by keyword or source.
+**Efficient deletion:** `HybridRetriever.remove(indices)` filters out docs + syncs ChromaDB deletion by content-hash ID, rebuilds only BM25 (cheap) — avoiding a full `clear() + index()` cycle when deleting by keyword or source.
 
 ## Performance Optimizations
 
@@ -255,7 +257,13 @@ text = caller.call("Generate summary", temperature=0.3)
 | **Background startup** | `_ensure_init()` runs in a background thread via FastAPI `lifespan` — server accepts requests immediately; endpoints still call `_ensure_init()` (idempotent, blocks if not ready) | `web.py` |
 | **Async endpoints** | All endpoints are `async def` with blocking calls wrapped in `asyncio.to_thread()` — FastAPI handles concurrent requests without serialization | `api/*.py` |
 | **Parallel extraction** | `AnalysisAgent._run_extraction_chain()` runs `extract_financial_metrics` + `extract_entities` in parallel via `ThreadPoolExecutor(2)` | `agents/analysis_agent.py` |
-| **Efficient KB deletion** | `HybridRetriever.remove(indices)` filters docs + embeddings, rebuilds only BM25 — no full re-embedding | `retrievers/retriever.py` |
+| **Phase 4 skip** | Pipeline skips SlotFiller output when Phase 3 Agent already produced >50 chars — avoids overwriting good agent output with template filler | `core/pipeline.py` |
+| **Text cleaning pipeline** | Pre-indexing pipeline: `TextPreprocessor` (boilerplate removal + paragraph dedup enabled by default) → trigram BM25 tokenization → ChromaDB indexing. MD5-based doc IDs for stable RRF dedup | `retrievers/bm25_engine.py`, `retrievers/preprocessor.py`, `retrievers/fusion.py` |
+| **SlotFiller LLMCaller** | SlotFiller wraps all LLM calls via `LLMCaller` (retry + cache + input validation) instead of bare `llm.chat()`. TTFT measured from actual latency, not fixed formula | `slot_filler.py`, `llm/caller.py` |
+| **Efficient KB deletion** | `HybridRetriever.remove(indices)` filters docs + syncs ChromaDB deletion, rebuilds only BM25 — no full re-embedding | `retrievers/retriever.py` |
+| **Compiled regex patterns** | Module-level `re.compile()` for keyword scanning (sentiment, doc-type, event impact) — replaces per-call `kw in text` loops | `services/analysis.py`, `tools/extraction_tools.py`, `tools/event_impact_tools.py` |
+| **Precomputed lookup sets** | `frozenset` keyword collections + `_ALL_METRIC_ALIASES` set for O(1) alias exclusion — replaces nested loop scans | `tools/extraction_tools.py` |
+| **ChromaDB lazy init** | `PersistentClient` only created when first vector indexed; in-memory fallback when no persist dir | `retrievers/vector_engine.py` |
 | **Config TTL cache** | `/api/config` caches result for 60s, avoiding repeated config reads | `api/analysis_router.py` |
 | **HTML cache** | `index.html` read once at startup, served from memory | `web.py` |
 | **Orchestrator retry** | `max_retries=1`, retry delay `0.1s` (was 2 retries, 1s delay) | `core/factory.py`, `core/orchestrator.py` |
@@ -293,7 +301,7 @@ text = caller.call("Generate summary", temperature=0.3)
 | `config.py` | Global config dataclasses | `config`, `AppConfig`, `LLMConfig` |
 | `prompts.py` | AI-sector LLM prompt templates + few-shot examples (SenseTime / NVIDIA / ZhipuAI) | — |
 | `templates.py` | 4 slot templates: QUICK_QA, FINANCIAL_REPORT, NEWS_BRIEF, DEEP_ANALYSIS | `SlottedTemplate`, `ALL_TEMPLATES` |
-| `slot_filler.py` | Parallel slot filling engine with TTFT measurement | `SlotFiller`, `create_slot_filler` |
+| `slot_filler.py` | Parallel slot filling engine with LLMCaller wrapper (retry + cache) + measured TTFT | `SlotFiller`, `create_slot_filler` |
 | `rss_fetcher.py` | Financial news via domestic APIs (10jqka / Sina / EastMoney) + rate limiting | `search_news`, `fetch_all_news` |
 | `tushare_client.py` | K-line & financial indicators via Tushare Pro | `fetch_stock_kline`, `compute_technical_indicators` |
 | `mock_data.py` | 25 AI-sector mock news + 3 long-form articles | Mock data for offline dev |
@@ -321,11 +329,10 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `agent_router.py` | Query-time routing: intent classification, chain selection, metadata extraction | `AgentRouter`, `RoutingDecision` |
 | `orchestrator.py` | Multi-agent scheduling engine — dict merge, list extend, scalar replace | `AgentOrchestrator` |
 | `data_orchestrator.py` | Multi-pool text management: TextPreprocessor + DocTypeClassifier + KnowledgePool routing | `DataOrchestrator`, `KnowledgePool` |
-| `pipeline.py` | 5-phase PipelineScheduler (Fetch → Index → Process → Output → Evolve) | `PipelineScheduler`, `PipelineResult` |
+| `pipeline.py` | 5-phase PipelineScheduler (Fetch → Index → Process (AgentRouter) → Output (SlotFiller, skippable) → Evolve (Scoring + HallucinationGuard)) | `PipelineScheduler`, `PipelineResult` |
 | `router.py` | CLI command dispatch + handlers | `CommandRouter` |
 | `factory.py` | Factory: creates and wires 4 agents + AgentRouter | `create_orchestrator`, `setup_environment` |
 | `indexer.py` | Hybrid retrieval pipeline orchestration | `PipelineOrchestrator` |
-| `reflector.py` | ReAct loop + HallucinationGuard | `ReflectionLoop`, `HallucinationGuard` |
 | `scorer.py` | Full-pipeline scorecard | `PipelineScoreCard`, `ScoreGrade` |
 | `protocol.py` | Agent messaging infrastructure | `AgentMessage`, `MessageBus` |
 
@@ -358,13 +365,13 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 
 | File | Role |
 |------|------|
-| `retriever.py` | `HybridRetriever`: orchestrates BM25 + Vector + RRF fusion + metadata filtering |
-| `bm25_engine.py` | `BM25Engine`: standalone BM25 scoring with jieba tokenization |
-| `vector_engine.py` | `VectorEngine`: cosine similarity over embedding vectors |
-| `fusion.py` | `rrf_fusion()`, `hybrid_fusion()`: RRF and weighted score fusion |
+| `retriever.py` | `HybridRetriever`: orchestrates BM25 + ChromaDB + RRF fusion + metadata filtering; accepts `chroma_persist_dir` for persistent vector storage |
+| `bm25_engine.py` | `BM25Engine`: BM25Okapi indexing + retrieval with jieba trigram tokenization (Chinese segments 2-8 chars → trigrams for segments ≥4 chars) |
+| `vector_engine.py` | `VectorEngine`: ChromaDB ANN search (HNSW, cosine) + brute-force fallback + Jaccard fallback; content-hash MD5 document IDs |
+| `fusion.py` | `rrf_fusion()`, `hybrid_fusion()`: RRF and weighted score fusion. MD5-based stable document IDs for deduplication |
 | `filters.py` | `apply_filters()`: metadata-based filtering (source, date, doc_type) |
 | `chunker.py` | `TextChunker`: document splitting with overlap + metadata tagging |
-| `preprocessor.py` | `TextPreprocessor` (cleaning), `RelevanceGate` (relevance filtering), `DocTypeClassifier` (fast classification) |
+| `preprocessor.py` | `TextPreprocessor` (cleaning, boilerplate removal, paragraph dedup — enabled by default), `RelevanceGate` (relevance filtering), `DocTypeClassifier` (fast classification) |
 | `query_parser.py` | `QueryParser`: intent detection, entity extraction, date parsing from queries |
 | `dictionaries.py` | Externalized keyword dictionaries: `STOCK_MAP`, `FINANCIAL_TERMS`, `INDUSTRY_TERMS`, etc. |
 | `persistence.py` | `save_index()`, `load_index()`: index serialization |
@@ -375,13 +382,13 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 |------|------|
 | `dashscope_client.py` | DashScope API: LLM + Embedding + Rerank |
 | `model_router.py` | Auto-select model by task complexity + budget control (4 tiers), `get_caller()` / `get_caller_for_agent()` |
-| `caller.py` | `LLMCaller`: retry + JSON parsing + response cache + input validation + anti-hallucination constraints |
+| `caller.py` | `LLMCaller`: retry + balanced-bracket JSON parsing + response cache + input validation + anti-hallucination constraints. Used by tools, SlotFiller, and pipeline |
 
 ### `financial_rag/guard/` — Anti-Hallucination
 
 | File | Role |
 |------|------|
-| `reflector.py` | `HallucinationGuard`: 6-layer check (source verification, consistency, fact check, completeness, citation accuracy, overall score) |
+| `reflector.py` | `HallucinationGuard`: 4-layer check — L1 source grounding (jieba token overlap), L2 numerical fidelity (number+unit pairs), L3 citation integrity ([N] references valid), L4 structure compliance (expected sections). Also `ReflectionLoop` (ReAct) |
 
 ### `financial_rag/services/` — Business Logic Layer
 
@@ -457,7 +464,7 @@ Env vars (`.env`):
 | K-line fetch fails | Check `.env` has `TUSHARE_TOKEN` with 120+ points |
 | News fetch fails | `from financial_rag.rss_fetcher import fetch_all_news; fetch_all_news()` |
 | Retrieval inaccurate | `python -m financial_rag.main score "query"`. Adjust `config.pipeline` weights |
-| LLM hallucination | Check `core/reflector.py` HallucinationGuard. Lower `temperature` |
+| LLM hallucination | Check `guard/reflector.py` HallucinationGuard (4-layer check). Lower `temperature` |
 | Adding a new Agent | Inherit `BaseAgent`, implement `process()`, register in `factory.py` |
 | Adding a new intent | Register in `AgentRouter.register_intent()` — keywords + chain mapping |
 
