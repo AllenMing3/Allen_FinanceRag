@@ -4,6 +4,7 @@ from financial_rag.retrievers.query_parser import (
     QueryParser, QueryResult,
     FINANCIAL_TERMS, INDUSTRY_TERMS, ACTION_TERMS, STOP_WORDS,
 )
+from financial_rag.retrievers.dictionaries import SYNONYM_LOOKUP, CONCEPT_MAP
 
 
 @pytest.fixture
@@ -230,3 +231,102 @@ class TestEndToEnd:
         keywords_dict = dict(result.keywords)
         # Should extract industry terms
         assert any(t in keywords_dict for t in ["芯片", "半导体"])
+
+
+# ===================== 查询扩展 =====================
+
+
+class TestQueryExpansion:
+    """规则层查询扩展测试"""
+
+    def test_synonym_lookup_exists(self):
+        """同义词表应存在且包含基本条目"""
+        assert "英伟达" in SYNONYM_LOOKUP
+        assert "NVIDIA" in SYNONYM_LOOKUP["英伟达"]
+        assert "NVDA" in SYNONYM_LOOKUP["英伟达"]
+
+    def test_concept_map_exists(self):
+        """概念关联表应存在且包含基本条目"""
+        assert "芯片" in CONCEPT_MAP
+        assert "半导体" in CONCEPT_MAP["芯片"]
+
+    def test_synonym_expansion_nvidia(self, parser):
+        """“英伟达”应扩展出 NVIDIA、NVDA"""
+        result = parser.parse("英伟达最新芯片")
+        assert len(result.expanded_terms) > 0
+        expanded_lower = [t.lower() for t in result.expanded_terms]
+        assert "nvidia" in expanded_lower or "nvda" in expanded_lower
+
+    def test_synonym_expansion_maotai(self, parser):
+        """“茅台”应扩展出贵州茅台、600519"""
+        result = parser.parse("茅台最近走势")
+        expanded_set = set(result.expanded_terms)
+        assert "贵州茅台" in expanded_set or "600519" in expanded_set
+
+    def test_concept_expansion_chip(self, parser):
+        """“芯片”应扩展出半导体、光刻等关联词"""
+        result = parser.parse("芯片行业分析")
+        expanded_set = set(result.expanded_terms)
+        assert "半导体" in expanded_set
+
+    def test_concept_expansion_ai(self, parser):
+        """“AI”应扩展出大模型、算力、GPU等"""
+        result = parser.parse("AI对投资的影响")
+        expanded_set = set(result.expanded_terms)
+        # At least one AI-related concept should be expanded
+        assert any(t in expanded_set for t in ["大模型", "算力", "GPU", "人工智能"])
+
+    def test_expanded_query_contains_original(self, parser):
+        """expanded_query 应包含原始查询"""
+        result = parser.parse("英伟达芯片")
+        assert "英伟达芯片" in result.expanded_query
+
+    def test_no_expansion_for_unrelated_query(self, parser):
+        """无关查询不应产生扩展词"""
+        result = parser.parse("今天天气怎么样")
+        assert result.expanded_terms == []
+        assert result.expanded_query == "今天天气怎么样"
+
+    def test_expand_weight_synonym(self, parser):
+        """同义词权重应为 1.5"""
+        result = parser.parse("英伟达最新财报")
+        kw_dict = dict(result.keywords)
+        # NVIDIA/NVDA should be in keywords with weight 1.5
+        for term in result.expanded_terms:
+            if term.lower() in ("nvidia", "nvda"):
+                assert kw_dict[term] == 1.5
+                break
+
+    def test_expand_weight_concept(self, parser):
+        """概念关联词权重应为 0.6"""
+        result = parser.parse("芯片板块走势")
+        kw_dict = dict(result.keywords)
+        for term in result.expanded_terms:
+            if term in CONCEPT_MAP.get("芯片", []):
+                assert kw_dict[term] == 0.6
+                break
+
+    def test_expansion_dedup(self, parser):
+        """扩展词不应与已有关键词重复"""
+        result = parser.parse("芯片半导体行业")
+        # “半导体”可能在 INDUSTRY_TERMS 中已存在，不应重复
+        terms = [t for t, w in result.keywords]
+        assert len(terms) == len(set(terms))
+
+    def test_max_expansion_cap(self, parser):
+        """扩展词数量不应超过上限"""
+        result = parser.parse("英伟达芯片AI算力GPU大模型半导体光刻机光伏储能")
+        assert len(result.expanded_terms) <= parser._MAX_EXPAND_TERMS
+
+    def test_expanded_terms_field_populated(self, parser):
+        """result.expanded_terms 应被正确填充"""
+        result = parser.parse("茅台")
+        assert isinstance(result.expanded_terms, list)
+        assert len(result.expanded_terms) > 0
+
+    def test_case_insensitive_synonym(self, parser):
+        """英文同义词应不区分大小写"""
+        result = parser.parse("NVIDIA最新GPU")
+        expanded_lower = [t.lower() for t in result.expanded_terms]
+        # Should find "英伟达" from the synonym group
+        assert "英伟达" in expanded_lower or "nvda" in expanded_lower

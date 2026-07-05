@@ -146,6 +146,7 @@ class HybridRetriever:
                 f"date={parsed.date or parsed.date_range or '-'} "
                 f"type={parsed.query_type} "
                 f"keywords={[(t, w) for t, w in parsed.keywords[:5]]}"
+                f"{' expand=' + str(parsed.expanded_terms[:6]) if parsed.expanded_terms else ''}"
             )
 
         # 1. 分词
@@ -183,17 +184,19 @@ class HybridRetriever:
             scorecard.record_bm25(0, 0.0, 0.0, len(query_tokens), 0,
                                   elapsed_ms=(time.time() - t0) * 1000)
 
-        # 3. Vector 检索
+        # 3. Vector 检索 (使用 expanded_query 提升语义召回)
         t_vec = time.time()
+        vec_query = (parsed.expanded_query
+                     if parsed and parsed.expanded_query else query)
         if self._vector.has_embedding:
             vector_results = self._vector.search_embedding(
-                self.documents, query, top_k * 2,
+                self.documents, vec_query, top_k * 2,
                 doc_embeddings=self.doc_embeddings,
                 cache_callback=lambda embs: setattr(self, 'doc_embeddings', embs),
             )
         else:
             vector_results = self._vector.search_jaccard(
-                self.documents, query, top_k * 2,
+                self.documents, vec_query, top_k * 2,
                 tokenize_fn=self._bm25.tokenize,
             )
         vec_elapsed = (time.time() - t_vec) * 1000
@@ -296,6 +299,38 @@ class HybridRetriever:
         card = PipelineScoreCard(query=query)
         results = self.search(query, top_k=top_k, use_rerank=use_rerank, scorecard=card)
         return results, card
+
+    def llm_rewrite_query(self, query: str, llm, parsed=None) -> str:
+        """
+        LLM 增强层: 对短查询做语义扩展
+
+        仅在以下条件下触发:
+        - query 较短 (< 15 字) 或规则扩展词 < 2 个
+        - LLM 可用
+
+        Returns: 改写后的查询字符串 (原 query + LLM 补充词)
+        """
+        # 条件检查
+        rule_expand_count = len(parsed.expanded_terms) if parsed else 0
+        if len(query) >= 15 and rule_expand_count >= 2:
+            return query  # 查询已足够丰富，不需要 LLM 扩展
+
+        try:
+            from financial_rag.llm.caller import LLMCaller
+            caller = LLMCaller(llm)
+            resp = caller.call(
+                f"查询: {query}\n请生成 2-3 个相关的搜索关键词，用空格分隔。只输出关键词，不要解释。",
+                system="你是搜索查询扩展助手。根据用户查询生成相关搜索词。",
+                max_tokens=50, temperature=0.0,
+            )
+            extra_terms = resp.content.strip()
+            if extra_terms and len(extra_terms) < 100:
+                rewritten = query + " " + extra_terms
+                logger.info(f"LLM query rewrite: '{query}' → '{rewritten}'")
+                return rewritten
+        except Exception as e:
+            logger.debug(f"LLM query rewrite skipped: {e}")
+        return query
 
     def remove(self, indices: List[int]):
         """Remove documents by index positions.

@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from financial_rag.retrievers.dictionaries import (
     FINANCIAL_TERMS, INDUSTRY_TERMS, ACTION_TERMS, STOP_WORDS,
     QUERY_TYPE_PATTERNS, STOCK_MAP,
+    SYNONYM_LOOKUP, CONCEPT_MAP,
 )
 
 
@@ -38,6 +39,10 @@ class QueryResult:
     
     # 查询类型
     query_type: str = "other"      # analysis / factual / comparison / other
+
+    # 扩展查询 (规则层: 同义词 + 概念关联)
+    expanded_terms: List[str] = field(default_factory=list)  # 扩展出的词
+    expanded_query: str = ""      # 原始查询 + 扩展词拼接 (给 ChromaDB embedding 用)
     
     def get_weighted_terms(self) -> List[str]:
         """返回加权关键词列表（高权重词重复多次，提升 BM25 召回）"""
@@ -100,7 +105,10 @@ class QueryParser:
         # 2. 关键词抽取（带权重）
         self._extract_keywords(query, result)
         
-        # 3. 查询类型分类
+        # 3. 查询扩展（同义词 + 概念关联）
+        self._expand_query(query, result)
+        
+        # 4. 查询类型分类
         self._classify_type(query, result)
         
         return result
@@ -225,6 +233,53 @@ class QueryParser:
     
     # ---- 查询类型分类 ----
     
+    # ---- 查询扩展 ----
+
+    # 权重配置
+    _SYNONYM_WEIGHT = 1.5       # 同义词: 略低于原始金融术语 (2.0)
+    _CONCEPT_WEIGHT = 0.6       # 概念关联: 仅补充召回，权重较低
+    _MAX_EXPAND_TERMS = 10      # 扩展词上限，防止爆炸
+
+    def _expand_query(self, query: str, result: QueryResult):
+        """
+        规则层查询扩展:
+        1. 扫描 query 中的词，查同义词表，添加同义词 (weight=1.5)
+        2. 扫描 query 中的词，查概念关联表，添加关联词 (weight=0.6)
+        3. 拼接 expanded_query 给 ChromaDB embedding 用
+        """
+        existing_terms = {term for term, _ in result.keywords}
+        expanded = []
+        query_lower = query.lower()
+
+        # --- 同义词扩展 ---
+        # 扫描 query 中的每个片段，查 SYNONYM_LOOKUP
+        for trigger, synonyms in SYNONYM_LOOKUP.items():
+            if trigger in query_lower:
+                for syn in synonyms:
+                    # 跳过触发词本身 + 已存在的词
+                    if syn.lower() != trigger and syn not in existing_terms and syn.lower() not in existing_terms:
+                        if len(expanded) < self._MAX_EXPAND_TERMS:
+                            expanded.append(syn)
+                            existing_terms.add(syn)
+                            result.keywords.append((syn, self._SYNONYM_WEIGHT))
+
+        # --- 概念关联扩展 ---
+        for concept, related_terms in CONCEPT_MAP.items():
+            if concept.lower() in query_lower:
+                for related in related_terms:
+                    if related not in existing_terms and related.lower() not in existing_terms:
+                        if len(expanded) < self._MAX_EXPAND_TERMS:
+                            expanded.append(related)
+                            existing_terms.add(related)
+                            result.keywords.append((related, self._CONCEPT_WEIGHT))
+
+        # --- 构建 expanded_query (给 ChromaDB embedding 用) ---
+        result.expanded_terms = expanded
+        if expanded:
+            result.expanded_query = query + " " + " ".join(expanded)
+        else:
+            result.expanded_query = query
+
     def _classify_type(self, query: str, result: QueryResult):
         """基于关键词判断查询类型"""
         for qtype, patterns in QUERY_TYPE_PATTERNS.items():
