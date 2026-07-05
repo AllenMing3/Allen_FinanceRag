@@ -36,7 +36,7 @@ python -m financial_rag.main web
 | **数据管理** | 导入数据 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库（后台 LLM 分析 + 进度显示） |
 | **数据管理** | 构建索引 | 点击「构建索引」 | BM25 + ChromaDB 向量双通道索引（jieba trigram 分词 + TextChunker 自动切分，Chroma 持久化到 `data/knowledge_base/chroma/`） |
 | **数据管理** | 管理知识库 | 按来源/关键词搜索删除 | 查看各来源文档数，一键删除匹配关键词的文档 |
-| **智能查询** | RAG 查询 | 输入问题 | AgentRouter **自动路由** → 检索知识库 → LLM 回答（带引用和分数明细） |
+| **智能查询** | RAG 查询 | 输入问题 | QueryParser **查询扩展**（同义词 + 概念关联）→ AgentRouter 自动路由 → 检索知识库 → LLM 回答（带引用和分数明细） |
 | **智能查询** | K线分析 | 输入股票代码或名称 | 生成 MACD/RSI/KDJ/布林带技术分析报告 |
 | **深度分析** | 新闻解读 | 粘贴新闻文本 | 多维影响评估 + 关键信号 + 风险提示 |
 | **深度分析** | 话题调研 | 输入话题关键词 | 子话题聚类 + 情绪趋势 + 反向信号 |
@@ -132,7 +132,7 @@ python -m pytest tests/ -v
 | Mock 数据 | `pytest tests/test_mock_data.py -v` | K线、搜索、指标、新闻 |
 | LLM 调用层 | `pytest tests/test_llm_caller.py -v` | LLMCaller 重试、JSON、缓存、约束 |
 | 数据编排器 | `pytest tests/test_data_orchestrator.py -v` | 多池摄入/搜索/跨池检索 |
-| 查询解析器 | `pytest tests/test_query_parser.py -v` | 意图、实体、日期提取 |
+| 查询解析器 | `pytest tests/test_query_parser.py -v` | 意图、实体、日期提取、查询扩展（同义词 + 概念关联） |
 | K线工具 | `pytest tests/test_kline_tools.py -v` | K线获取、技术分析 |
 | 新闻工具 | `pytest tests/test_news_tools.py -v` | 股票新闻、财经新闻、公告 |
 | 事件影响工具 | `pytest tests/test_event_impact_tools.py -v` | 事件获取、影响评估 |

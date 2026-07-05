@@ -248,6 +248,12 @@ text = caller.call("Generate summary", temperature=0.3)
 
 `HybridRetriever` also applies `TextChunker` (split + overlap + metadata tagging) at index time and metadata filtering at query time. ChromaDB `PersistentClient` stores vectors on disk (`data/knowledge_base/chroma/`); content-hash MD5 document IDs ensure stable identity across add/remove operations.
 
+**Query Expansion** (规则优先 + LLM 增强):
+- **同义词扩展** (weight=1.5): 35 组双向同义词，如 "英伟达" ↔ "NVIDIA" ↔ "NVDA"，O(1) 查找表
+- **概念关联** (weight=0.6): 18 个行业概念单向关联，如 "芯片" → [半导体, 光刻, 晶圆, 封装, 制程]
+- **LLM 增强**: 短查询 (<15 字) 且规则扩展词 <2 个时，通过 `llm_rewrite_query()` 补充 2-3 个语义关键词
+- BM25 用扩展后加权关键词搜索，ChromaDB 用 `expanded_query` (原 query + 扩展词拼接) 做语义检索
+
 **Efficient deletion:** `HybridRetriever.remove(indices)` filters out docs + syncs ChromaDB deletion by content-hash ID, rebuilds only BM25 (cheap) — avoiding a full `clear() + index()` cycle when deleting by keyword or source.
 
 ## Performance Optimizations
@@ -265,6 +271,7 @@ text = caller.call("Generate summary", temperature=0.3)
 | **Precomputed lookup sets** | `frozenset` keyword collections + `_ALL_METRIC_ALIASES` set for O(1) alias exclusion — replaces nested loop scans | `tools/extraction_tools.py` |
 | **ChromaDB lazy init** | `PersistentClient` only created when first vector indexed; in-memory fallback when no persist dir | `retrievers/vector_engine.py` |
 | **Config TTL cache** | `/api/config` caches result for 60s, avoiding repeated config reads | `api/analysis_router.py` |
+| **Query expansion** | 35 组同义词 + 18 个概念关联，规则层零延迟扩展 + LLM 短查询增强。BM25 用加权扩展词，ChromaDB 用 expanded_query | `retrievers/query_parser.py`, `retrievers/dictionaries.py` |
 | **HTML cache** | `index.html` read once at startup, served from memory | `web.py` |
 | **Orchestrator retry** | `max_retries=1`, retry delay `0.1s` (was 2 retries, 1s delay) | `core/factory.py`, `core/orchestrator.py` |
 | **Fetch normalization** | Pipeline `_phase_fetch` normalizes all tool results to standard doc format (`title`, `content`, `source`, `publish_time`, `url`) — handles alternate keys (`items` / `results`) | `core/pipeline.py` |

@@ -333,6 +333,35 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ---
 
+## Q23: 查询扩展 (Query Expansion) 是怎么做的？
+
+**问题**：用户输入 "英伟达" 时，BM25 只搜 "英伟达" 三个字，但知识库文档可能写的是 "NVIDIA"、"NVDA"、"黄仁勋"。短查询召回率很低。
+
+**解决**：规则优先 + LLM 增强的两层查询扩展：
+
+| 层 | 策略 | 权重 | 延迟 |
+|---|---|---|---|
+| 同义词扩展 | 35 组双向同义词（"英伟达" ↔ "NVIDIA" ↔ "NVDA"），O(1) 查找表 | 1.5 | 0ms |
+| 概念关联 | 18 个行业概念单向关联（"芯片" → [半导体, 光刻, 晶圆]） | 0.6 | 0ms |
+| LLM 增强 | 短查询 <15 字且规则扩展 <2 词时，LLM 补充 2-3 个搜索词 | - | ~500ms |
+
+**数据流**：
+- `QueryParser._expand_query()` 扫描查询中的词，查 `SYNONYM_LOOKUP` 和 `CONCEPT_MAP`
+- 扩展词添加到 `result.keywords` 并生成 `result.expanded_query`（原 query + 扩展词拼接）
+- `HybridRetriever.search()` 中 BM25 用扩展后加权关键词，ChromaDB 用 `expanded_query` 做语义检索
+- 可选 `llm_rewrite_query()` 对短查询做 LLM 语义补充
+
+**示例**：
+```
+输入: "英伟达芯片"
+  → 同义词: NVIDIA, NVDA (weight=1.5)
+  → 概念: 半导体, 光刻, 晶圆, 封装, 制程 (weight=0.6)
+  → expanded_query: "英伟达芯片 NVIDIA NVDA 半导体 光刻 晶圆 封装 制程"
+  → BM25 用以上加权词搜索，ChromaDB 用拼接后的语义查询
+```
+
+---
+
 ## 关键数字（面试时可引用）
 
 | 指标 | 数据 |
@@ -340,9 +369,10 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 | 总 commit 数 | ~60 |
 | Agent 数量 | 4（从 7 精简） |
 | 注册工具 | 27 个，跨 9 个模块 |
-| 测试覆盖 | 507 tests（21 个测试文件） |
+| 测试覆盖 | 521 tests（21 个测试文件） |
 | 知识库文档 | ~500+ 篇（去重后） |
 | 检索延迟 | BM25 < 50ms，ChromaDB ANN < 200ms |
+| 查询扩展 | 35 组同义词 + 18 个概念关联，规则层 0ms + LLM 层可选 |
 | 全链路评分 | 4 层防幻觉 + 5 阶段打分 |
 | API 架构 | 4 个 FastAPI Router（KB / Ingest / Analysis / Query） |
 | 意图路由 | 5 种意图（kline / event_impact / report / news / general） |
