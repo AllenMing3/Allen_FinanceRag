@@ -34,53 +34,198 @@
 
   <!-- ========== SYSTEM OVERVIEW ========== -->
   <div class="panel" id="panel-overview">
-    <div class="agent-flow">
-      <div style="margin-bottom:16px;padding:12px 16px;background:rgba(78,205,196,.06);border:1px solid rgba(78,205,196,.15);border-radius:8px">
-        <p style="font-size:13px;color:var(--text2);margin:0;line-height:1.7">
-          FinRAG 是一个意图驱动的多智能体 RAG 系统。用户输入自然语言查询，系统自动识别意图、选择合适的 Agent 链执行分析，并在最终输出前进行质量校验和幻觉检测。
-        </p>
+  
+    <!-- Section 1: System stats bar -->
+    <div class="overview-stats" id="overviewStats">
+      <div class="stat-chip"><span class="stat-num" id="statAgents">4</span><span class="stat-label">Agents</span></div>
+      <div class="stat-chip"><span class="stat-num" id="statTools">27</span><span class="stat-label">Tools</span></div>
+      <div class="stat-chip"><span class="stat-num" id="statTests">507</span><span class="stat-label">Tests</span></div>
+      <div class="stat-chip"><span class="stat-num" id="statDocs">-</span><span class="stat-label">KB Docs</span></div>
+      <div class="stat-chip"><span class="stat-num" id="statIndex">-</span><span class="stat-label">Index</span></div>
+      <div class="stat-chip"><span class="stat-num" id="statModel">-</span><span class="stat-label">LLM</span></div>
+    </div>
+  
+    <!-- Section 2: 5-Phase Pipeline -->
+    <div class="ov-section">
+      <h3 class="ov-title">5-Phase Pipeline</h3>
+      <div class="pipeline-vis">
+        <div class="pv-step">
+          <div class="pv-icon">📡</div>
+          <div class="pv-name">Fetch</div>
+          <div class="pv-desc">Function Calling 自动选择数据源获取数据</div>
+        </div>
+        <div class="pv-arrow">→</div>
+        <div class="pv-step">
+          <div class="pv-icon">📚</div>
+          <div class="pv-name">Index</div>
+          <div class="pv-desc">BM25 + ChromaDB 双通道索引 + 文本预处理</div>
+        </div>
+        <div class="pv-arrow">→</div>
+        <div class="pv-step">
+          <div class="pv-icon">🧠</div>
+          <div class="pv-name">Process</div>
+          <div class="pv-desc">AgentRouter 意图分类 → Agent 链执行分析</div>
+        </div>
+        <div class="pv-arrow">→</div>
+        <div class="pv-step">
+          <div class="pv-icon">📝</div>
+          <div class="pv-name">Output</div>
+          <div class="pv-desc">SlotFiller 槽位填充（Agent 已有输出时跳过）</div>
+        </div>
+        <div class="pv-arrow">→</div>
+        <div class="pv-step">
+          <div class="pv-icon">🛡️</div>
+          <div class="pv-name">Evolve</div>
+          <div class="pv-desc">ScoreCard 全链路评分 + 4 层防幻觉校验</div>
+        </div>
       </div>
-
-      <div>
-        <h3 style="font-size:14px;color:var(--text2);margin-bottom:12px">4-AGENT 协作链</h3>
-        <div class="agent-row">
-          <div class="agent-card">
-            <span class="agent-phase tag tag-info">Step 1</span>
-            <div class="agent-icon">🧭</div>
-            <div class="agent-name">Coordinator</div>
-            <div class="agent-role">意图分类 + Agent 链选择。解析用户查询，识别意图类型（K线 / 事件影响 / 报告 / 新闻 / 通用），选择对应执行链。</div>
+    </div>
+  
+    <!-- Section 3: Agent-Tool Mapping -->
+    <div class="ov-section">
+      <h3 class="ov-title">Agent-Tool 协作映射</h3>
+      <div class="agent-row">
+        <div class="agent-card">
+          <div class="agent-icon">🧭</div>
+          <div class="agent-name">Coordinator</div>
+          <div class="agent-role">意图分类 + Agent 链选择</div>
+          <div class="agent-tools">
+            <span class="tool-tag">classify_query_intent</span>
+            <span class="tool-tag">select_agent_chain</span>
           </div>
-          <div class="agent-arrow">→</div>
-          <div class="agent-card">
-            <span class="agent-phase tag tag-ok">Step 2</span>
-            <div class="agent-icon">📥</div>
-            <div class="agent-name">Ingestion</div>
-            <div class="agent-role">数据加载与预处理。文件摄取、文本清洗切片、相关性过滤，将原始数据转为可检索的知识库文档。</div>
+        </div>
+        <div class="agent-arrow">→</div>
+        <div class="agent-card">
+          <div class="agent-icon">📥</div>
+          <div class="agent-name">Ingestion</div>
+          <div class="agent-role">数据加载 + 预处理</div>
+          <div class="agent-tools">
+            <span class="tool-tag">extract_document_metadata</span>
+            <span class="tool-tag">detect_document_type</span>
           </div>
-          <div class="agent-arrow">→</div>
-          <div class="agent-card" style="border-color:#7c3aed">
-            <span class="agent-phase" style="background:rgba(124,58,237,.15);color:#7c3aed;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">Step 3</span>
-            <div class="agent-icon">🧠</div>
-            <div class="agent-name">Analysis</div>
-            <div class="agent-role">统一分析引擎。按意图路由到不同工具链：K线技术分析、事件影响评估、报告合成、新闻深度解读。</div>
+        </div>
+        <div class="agent-arrow">→</div>
+        <div class="agent-card" style="border-color:#7c3aed">
+          <div class="agent-icon">🧠</div>
+          <div class="agent-name">Analysis</div>
+          <div class="agent-role">统一分析引擎 (按 intent 路由)</div>
+          <div class="agent-tools">
+            <div class="intent-chain"><span class="ic-label">kline:</span> fetch_kline_report → analyze_kline → generate_kline_analysis</div>
+            <div class="intent-chain"><span class="ic-label">event:</span> fetch_date_events → assess_event_impact</div>
+            <div class="intent-chain"><span class="ic-label">news:</span> analyze_news_deep (多维影响 + 关键信号)</div>
+            <div class="intent-chain"><span class="ic-label">general:</span> extract_metrics → extract_entities → synthesize_report</div>
           </div>
-          <div class="agent-arrow">→</div>
-          <div class="agent-card" style="border-color:var(--danger)">
-            <span class="agent-phase" style="background:rgba(255,99,99,.12);color:var(--danger);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500">Step 4</span>
-            <div class="agent-icon">🛡️</div>
-            <div class="agent-name">Scoring</div>
-            <div class="agent-role">质量校验与幻觉防护。6 层校验 + 各阶段打分，确保输出结果可信、可引用。</div>
+        </div>
+        <div class="agent-arrow">→</div>
+        <div class="agent-card" style="border-color:var(--danger)">
+          <div class="agent-icon">🛡️</div>
+          <div class="agent-name">Scoring</div>
+          <div class="agent-role">质量校验 + 幻觉防护</div>
+          <div class="agent-tools">
+            <span class="tool-tag">evaluate_pipeline_quality</span>
+            <span class="tool-tag">check_hallucination</span>
+            <span class="tool-tag">generate_score_report</span>
           </div>
         </div>
       </div>
-
-      <div style="margin-top:16px;padding:12px 16px;background:var(--bg2);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.8">
-        <strong style="color:var(--text1)">🔀 意图路由示例</strong><br>
-        “茅台走势” → K线分析链 &nbsp;|&nbsp;
-        “收购是利好还是利空” → 事件影响链<br>
-        “财报分析” / “最新AI动态” → 完整分析链（摄取 + 分析 + 评分）<br>
-        <span style="color:var(--text2)">用户只需输入问题，系统自动决定执行路径</span>
+    </div>
+  
+    <!-- Section 4: Retrieval Pipeline -->
+    <div class="ov-section">
+      <h3 class="ov-title">Hybrid Retrieval Pipeline</h3>
+      <div class="retrieval-chain">
+        <div class="rc-node">
+          <div class="rc-icon">🔤</div>
+          <div class="rc-name">BM25</div>
+          <div class="rc-detail">jieba trigram 分词<br>权重 0.3</div>
+        </div>
+        <div class="rc-plus">+</div>
+        <div class="rc-node">
+          <div class="rc-icon">🧮</div>
+          <div class="rc-name">ChromaDB</div>
+          <div class="rc-detail">HNSW ANN 语义检索<br>1024-dim · 权重 0.7</div>
+        </div>
+        <div class="rc-arrow">→</div>
+        <div class="rc-node">
+          <div class="rc-icon">🔀</div>
+          <div class="rc-name">RRF Fusion</div>
+          <div class="rc-detail">Reciprocal Rank Fusion<br>k=60 · MD5 去重</div>
+        </div>
+        <div class="rc-arrow">→</div>
+        <div class="rc-node">
+          <div class="rc-icon">🎯</div>
+          <div class="rc-name">qwen3-rerank</div>
+          <div class="rc-detail">精排重排序<br>无 API 时降级 RRF</div>
+        </div>
+        <div class="rc-arrow">→</div>
+        <div class="rc-node">
+          <div class="rc-icon">🏷️</div>
+          <div class="rc-name">Metadata Filter</div>
+          <div class="rc-detail">来源/日期/类型<br>QueryParser 自动提取</div>
+        </div>
       </div>
+    </div>
+  
+    <!-- Section 5: Hallucination Guard -->
+    <div class="ov-section">
+      <h3 class="ov-title">4-Layer Hallucination Guard</h3>
+      <div class="guard-layers">
+        <div class="gl-row">
+          <div class="gl-bar-wrap"><div class="gl-bar" style="width:100%;background:var(--accent)"></div></div>
+          <div class="gl-info">
+            <span class="gl-name">L1 来源锚定</span>
+            <span class="gl-weight">35%</span>
+            <span class="gl-desc">jieba 分词 → 逐句 token 重叠率 ≥ 15% 视为有来源支撑</span>
+          </div>
+        </div>
+        <div class="gl-row">
+          <div class="gl-bar-wrap"><div class="gl-bar" style="width:71%;background:var(--accent2)"></div></div>
+          <div class="gl-info">
+            <span class="gl-name">L2 数值一致</span>
+            <span class="gl-weight">25%</span>
+            <span class="gl-desc">提取「数字+单位」对，交叉比对检索源，防止编造数据</span>
+          </div>
+        </div>
+        <div class="gl-row">
+          <div class="gl-bar-wrap"><div class="gl-bar" style="width:57%;background:var(--ok)"></div></div>
+          <div class="gl-info">
+            <span class="gl-name">L3 引用完整</span>
+            <span class="gl-weight">20%</span>
+            <span class="gl-desc">[N] 标记存在且 N 对应有效来源，防止伪引用</span>
+          </div>
+        </div>
+        <div class="gl-row">
+          <div class="gl-bar-wrap"><div class="gl-bar" style="width:57%;background:var(--warn)"></div></div>
+          <div class="gl-info">
+            <span class="gl-name">L4 结构规范</span>
+            <span class="gl-weight">20%</span>
+            <span class="gl-desc">检测摘要/要点/分析/风险等预期段落是否存在</span>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--text2);margin-top:8px">每层得分 + 未锚定句子 + 警告 → 嵌入最终输出，用户可见</p>
+    </div>
+  
+    <!-- Section 6: Live KB Status -->
+    <div class="ov-section">
+      <h3 class="ov-title">Knowledge Base <button class="btn btn-secondary btn-sm" onclick="loadOverviewStats()" style="margin-left:8px;padding:2px 10px;font-size:11px">刷新</button></h3>
+      <div class="kb-live" id="kbLivePanel">
+        <div class="kb-live-grid" id="kbLiveGrid">
+          <div class="kbl-item"><span class="kbl-label">文档总数</span><strong id="kblDocs">-</strong></div>
+          <div class="kbl-item"><span class="kbl-label">索引状态</span><strong id="kblIndex">-</strong></div>
+          <div class="kbl-item"><span class="kbl-label">ChromaDB</span><strong id="kblChroma">-</strong></div>
+          <div class="kbl-item"><span class="kbl-label">元数据</span><strong id="kblMeta">-</strong></div>
+        </div>
+        <div id="kblSources" style="margin-top:10px;font-size:12px;color:var(--text2)"></div>
+      </div>
+    </div>
+  
+    <!-- Routing Examples -->
+    <div style="margin-top:16px;padding:12px 16px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.8">
+      <strong style="color:var(--text1)">🔀 意图路由示例</strong> — 用户只需输入问题，系统自动决定执行路径<br>
+      "茅台走势" → K线分析链 &nbsp;|&nbsp;
+      "收购是利好还是利空" → 事件影响链 &nbsp;|&nbsp;
+      "最新AI动态" → 完整分析链（摄取 + 分析 + 评分）
     </div>
   </div>
 

@@ -14,6 +14,8 @@ document.querySelectorAll('.flow-step').forEach(el => {
     document.getElementById('panel-' + el.dataset.panel).classList.add('active');
     // Auto-refresh learning history when switching to analyze tab
     if (el.dataset.panel === 'analyze') refreshLearningHistory();
+    // Auto-refresh overview stats
+    if (el.dataset.panel === 'overview') loadOverviewStats();
   });
 });
 
@@ -918,3 +920,41 @@ async function sendFollowup() {
   document.getElementById('chatSendBtn').disabled = false;
   input.focus();
 }
+
+// ===== Overview Live Stats =====
+async function loadOverviewStats() {
+  try {
+    const [cfg, kb] = await Promise.all([
+      fetch('/api/config').then(r => r.json()).catch(() => null),
+      fetch('/api/kb/status').then(r => r.json()).catch(() => null),
+    ]);
+    // Config
+    if (cfg) {
+      document.getElementById('statModel').textContent = (cfg.llm_model || '-').replace('qwen-', 'QW-');
+    }
+    // KB status
+    if (kb) {
+      const docCount = kb.doc_count ?? 0;
+      document.getElementById('statDocs').textContent = docCount;
+      document.getElementById('statIndex').textContent = kb.kb_built ? 'Built' : 'Not built';
+      document.getElementById('kblDocs').textContent = docCount + ' 篇';
+      document.getElementById('kblIndex').textContent = kb.kb_built ? '✅ 已构建' : '⏳ 未构建';
+      document.getElementById('kblChroma').textContent = kb.kb_built ? '✅ Active' : '⏳ Inactive';
+      document.getElementById('kblMeta').textContent = (kb.meta_count ?? 0) + ' 条';
+      // Sources breakdown
+      const sources = kb.sources || {};
+      const keys = Object.keys(sources);
+      if (keys.length > 0) {
+        document.getElementById('kblSources').innerHTML = '<strong style="color:var(--text1)">来源分布：</strong> ' +
+          keys.map(k => `${escHtml(k)}: ${sources[k]}`).join(' · ');
+      } else {
+        document.getElementById('kblSources').innerHTML = '<span style="color:var(--text2)">暂无文档来源</span>';
+      }
+    }
+  } catch(e) {
+    console.warn('Overview stats load failed:', e);
+  }
+}
+
+// Load on page open if overview is first visible tab
+loadOverviewStats();
