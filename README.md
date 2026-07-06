@@ -31,15 +31,17 @@
 
 **Intent-aware routing.** The same word "Apple" routes to K-line analysis for stock price queries, event impact scoring for acquisition news, or report synthesis for earnings data — decided by the Coordinator agent, not the user.
 
-**Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 27 registered tools across 9 modules. Agents stay thin and testable.
+**Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 28 registered tools across 9 modules. Agents stay thin and testable.
 
-**Every chain ends with a quality gate.** The Scoring agent runs a 4-layer hallucination check (source grounding, numerical fidelity, citation integrity, structure compliance) and pipeline quality evaluation before any result reaches the user. No silent failures.
+**Every chain ends with a quality gate.** The Scoring agent runs a 6-layer hallucination guard (4 rule layers: source grounding, numerical fidelity, citation integrity, structure compliance + 2 LLM layers: LLM critique, LLM assist) and pipeline quality evaluation before any result reaches the user. No silent failures.
 
-**Hybrid retrieval that actually works.** BM25 + ChromaDB ANN vector search (1024-dim) + RRF fusion + qwen3-rerank reranking + metadata filtering — five signals combined instead of relying on any single one.
+**Hybrid retrieval that actually works.** BM25 + ChromaDB ANN vector search (1024-dim) + RRF fusion + qwen3-rerank reranking + metadata filtering + **query expansion** (52 synonym groups + 20 concept association maps, LLM-enhanced for short queries) — six signals combined instead of relying on any single one.
+
+**Domain dictionaries that grow without code changes.** `DictionaryRegistry` centralizes 10 dictionary types (stock mappings, financial terms, synonyms, jieba words, etc.) and auto-merges external JSON files from `data/dictionaries/`. Drop in a JSON file → dictionaries expand at next startup. Coverage stats via `reg.summary()` — weak spots visible at a glance.
 
 **LLM calls never fail silently.** `LLMCaller` wraps every LLM invocation with retry, balanced-bracket JSON parsing, response caching, and anti-hallucination constraints — one unified layer for the entire system.
 
-**507 tests, zero API keys.** All tests pass in under 5 seconds using mocked data sources. LLM and embedding stay real in tests — only external APIs are mocked.
+**521 tests, zero API keys.** All tests pass in under 6 seconds using mocked data sources. LLM and embedding stay real in tests — only external APIs are mocked.
 
 ---
 
@@ -97,9 +99,10 @@ The user types a natural language question. The system decides everything else.
 | Rerank | qwen3-rerank (fallback to RRF score) |
 | Backend | FastAPI + 4 async routers |
 | Data APIs | Tushare, 10jqka, Sina, EastMoney |
-| Retrieval | BM25 + ChromaDB (ANN) + RRF + TextChunker + QueryParser |
+| Retrieval | BM25 + ChromaDB (ANN) + RRF + TextChunker + QueryParser (52 synonym groups + 20 concept maps) |
+| Domain Dicts | DictionaryRegistry (10 types, JSON-extensible: `data/dictionaries/*.json`) |
 | Vector DB | ChromaDB (HNSW ANN, cosine distance, persistent storage) |
-| Testing | pytest — 507 tests across 21 files |
+| Testing | pytest — 521 tests across 21 files |
 
 ---
 
@@ -141,7 +144,7 @@ python -m financial_rag.main toolcall -l   # list all registered tools
 ## Testing
 
 ```bash
-python -m pytest tests/ -v    # 507 tests, < 5s, no API key needed
+python -m pytest tests/ -v    # 521 tests, < 6s, no API key needed
 ```
 
 Tests mock only **data sources** (Tushare, news APIs). LLM, embedding, and rerank stay real. Extraction tools have regex fallback for fully offline operation.

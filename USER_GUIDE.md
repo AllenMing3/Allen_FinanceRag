@@ -40,6 +40,7 @@ python -m financial_rag.main web
 | **智能查询** | K线分析 | 输入股票代码或名称 | 生成 MACD/RSI/KDJ/布林带技术分析报告 |
 | **深度分析** | 新闻解读 | 粘贴新闻文本 | 多维影响评估 + 关键信号 + 风险提示 |
 | **深度分析** | 话题调研 | 输入话题关键词 | 子话题聚类 + 情绪趋势 + 反向信号 |
+| **深度分析** | 追问 | 分析完成后输入追问 | 基于原始分析上下文的多轮对话，支持对新闻/话题结果深入追问 |
 
 > **智能路由**：查询自动分类为 5 种意图（kline / event_impact / report / news / general），系统选择最优 Agent 执行链，无需手动指定。
 
@@ -110,7 +111,7 @@ Web UI 开启 Mock 模式时会显示橙色提示条。
 ## 4. 测试
 
 ```cmd
-:: 全量（507 tests，无需 API Key）
+:: 全量（521 tests，无需 API Key）
 python -m pytest tests/ -v
 ```
 
@@ -188,11 +189,44 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 - 所有业务能力实现在 tools 层
 - 每条链都以 ScoringAgent 结尾，确保输出质量
 - 所有 LLM 调用经过 LLMCaller 保护层（重试 + 平衡括号 JSON 解析 + 缓存 + 防幻觉约束）
-- 防幻觉校验为 4 层透明检查：来源锚定（jieba 分词重叠）、数值一致、引用完整、结构规范
+- 防幻觉校验为 6 层透明检查：L1 来源锚定（jieba 分词重叠）、L2 数值一致、L3 引用完整、L4 结构规范、L5 LLM 质疑（LLM 审查答案 + 来源，输出结构化发现）、L6 LLM 协助（低分时 LLM 修复问题）
 
 ---
 
-## 7. 常见问题
+## 7. 字典扩展
+
+系统的检索质量依赖领域字典（股票映射、金融术语、同义词、jieba 分词词表等）。`DictionaryRegistry` 统一管理 10 种字典，支持**不改代码**扩展：
+
+**扩展方式**：把 JSON 文件放入 `data/dictionaries/` 目录，启动时自动加载并合并：
+
+```
+data/dictionaries/
+├── ai_domain.json        # AI/科技领域术语
+└── stocks_extended.json  # 股票映射扩展
+```
+
+**当前覆盖情况**（内置 + 外部 JSON 合并后）：
+
+| 字典 | 规模 | 说明 |
+|------|------|------|
+| stock_map | 33 条 | 股票名称/别名 → 代码映射 |
+| financial_terms | 64 个 | BM25 高权重词 |
+| industry_terms | 73 个 | BM25 中权重词 |
+| synonym_lookup | 143 条 (52 组) | 同义词双向扩展 |
+| concept_map | 20 组 | 概念关联（如“芯片”→半导体、光刻等） |
+| jieba_words | 91 个 | jieba 分词扩展 |
+
+**补强方法**：发现某个领域检索不准时，检查对应字典是否覆盖。例如缺少某公司别名，在 `stocks_extended.json` 的 `stock_map` 中加一行即可。
+
+**查看当前状态**：
+```python
+from financial_rag.retrievers.dictionary_registry import get_registry
+print(get_registry().summary())  # 一眼看清哪里弱
+```
+
+---
+
+## 8. 常见问题
 
 **Rerank 403** — `qwen3-rerank` 需在 [阿里云百炼控制台](https://bailian.console.aliyun.com/) 手动开通，未开通时自动降级为 RRF 融合。
 

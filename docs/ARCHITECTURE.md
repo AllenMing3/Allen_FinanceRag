@@ -11,7 +11,7 @@
 | **Data Orchestrate** | `core/data_orchestrator.py` | Multi-pool text management: TextPreprocessor → DocTypeClassifier → KnowledgePool routing, cross-pool search |
 | **Schedule** | `core/pipeline.py` | 5-phase pipeline: Fetch → Index → Process (AgentRouter) → Output (SlotFiller, skippable) → Evolve (Scoring + HallucinationGuard) |
 | **Indexer** | `core/indexer.py` | 4-stage retrieval: Clean → Extract → Retrieve → Verify. BM25 + ChromaDB + RRF fusion |
-| **Reflect** | `guard/reflector.py` | ReAct loop (Think → Act → Observe → Judge) + 4-layer anti-hallucination guard (source grounding, numerical fidelity, citation integrity, structure compliance) |
+| **Guard** | `guard/` | 6-layer anti-hallucination: L1-L4 rule layers (`rule_layers.py`) + L5 LLM Critique (`llm_critique.py`) + L6 LLM Assist (`llm_assist.py`), orchestrated by `HallucinationGuard` (`reflector.py`) |
 | **Score** | `core/scorer.py` | Full-pipeline scorecard: phase coverage, hallucination, citation density, answer relevance |
 
 ---
@@ -64,20 +64,64 @@
 | `data/knowledge_base/news_archive.jsonl` | Cumulative raw news archive — each search appends with full metadata |
 | `output/*.md` | Markdown reports (news summaries, K-line analysis reports) |
 
-### KB Management APIs
+### API Endpoints
+
+#### KB Management (`api/kb_router.py`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/kb/status` | GET | KB doc count + source breakdown |
-| `/api/kb/sources` | GET | List all sources with doc counts |
+| `/api/kb/status` | GET | KB doc count + source breakdown + build status |
 | `/api/kb/search` | GET | Search KB docs by keyword (`?keyword=xxx`) |
 | `/api/kb/keyword/{kw}` | DELETE | Delete all docs matching a keyword |
 | `/api/kb/source/{name}` | DELETE | Delete all docs from a source |
 | `/api/kb/clear` | POST | Wipe all docs + reset ingestion progress |
+| `/api/kb-query` | POST | Query built KB with retriever (top_k, keyword) |
 | `/api/kb/history` | GET | List analysis conclusions (learning history) |
-| `/api/ingest/progress` | GET | Poll background ingestion progress |
+| `/api/learning/stats` | GET | Learning statistics |
+| `/api/build` | POST | Build KB index (BM25 + ChromaDB) |
+
+#### Ingestion (`api/ingest_router.py`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
 | `/api/file/preview` | GET | Preview first N lines of a file (`?path=xxx&file=yyy&lines=20`) |
+| `/api/directories` | GET | List available import directories |
 | `/api/ingest/files` | POST | Import selected files with analysis mode (`files: [...]`, `mode: "deep"|"quick"`) |
+| `/api/ingest/news` | POST | Fetch and ingest news by keyword |
+| `/api/ingest/progress` | GET | Poll background ingestion progress |
+
+#### Analysis & Chat (`api/analysis_router.py`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/config` | GET | System config (TTL cached 60s): API key status, mock mode, KB status |
+| `/api/analyze/news` | POST | News interpretation: multi-dim impact + entities + follow-up session |
+| `/api/analyze/topic` | POST | Topic research: sub-topics + key players + sentiment trend |
+| `/api/metadata/clear` | POST | Clear news metadata store |
+| `/api/metadata/status` | GET | News metadata store status + count |
+| `/api/news` | POST | Fetch news by keyword (10jqka / Sina / EastMoney) |
+| `/api/kline` | POST | K-line technical analysis (MACD / RSI / KDJ / Bollinger) |
+| `/api/chat/sessions` | GET | List conversation sessions |
+| `/api/chat/sessions` | POST | Create new conversation session |
+| `/api/chat/sessions/{id}` | GET | Get session detail + message history |
+| `/api/chat/sessions/{id}` | DELETE | Delete conversation session |
+| `/api/chat/followup` | POST | Follow-up question in existing session (injects original context + history) |
+
+#### Query Pipeline (`api/query_router.py`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/pipeline` | POST | End-to-end pipeline query (auto-routed by AgentRouter) |
+| `/api/slot` | POST | SlotFiller template query |
+| `/api/score` | POST | Retrieval scoring diagnostic |
+
+#### Pipeline Utilities (`api/kb_router.py`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/pipeline/clean-report` | POST | Clean report text (boilerplate removal) |
+| `/api/pipeline/chunk-demo` | POST | Demo text chunking with configurable params |
+| `/api/pipeline/dict-stats` | GET | DictionaryRegistry coverage statistics |
 
 ---
 
@@ -116,7 +160,7 @@ Every chain ends with `ScoringAgent` for quality assurance. `CoordinatorAgent` i
 Alongside intent classification, `AgentRouter` extracts structured metadata:
 
 - **Date**: `YYYY-MM-DD`, `YYYY年M月D日`, `YYYYMMDD` → stored in `routing_decision.metadata.date`
-- **Stock**: keyword lookup via `STOCK_MAP` (11 stocks), SH/SZ code patterns → stored in `routing_decision.metadata.ts_code`
+- **Stock lookup**: keyword lookup via `STOCK_MAP` (33 stocks, enhanced by DictionaryRegistry), SH/SZ code patterns → stored in `routing_decision.metadata.ts_code`
 - **Context override**: If query already contains `ts_code` in orchestrator context, it is preserved
 
 ---
@@ -249,12 +293,62 @@ text = caller.call("Generate summary", temperature=0.3)
 `HybridRetriever` also applies `TextChunker` (split + overlap + metadata tagging) at index time and metadata filtering at query time. ChromaDB `PersistentClient` stores vectors on disk (`data/knowledge_base/chroma/`); content-hash MD5 document IDs ensure stable identity across add/remove operations.
 
 **Query Expansion** (规则优先 + LLM 增强):
-- **同义词扩展** (weight=1.5): 35 组双向同义词，如 "英伟达" ↔ "NVIDIA" ↔ "NVDA"，O(1) 查找表
-- **概念关联** (weight=0.6): 18 个行业概念单向关联，如 "芯片" → [半导体, 光刻, 晶圆, 封装, 制程]
+- **同义词扩展** (weight=1.5): 52 组双向同义词 (内置 35 + 外部 JSON 扩展 17)，如 "英伟达" ↔ "NVIDIA" ↔ "NVDA"，O(1) 查找表
+- **概念关联** (weight=0.6): 20 个行业概念单向关联，如 "芯片" → [半导体, 光刻, 晶圆, 封装, 制程]
 - **LLM 增强**: 短查询 (<15 字) 且规则扩展词 <2 个时，通过 `llm_rewrite_query()` 补充 2-3 个语义关键词
 - BM25 用扩展后加权关键词搜索，ChromaDB 用 `expanded_query` (原 query + 扩展词拼接) 做语义检索
 
 **Efficient deletion:** `HybridRetriever.remove(indices)` filters out docs + syncs ChromaDB deletion by content-hash ID, rebuilds only BM25 (cheap) — avoiding a full `clear() + index()` cycle when deleting by keyword or source.
+
+## DictionaryRegistry — 统一业务字典管理
+
+`DictionaryRegistry` 是 10 种领域字典的中央注册中心，支持内置默认 + 外部 JSON 自动合并，不改源码即可扩展字典覆盖。
+
+### 管理的 10 种字典
+
+| 类型 | 字典名 | 用途 | 当前规模 |
+|------|---------|------|----------|
+| set | `financial_terms` | QueryParser 高权重词 (weight=2.0) | 64 |
+| set | `industry_terms` | QueryParser 中权重词 (weight=1.5) | 73 |
+| set | `action_terms` | 查询分类 | 16 |
+| set | `stop_words` | 停用词过滤 | 51 |
+| dict | `stock_map` | 关键词→股票代码映射 | 33 |
+| dict | `concept_map` | 概念→关联词列表 | 20 组 |
+| dict | `doc_type_keywords` | 文档分类关键词 | 3 类 |
+| dict | `doc_type_patterns` | 文档分类正则 | — |
+| dict | `synonym_lookup` | 同义词→扩展词 (O(1) 查找) | 143 条 / 52 组 |
+| list | `jieba_words` | jieba 分词扩展词 | 91 |
+
+### 外部 JSON 扩展
+
+将 JSON 文件放入 `data/dictionaries/` 目录，启动时自动加载并合并到内置字典：
+
+```
+data/dictionaries/
+├── ai_domain.json        # AI/科技领域: financial_terms, industry_terms, jieba_words, concept_map, synonym_groups
+└── stocks_extended.json  # 股票映射扩展 + 同义词组
+```
+
+JSON 格式支持所有 10 种字典类型，与内置字典**合并**（不覆盖）。
+
+### API
+
+```python
+from financial_rag.retrievers.dictionary_registry import get_registry
+
+reg = get_registry()
+print(reg.summary())         # 覆盖率统计，一眼看出哪里弱
+reg.add_words("stock_map", {"新公司": ("XXXXXX.SH", "新公司")})  # 运行时增词
+reg.save_external()          # 持久化到 JSON
+```
+
+### 数据流
+
+1. `dictionaries.py` 模块加载时：内置默认 → `initialize_registry()` 注册 → 自动扫描 `data/dictionaries/*.json` → 合并
+2. `retriever.py` / `rule_layers.py`：调用 `get_registry().set_jieba(jieba)` → 91 个领域词一次性注入分词器
+3. `query_parser.py`：直接 import `dictionaries.py` 的变量（已被 registry 替换为增强版本），向后兼容
+
+---
 
 ## Performance Optimizations
 
@@ -271,7 +365,7 @@ text = caller.call("Generate summary", temperature=0.3)
 | **Precomputed lookup sets** | `frozenset` keyword collections + `_ALL_METRIC_ALIASES` set for O(1) alias exclusion — replaces nested loop scans | `tools/extraction_tools.py` |
 | **ChromaDB lazy init** | `PersistentClient` only created when first vector indexed; in-memory fallback when no persist dir | `retrievers/vector_engine.py` |
 | **Config TTL cache** | `/api/config` caches result for 60s, avoiding repeated config reads | `api/analysis_router.py` |
-| **Query expansion** | 35 组同义词 + 18 个概念关联，规则层零延迟扩展 + LLM 短查询增强。BM25 用加权扩展词，ChromaDB 用 expanded_query | `retrievers/query_parser.py`, `retrievers/dictionaries.py` |
+| **Query expansion** | 52 组同义词 + 20 个概念关联，DictionaryRegistry 统一管理，规则层零延迟 + LLM 短查询增强。BM25 用加权扩展词，ChromaDB 用 expanded_query | `retrievers/query_parser.py`, `retrievers/dictionary_registry.py` |
 | **HTML cache** | `index.html` read once at startup, served from memory | `web.py` |
 | **Orchestrator retry** | `max_retries=1`, retry delay `0.1s` (was 2 retries, 1s delay) | `core/factory.py`, `core/orchestrator.py` |
 | **Fetch normalization** | Pipeline `_phase_fetch` normalizes all tool results to standard doc format (`title`, `content`, `source`, `publish_time`, `url`) — handles alternate keys (`items` / `results`) | `core/pipeline.py` |
@@ -298,6 +392,15 @@ text = caller.call("Generate summary", temperature=0.3)
 | `main.py` | Thin wrapper — delegates to `financial_rag.main.main()` |
 | `.env.example` | Env var template (`DASHSCOPE_API_KEY`, `TUSHARE_TOKEN`, `MOCK_MODE`) |
 | `requirements.txt` | pip dependencies (incl. fastapi, uvicorn) |
+
+### `data/dictionaries/` — External Domain Dictionaries
+
+| File | Content |
+|------|---------|
+| `ai_domain.json` | AI/tech domain: financial_terms (19), industry_terms (43), jieba_words (36), concept_map (5), synonym_groups (13) |
+| `stocks_extended.json` | Stock mappings (23 AI/tech companies) + synonym_groups (5) |
+
+Drop any `*.json` file here → auto-loaded at startup and merged into `DictionaryRegistry`. See [DictionaryRegistry section](#dictionaryregistry--%E7%BB%9F%E4%B8%80%E4%B8%9A%E5%8A%A1%E5%AD%97%E5%85%B8%E7%AE%A1%E7%90%86) for format and API.
 
 ### `financial_rag/` — Core Package
 
@@ -341,6 +444,7 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `factory.py` | Factory: creates and wires 4 agents + AgentRouter | `create_orchestrator`, `setup_environment` |
 | `indexer.py` | Hybrid retrieval pipeline orchestration | `PipelineOrchestrator` |
 | `scorer.py` | Full-pipeline scorecard | `PipelineScoreCard`, `ScoreGrade` |
+| `ingestion_scorer.py` | Ingestion pipeline quality scorecard: 4-stage scoring (preprocessing → chunking → tokenization → index health) | `IngestionScoreCard` |
 | `protocol.py` | Agent messaging infrastructure | `AgentMessage`, `MessageBus` |
 
 ### `financial_rag/agents/` — 4 Agents
@@ -353,11 +457,11 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `scoring_agent.py` | Quality scoring → `call_tool(evaluate_pipeline_quality, check_hallucination, generate_score_report)` |
 | `utils.py` | Shared: `build_news_context()` |
 
-### `financial_rag/tools/` — 27 Registered Tools across 9 Modules
+### `financial_rag/tools/` — 28 Registered Tools across 9 Modules
 
 | File | Tools | Role |
 |------|-------|------|
-| `core.py` | — | Infrastructure: `FunctionDef`, `FunctionRegistry`, `ToolExecutor`, `ToolCallSession` |
+| `core.py` | 5 | Infrastructure: `FunctionDef`, `FunctionRegistry`, `ToolExecutor`, `ToolCallSession` + 4 built-in tools (calculate_growth_rate, calculate_financial_ratio, compare_metrics, summarize_financials) + search_financial_data |
 | `extraction_tools.py` | 5 | Document metadata, doc type, financial metrics, entities, search queries (LLM-first + regex fallback) |
 | `news_tools.py` | 4 | Fetch stock news, financial news, announcements, news report (10jqka / Sina / EastMoney) |
 | `kline_tools.py` | 4 | Fetch K-line report, K-line context, analyze K-line, generate K-line analysis. Also hosts `STOCK_MAP`, `KLINE_ANALYSIS_SYSTEM`, `KLINE_ANALYSIS_PROMPT` |
@@ -366,7 +470,7 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `coordinator_tools.py` | 2 | Classify query intent, select agent chain |
 | `report_tools.py` | 1 | Synthesize report (LLM-driven or heuristic fallback) |
 | `analysis_tools.py` | 2 | Deep analysis: `analyze_news_deep` (wraps services/analysis.py for multi-dim impact), `analyze_topic_deep` (sub-topics, key players, sentiment trend) |
-| `__init__.py` | — | `create_financial_registry()` — registers all 27 tools; re-exports `STOCK_MAP` |
+| `__init__.py` | — | `create_financial_registry()` — registers all 28 tools; re-exports `STOCK_MAP` |
 
 ### `financial_rag/retrievers/` — Modular Retrieval Stack
 
@@ -380,8 +484,10 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `chunker.py` | `TextChunker`: document splitting with overlap + metadata tagging |
 | `preprocessor.py` | `TextPreprocessor` (cleaning, boilerplate removal, paragraph dedup — enabled by default), `RelevanceGate` (relevance filtering), `DocTypeClassifier` (fast classification) |
 | `query_parser.py` | `QueryParser`: intent detection, entity extraction, date parsing from queries |
-| `dictionaries.py` | Externalized keyword dictionaries: `STOCK_MAP`, `FINANCIAL_TERMS`, `INDUSTRY_TERMS`, etc. |
+| `dictionaries.py` | Built-in keyword dictionaries: `STOCK_MAP`, `FINANCIAL_TERMS`, `INDUSTRY_TERMS`, `SYNONYM_LOOKUP`, etc. Auto-merged with external JSON via `DictionaryRegistry` |
+| `dictionary_registry.py` | `DictionaryRegistry`: centralized hub for all domain dicts. Loads external `data/dictionaries/*.json`, injects jieba words, provides `get_registry()` singleton |
 | `persistence.py` | `save_index()`, `load_index()`: index serialization |
+| `embedding_cache.py` | `EmbeddingCache`: content-hash (MD5) embedding cache, disk persistence (JSON), LRU eviction, batch miss → bulk embed → cache writeback |
 
 ### `financial_rag/llm/` — LLM Layer
 
@@ -391,17 +497,21 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `model_router.py` | Auto-select model by task complexity + budget control (4 tiers), `get_caller()` / `get_caller_for_agent()` |
 | `caller.py` | `LLMCaller`: retry + balanced-bracket JSON parsing + response cache + input validation + anti-hallucination constraints. Used by tools, SlotFiller, and pipeline |
 
-### `financial_rag/guard/` — Anti-Hallucination
+### `financial_rag/guard/` — Anti-Hallucination (6 Layers)
 
 | File | Role |
 |------|------|
-| `reflector.py` | `HallucinationGuard`: 4-layer check — L1 source grounding (jieba token overlap), L2 numerical fidelity (number+unit pairs), L3 citation integrity ([N] references valid), L4 structure compliance (expected sections). Also `ReflectionLoop` (ReAct) |
+| `reflector.py` | `HallucinationGuard`: orchestrates 6-layer check, embeds per-layer scores + reasons into final output |
+| `rule_layers.py` | L1-L4 rule layers: L1 source grounding (jieba token overlap), L2 numerical fidelity (number+unit pairs), L3 citation integrity ([N] references), L4 structure compliance (expected sections) |
+| `llm_critique.py` | L5 LLM Critique: LLM reviews answer + sources, outputs structured JSON findings (severity + confidence) |
+| `llm_assist.py` | L6 LLM Assist: LLM fixes identified issues (missing citations, ungrounded claims) when L1-L4 scores are low |
 
 ### `financial_rag/services/` — Business Logic Layer
 
 | File | Role | Key exports |
 |------|------|-------------|
 | `analysis.py` | Pure analysis functions (no HTTP deps, DI via kwargs) | `analyze_news_text()`, `analyze_topic_research()`, `_extract_confidence()`, `_parse_verdict()` |
+| `conversation.py` | `ConversationManager`: multi-turn follow-up for news/topic analysis. Session CRUD, message history, context-injected LLM calls, JSON persistence | `ConversationManager`, `create_conversation_manager()` |
 | `persistence.py` | KB / Meta / Archive JSON read/write + index persistence | `load_kb()`, `save_kb()`, `save_index()`, `load_index()`, `append_news_archive()` |
 
 ### `financial_rag/static/` — Frontend
@@ -426,7 +536,7 @@ python -m financial_rag.main pipeline "茅台走势" -v              # → kline
 python -m financial_rag.main pipeline "2024-06-01 发生了什么"    # → event_impact chain
 
 # Function Calling
-python -m financial_rag.main toolcall -l                  # list all 27 tools
+python -m financial_rag.main toolcall -l                  # list all 28 tools
 python -m financial_rag.main toolcall "商汤科技营收增长" -v
 
 # News / KLine / Slot / Score
@@ -449,7 +559,6 @@ All config in `financial_rag/config.py`. Global instance: `from financial_rag.co
 | `config.llm` | model, embedding_model, rerank_model, temperature | qwen-plus, text-embedding-v3, qwen3-rerank, 0.0 |
 | `config.coordinator` | execution_mode, max_parallel_agents, max_retries | sequential, 3, 1 |
 | `config.pipeline` | hybrid_top_k, rrf_k, bm25_weight, vector_weight | 10, 60, 0.3, 0.7 |
-| `config.reflection` | max_retrievals, max_steps, min_confidence | 3, 6, 0.6 |
 
 Env vars (`.env`):
 
@@ -471,7 +580,7 @@ Env vars (`.env`):
 | K-line fetch fails | Check `.env` has `TUSHARE_TOKEN` with 120+ points |
 | News fetch fails | `from financial_rag.rss_fetcher import fetch_all_news; fetch_all_news()` |
 | Retrieval inaccurate | `python -m financial_rag.main score "query"`. Adjust `config.pipeline` weights |
-| LLM hallucination | Check `guard/reflector.py` HallucinationGuard (4-layer check). Lower `temperature` |
+| LLM hallucination | Check `guard/` HallucinationGuard (6-layer check). Lower `temperature` |
 | Adding a new Agent | Inherit `BaseAgent`, implement `process()`, register in `factory.py` |
 | Adding a new intent | Register in `AgentRouter.register_intent()` — keywords + chain mapping |
 

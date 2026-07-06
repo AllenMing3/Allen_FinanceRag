@@ -99,18 +99,25 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ## Q7: 防幻觉（Hallucination Guard）怎么做的？
 
-**四层透明校验**（`guard/reflector.py`），每层做实、分数可见：
+**六层透明校验**（`guard/` 模块），规则层 + LLM 层递进，每层分数可见：
+
+**规则层（L1-L4）**：
 
 1. **L1 来源锚定**（weight 0.35）：jieba 分词后逐句检查 token 重叠率，每句能否追溯到某篇检索源。阈值 0.15。
 2. **L2 数值一致**（weight 0.25）：提取 answer 中的「数字+单位」对，交叉比对 source 中是否有相同数字。防止编造营收/增长等关键数据。
 3. **L3 引用完整**（weight 0.20）：`[N]` 标记存在且 N 对应有效来源编号。防止“伪引用”。
 4. **L4 结构规范**（weight 0.20）：输出是否包含预期段落（摘要/要点/风险等）。
 
+**LLM 层（L5-L6）**：
+
+5. **L5 LLM 质疑**：LLM 审查 answer + sources + L1-L4 检测结果，输出结构化 JSON 发现（严重程度 + 置信度）。发现规则层漏检的幻觉问题。
+6. **L6 LLM 协助**：当 L1-L4 分数低于阈值时，LLM 主动修复问题（补充引用、修正无来源声明）。
+
 **用户可见**：每层的得分、通过/未通过、未锚定的句子都会出现在最终输出的防幻觉报告中，不是藏在 metadata 里。
 
 **集成点**：ScoringAgent 在 Phase 5 (Evolve) 调用 `check_hallucination` 工具，评分卡 + 防幻觉报告一起写入最终输出。
 
-**为什么从 6 层改成 4 层**：原来的 6 层有几层是“凑数”的（完整性、事实核查）——它们和 L1 来源锚定高度重叠，且检查逻辑不够具体。重写后每层有明确的检查目标和独立的分数，而不是“看起来层数多但实际效果含糊”。
+**架构演进**：最初是“凑数”的 6 层（完整性、事实核查与 L1 高度重叠）→ 重写为 4 层规则检查（每层有明确目标和独立分数）→ 增加 L5/L6 两个 LLM 层（规则层无法覆盖的语义级幻觉由 LLM 补充）。现在 6 层各有不可替代的职责。
 
 ---
 
@@ -167,7 +174,7 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 | RAG 检索 | BM25/ChromaDB 命中率、RRF 共识度、Rerank 高相关比例 |
 | Multi-Agent | 各 Agent 成功率、工具调用成功率 |
 | 槽位输出 | 模板填充率 |
-| 防幻觉 | 四层透明校验（来源锚定 + 数值一致 + 引用完整 + 结构规范） |
+| 防幻觉 | 六层透明校验：L1-L4 规则层（来源锚定 + 数值一致 + 引用完整 + 结构规范）+ L5 LLM 质疑 + L6 LLM 协助 |
 
 最终输出加权总分 + 等级（A/B/C/D/F）+ 最薄弱 3 个环节的诊断建议。
 
@@ -191,7 +198,7 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ## Q13: 项目的测试策略是什么？
 
-**四层测试**（507 tests passing）：
+**四层测试**（521 tests passing）：
 1. **单元测试**：每个模块独立测试（test_agents.py, test_analysis.py, test_query_parser.py）
 2. **集成测试**：Agent 链端到端（test_new_agents.py, test_orchestrator_merge.py）
 3. **Smoke 测试**：Web API 全链路（test_smoke.py），验证每个 endpoint 不 crash
@@ -341,8 +348,8 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 | 层 | 策略 | 权重 | 延迟 |
 |---|---|---|---|
-| 同义词扩展 | 35 组双向同义词（"英伟达" ↔ "NVIDIA" ↔ "NVDA"），O(1) 查找表 | 1.5 | 0ms |
-| 概念关联 | 18 个行业概念单向关联（"芯片" → [半导体, 光刻, 晶圆]） | 0.6 | 0ms |
+| 同义词扩展 | 52 组双向同义词（内置 35 + 外部 JSON 17），如“英伟达” ↔ “NVIDIA” ↔ “NVDA”，O(1) 查找表 | 1.5 | 0ms |
+| 概念关联 | 20 个行业概念单向关联（“芯片” → [半导体, 光刻, 晶圆]） | 0.6 | 0ms |
 | LLM 增强 | 短查询 <15 字且规则扩展 <2 词时，LLM 补充 2-3 个搜索词 | - | ~500ms |
 
 **数据流**：
@@ -362,17 +369,48 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ---
 
+## Q24: 为什么要做 DictionaryRegistry？
+
+**问题**：领域字典散落在 `dictionaries.py` 里，用 Python 常量定义（`STOCK_MAP = {...}`, `FINANCIAL_TERMS = {...}`）。每次要加新股票、新术语，就得改代码、重新部署。
+
+**痛点**：
+- **字典太弱**：STOCK_MAP 只有 11 个股票，jieba 分词词表只有 55 个词，金融术语只有 45 个
+- **不可见**：字典覆盖率无法查看，哪里弱只能靠感觉
+- **不可扩展**：想加 AI 领域术语就得改 `dictionaries.py`，每次提交一堆字典数据
+
+**解决**：
+- **中央注册中心**：`DictionaryRegistry` 统一管理 10 种字典（stock_map、financial_terms、synonym_lookup、jieba_words 等）
+- **外部 JSON 热扩展**：把 JSON 文件放入 `data/dictionaries/` 目录，启动时自动加载并合并，不改源码
+- **覆盖率可视化**：`reg.summary()` 一眼看出每种字典的规模，哪里弱补哪里
+- **jieba 自动注入**：`set_jieba(jieba)` 一次性注入 91 个领域词，幂等（重复调用不重复注入）
+- **向后兼容**：`dictionaries.py` 的模块级变量（`STOCK_MAP`、`SYNONYM_LOOKUP` 等）被 registry 自动替换为增强版本，现有 import 无需修改
+
+**效果**：
+
+| 字典 | 内置 | 增强后 | 增长 |
+|------|------|--------|------|
+| stock_map | 11 | 33 | +200% |
+| financial_terms | 45 | 64 | +42% |
+| industry_terms | 30 | 73 | +143% |
+| synonym_lookup | 60 | 143 | +138% |
+| jieba_words | 55 | 91 | +65% |
+
+**设计原则**：字典数据属于配置而非代码。新增股票、术语、同义词只需要编辑 JSON，不应该触发代码变更。
+
+---
+
 ## 关键数字（面试时可引用）
 
 | 指标 | 数据 |
 |---|---|
 | 总 commit 数 | ~60 |
 | Agent 数量 | 4（从 7 精简） |
-| 注册工具 | 27 个，跨 9 个模块 |
+| 注册工具 | 28 个，跨 9 个模块 |
 | 测试覆盖 | 521 tests（21 个测试文件） |
 | 知识库文档 | ~500+ 篇（去重后） |
 | 检索延迟 | BM25 < 50ms，ChromaDB ANN < 200ms |
-| 查询扩展 | 35 组同义词 + 18 个概念关联，规则层 0ms + LLM 层可选 |
-| 全链路评分 | 4 层防幻觉 + 5 阶段打分 |
+| 查询扩展 | 52 组同义词 + 20 个概念关联，DictionaryRegistry 统一管理，规则层 0ms + LLM 层可选 |
+| 全链路评分 | 6 层防幻觉（4 规则 + 2 LLM）+ 5 阶段打分 |
 | API 架构 | 4 个 FastAPI Router（KB / Ingest / Analysis / Query） |
 | 意图路由 | 5 种意图（kline / event_impact / report / news / general） |
+| 领域字典 | 10 种字典类型，外部 JSON 热扩展（`data/dictionaries/*.json`），STOCK_MAP 33 条 / synonym 143 条 |
