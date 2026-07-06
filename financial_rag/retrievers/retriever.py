@@ -17,6 +17,7 @@ from financial_rag.retrievers.bm25_engine import BM25Engine
 from financial_rag.retrievers.vector_engine import VectorEngine
 from financial_rag.retrievers.fusion import rrf_fusion
 from financial_rag.retrievers.filters import apply_filters
+from financial_rag.retrievers.embedding_cache import EmbeddingCache
 from financial_rag.retrievers import persistence
 from financial_rag.core.ingestion_scorer import IngestionScoreCard
 
@@ -47,6 +48,7 @@ class HybridRetriever:
         chunker: Any = None,
         parser: Any = None,
         chroma_persist_dir: Optional[str] = None,
+        embedding_cache: Optional[EmbeddingCache] = None,
     ):
         cfg = config or {}
         self.rrf_k = cfg.get("rrf_k", 60)
@@ -57,6 +59,7 @@ class HybridRetriever:
         self.reranker = reranker
         self._chunker = chunker
         self._parser = parser
+        self._emb_cache = embedding_cache or EmbeddingCache.get_instance()
 
         # 子引擎
         self._bm25 = BM25Engine(tokenizer=tokenizer)
@@ -82,15 +85,11 @@ class HybridRetriever:
         self.documents = documents
         self._bm25.build(documents)
 
-        # 预计算 embedding + 索引到 Chroma
+        # 预计算 embedding + 索引到 Chroma（走缓存，仅新增文档调 API）
         if precompute_embeddings and self._vector.has_embedding:
             texts = [d.get("text", "") for d in documents]
             logger.info(f"预计算 {len(texts)} 个文档的 embedding...")
-            all_embeddings = []
-            for i in range(0, len(texts), 25):
-                all_embeddings.extend(
-                    self.embedder.embed_documents(texts[i:i + 25])
-                )
+            all_embeddings = self._emb_cache.embed_texts(texts, self.embedder)
             self.doc_embeddings = all_embeddings
             # 索引到 Chroma (ANN 索引)
             self._vector.index(documents, all_embeddings)
@@ -137,14 +136,10 @@ class HybridRetriever:
         self.documents.extend(documents)
         self._bm25.build(self.documents)
 
-        # 增量添加时也计算新文档的 embeddings + 索引到 Chroma
+        # 增量添加时也计算新文档的 embeddings + 索引到 Chroma（走缓存）
         if self.embedder and self._vector.has_embedding:
             texts = [d.get("text", "") for d in documents]
-            new_embeddings = []
-            for i in range(0, len(texts), 25):
-                new_embeddings.extend(
-                    self.embedder.embed_documents(texts[i:i + 25])
-                )
+            new_embeddings = self._emb_cache.embed_texts(texts, self.embedder)
             # Chroma 增量索引
             self._vector.add(documents, new_embeddings)
             if self.doc_embeddings is not None:
@@ -406,16 +401,12 @@ class HybridRetriever:
         self._bm25.build(self.documents)
 
         # 如果 Chroma 已有持久化数据，会自动加载
-        # 否则，如果有 embedder，重新计算 embedding 并索引到 Chroma
+        # 否则，如果有 embedder，重新计算 embedding 并索引到 Chroma（走缓存）
         if self._vector.has_embedding and not self._vector._chroma_indexed:
             texts = [d.get("text", "") for d in self.documents]
             if texts:
                 logger.info(f"加载后重建 Chroma 索引: {len(texts)} 篇文档...")
-                all_embeddings = []
-                for i in range(0, len(texts), 25):
-                    all_embeddings.extend(
-                        self.embedder.embed_documents(texts[i:i + 25])
-                    )
+                all_embeddings = self._emb_cache.embed_texts(texts, self.embedder)
                 self.doc_embeddings = all_embeddings
                 self._vector.index(self.documents, all_embeddings)
                 logger.info(f"Chroma 索引重建完成，维度: {len(all_embeddings[0]) if all_embeddings else 0}")
