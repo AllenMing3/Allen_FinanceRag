@@ -29,7 +29,10 @@ from financial_rag.api.app_state import (
     _load_stats, _update_stats, _get_version,
     _assign_doc_ids, _dedup_docs,
 )
-from financial_rag.api.models import QueryRequest, BuildRequest
+from financial_rag.api.models import (
+    QueryRequest, BuildRequest,
+    CleanReportRequest, ChunkDemoRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -406,3 +409,300 @@ async def api_learning_stats():
     stats["kb_doc_count"] = len(docs)
     stats["version"] = _get_version()
     return stats
+
+
+# ===================== Pipeline 白盒诊断端点 =====================
+
+
+def _resolve_text(text: str, doc_index: int) -> tuple:
+    """Resolve input: use text if provided, otherwise pick from KB by doc_index.
+    Returns (resolved_text, source_label).
+    """
+    if text and text.strip():
+        return text, "user_input"
+    docs = _state.get("kb_docs", [])
+    idx = doc_index if doc_index >= 0 else 0
+    if not docs:
+        raise HTTPException(400, "知识库为空且未传入 text")
+    if idx >= len(docs):
+        raise HTTPException(400, f"doc_index={idx} 超出范围，当前仅 {len(docs)} 篇")
+    doc = docs[idx]
+    return doc.get("text", ""), doc.get("meta", {}).get("source", f"kb_doc_{idx}")
+
+
+@router.post("/api/pipeline/clean-report")
+async def api_pipeline_clean_report(req: CleanReportRequest):
+    """清洗报告: 对一段文本运行 TextPreprocessor，返回清洗前后对比 + 评分"""
+    await asyncio.to_thread(_ensure_init)
+    from financial_rag.retrievers.preprocessor import TextPreprocessor
+    from financial_rag.core.ingestion_scorer import IngestionScoreCard
+
+    raw_text, source = _resolve_text(req.text, req.doc_index)
+    if not raw_text.strip():
+        raise HTTPException(400, "解析到的文本为空")
+
+    # Run preprocessor
+    pp = TextPreprocessor()
+    cleaned = pp.process(raw_text, collect_stats=True)
+    stats = pp.get_last_stats()
+
+    # Run ingestion scoring on preprocessing stage
+    card = IngestionScoreCard()
+    card.record_preprocessing([{"text": raw_text}])
+    card.compute()
+    stage = card.stages[0] if card.stages else None
+
+    # Build logger summary
+    logger.info(
+        f"[Pipeline诊断/clean-report] source={source} "
+        f"original={stats.original_len} cleaned={stats.cleaned_len} "
+        f"retention={stats.retention:.2%} "
+        f"html_removed={stats.html_removed} urls_removed={stats.urls_removed} "
+        f"boilerplate={stats.boilerplate_removed} dedup={stats.paragraphs_deduped}"
+    )
+    if stage:
+        for line in card._build_lines():
+            logger.info(f"[Pipeline诊断] {line}")
+
+    score_info = None
+    if stage:
+        score_info = {
+            "score": round(stage.score, 3),
+            "grade": stage.grade.value,
+            "grade_cn": stage.grade.cn,
+            "diagnosis": stage.diagnosis,
+            "warnings": stage.warnings,
+            "suggestions": stage.suggestions,
+            "metrics": stage.metrics,
+        }
+
+    return {
+        "source": source,
+        "original": raw_text[:500],
+        "original_len": len(raw_text),
+        "cleaned": cleaned[:500],
+        "cleaned_len": len(cleaned),
+        "stats": {
+            "html_removed": stats.html_removed,
+            "urls_removed": stats.urls_removed,
+            "control_removed": stats.control_removed,
+            "boilerplate_removed": stats.boilerplate_removed,
+            "paragraphs_deduped": stats.paragraphs_deduped,
+            "retention": round(stats.retention, 4),
+            "is_over_cleaned": stats.is_over_cleaned,
+            "warnings": stats.warnings,
+        },
+        "score": score_info,
+    }
+
+
+@router.post("/api/pipeline/chunk-demo")
+async def api_pipeline_chunk_demo(req: ChunkDemoRequest):
+    """切片 + 分词 Demo: 对一段文本切片，展示前 3 个 chunk 的分词结果"""
+    await asyncio.to_thread(_ensure_init)
+    from financial_rag.retrievers.chunker import TextChunker
+    from financial_rag.retrievers.bm25_engine import BM25Engine
+    from financial_rag.retrievers.dictionaries import FINANCIAL_TERMS, INDUSTRY_TERMS
+    from financial_rag.core.ingestion_scorer import IngestionScoreCard
+
+    raw_text, source = _resolve_text(req.text, req.doc_index)
+    if not raw_text.strip():
+        raise HTTPException(400, "解析到的文本为空")
+
+    # Run chunker
+    chunker = TextChunker(chunk_size=req.chunk_size)
+    chunks = chunker.split(raw_text, meta={"source": source})
+
+    if not chunks:
+        raise HTTPException(400, "切片结果为空")
+
+    # Tokenize first 3 chunks
+    domain_terms = FINANCIAL_TERMS | INDUSTRY_TERMS
+    token_samples = []
+    corpus_tokens = []
+    for i, chunk in enumerate(chunks[:3]):
+        tokens = BM25Engine._fallback_tokenize(chunk.get("text", ""))
+        corpus_tokens.append(tokens)
+        unique = set(tokens)
+        matched_domain = [t for t in unique if t in domain_terms]
+        token_samples.append({
+            "chunk_id": chunk.get("meta", {}).get("chunk_id", i),
+            "text_preview": chunk.get("text", "")[:200],
+            "token_count": len(tokens),
+            "unique_count": len(unique),
+            "tokens": tokens[:60],  # cap output size
+            "domain_terms_hit": matched_domain,
+        })
+
+    # Run ingestion scoring
+    card = IngestionScoreCard()
+    chunked_docs = [{"text": c.get("text", "")} for c in chunks]
+    card.record_chunking(1, chunked_docs, chunk_size=req.chunk_size)
+    if corpus_tokens:
+        card.record_tokenization(corpus_tokens)
+    card.compute()
+
+    # Logger summary
+    sizes = [len(c.get("text", "")) for c in chunks]
+    avg_size = sum(sizes) / len(sizes)
+    logger.info(
+        f"[Pipeline诊断/chunk-demo] source={source} "
+        f"text_len={len(raw_text)} chunks={len(chunks)} "
+        f"avg_chunk_size={avg_size:.0f}"
+    )
+    for line in card._build_lines():
+        logger.info(f"[Pipeline诊断] {line}")
+
+    # Build score info
+    scores = []
+    for s in card.stages:
+        scores.append({
+            "name": s.name,
+            "display": s.display,
+            "score": round(s.score, 3),
+            "grade": s.grade.value,
+            "grade_cn": s.grade.cn,
+            "diagnosis": s.diagnosis,
+            "warnings": s.warnings,
+            "metrics": s.metrics,
+        })
+
+    # Build chunk summary list (all chunks, brief)
+    chunk_list = []
+    for i, c in enumerate(chunks):
+        t = c.get("text", "")
+        boundary_char = t[-1] if t else ""
+        chunk_list.append({
+            "chunk_id": c.get("meta", {}).get("chunk_id", i),
+            "size": len(t),
+            "text_preview": t[:200],
+            "boundary_char": boundary_char,
+        })
+
+    return {
+        "source": source,
+        "summary": {
+            "original_len": len(raw_text),
+            "chunk_count": len(chunks),
+            "avg_chunk_size": round(avg_size),
+            "min_chunk_size": min(sizes),
+            "max_chunk_size": max(sizes),
+        },
+        "chunks": chunk_list,
+        "token_samples": token_samples,
+        "scores": scores,
+    }
+
+
+@router.get("/api/pipeline/dict-stats")
+async def api_pipeline_dict_stats():
+    """词典利用率报告: 扫描 KB 文档，报告每个词典的命中情况"""
+    await asyncio.to_thread(_ensure_init)
+    from financial_rag.retrievers.dictionaries import (
+        FINANCIAL_TERMS, INDUSTRY_TERMS, ACTION_TERMS, STOCK_MAP,
+        JIEBA_FINANCE_WORDS, SYNONYM_LOOKUP, CONCEPT_MAP,
+    )
+
+    docs = _state.get("kb_docs", [])
+    if not docs:
+        return {
+            "doc_count": 0,
+            "dictionaries": {},
+            "overall": {"total": 0, "matched": 0, "hit_rate": 0},
+            "recommendations": ["知识库为空，无法评估词典利用率"],
+        }
+
+    # Collect all doc text (lowered) for scanning
+    doc_texts = [d.get("text", "").lower() for d in docs]
+    combined = " ".join(doc_texts)  # for fast substring search
+
+    def _scan_dict(name: str, terms: set | list | dict, extract_fn=None):
+        """Scan terms against doc texts. extract_fn converts dict entry to searchable string."""
+        if isinstance(terms, dict):
+            entries = list(terms.keys())
+        elif isinstance(terms, list):
+            entries = terms
+        else:
+            entries = list(terms)
+
+        total = len(entries)
+        matched_terms = []
+        missing_terms = []
+        hit_freq = 0
+
+        for entry in entries:
+            search_key = (extract_fn(entry) if extract_fn else str(entry)).lower()
+            if not search_key:
+                missing_terms.append(entry)
+                continue
+            # Count hits across all docs
+            count = sum(1 for t in doc_texts if search_key in t)
+            if count > 0:
+                matched_terms.append(entry)
+                hit_freq += count
+            else:
+                missing_terms.append(entry)
+
+        return {
+            "name": name,
+            "total": total,
+            "matched": len(matched_terms),
+            "hit_rate": round(len(matched_terms) / max(total, 1), 4),
+            "hit_freq": hit_freq,
+            "missing_sample": [str(t) for t in missing_terms[:10]],
+        }
+
+    # Scan each dictionary
+    dicts = []
+    dicts.append(_scan_dict("FINANCIAL_TERMS", FINANCIAL_TERMS))
+    dicts.append(_scan_dict("INDUSTRY_TERMS", INDUSTRY_TERMS))
+    dicts.append(_scan_dict("ACTION_TERMS", ACTION_TERMS))
+    # STOCK_MAP: keys are keywords
+    dicts.append(_scan_dict("STOCK_MAP", STOCK_MAP))
+    # JIEBA_FINANCE_WORDS: list of compound words
+    dicts.append(_scan_dict("JIEBA_FINANCE_WORDS", JIEBA_FINANCE_WORDS))
+    # SYNONYM_LOOKUP: keys are trigger terms
+    dicts.append(_scan_dict("SYNONYM_LOOKUP", SYNONYM_LOOKUP))
+    # CONCEPT_MAP: keys are concept triggers
+    dicts.append(_scan_dict("CONCEPT_MAP", CONCEPT_MAP))
+
+    # Overall
+    total_all = sum(d["total"] for d in dicts)
+    matched_all = sum(d["matched"] for d in dicts)
+    overall_rate = round(matched_all / max(total_all, 1), 4)
+
+    # Recommendations
+    recs = []
+    for d in dicts:
+        if d["hit_rate"] < 0.1 and d["total"] > 3:
+            recs.append(f"{d['name']}: 命中率仅 {d['hit_rate']:.0%}，考虑精简词典或扩充相关文档")
+        elif d["hit_rate"] > 0.8:
+            recs.append(f"{d['name']}: 命中率 {d['hit_rate']:.0%}，覆盖良好")
+    if not recs:
+        recs.append("各词典利用率均在合理范围内")
+
+    # Logger output
+    logger.info(f"[Pipeline诊断/dict-stats] KB文档数={len(docs)} 词典数={len(dicts)}")
+    logger.info(f"[Pipeline诊断] {'词典名称':<24s} {'总数':>5s} {'命中':>5s} {'命中率':>7s} {'累计频次':>8s}")
+    logger.info(f"[Pipeline诊断] {'-'*55}")
+    for d in dicts:
+        logger.info(
+            f"[Pipeline诊断] {d['name']:<24s} {d['total']:>5d} {d['matched']:>5d} "
+            f"{d['hit_rate']:>6.0%} {d['hit_freq']:>8d}"
+        )
+        if d["missing_sample"]:
+            logger.info(f"[Pipeline诊断]   未命中样本: {', '.join(d['missing_sample'][:5])}")
+    logger.info(f"[Pipeline诊断] 综合命中率: {overall_rate:.0%} ({matched_all}/{total_all})")
+    for r in recs:
+        logger.info(f"[Pipeline诊断] → {r}")
+
+    return {
+        "doc_count": len(docs),
+        "dictionaries": dicts,
+        "overall": {
+            "total": total_all,
+            "matched": matched_all,
+            "hit_rate": overall_rate,
+        },
+        "recommendations": recs,
+    }

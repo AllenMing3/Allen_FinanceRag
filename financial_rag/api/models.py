@@ -74,3 +74,14 @@ class CreateSessionRequest(BaseModel):
     title: str = ""
     initial_analysis: str = ""
     context: dict = {}
+
+
+class CleanReportRequest(BaseModel):
+    text: str = ""          # 直接传文本（与 doc_index 二选一）
+    doc_index: int = -1     # >= 0 时从 KB 取第 N 篇文档
+
+
+class ChunkDemoRequest(BaseModel):
+    text: str = ""          # 直接传文本（与 doc_index 二选一）
+    doc_index: int = -1     # >= 0 时从 KB 取第 N 篇文档
+    chunk_size: int = 500   # 切片大小

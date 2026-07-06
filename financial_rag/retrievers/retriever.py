@@ -18,6 +18,7 @@ from financial_rag.retrievers.vector_engine import VectorEngine
 from financial_rag.retrievers.fusion import rrf_fusion
 from financial_rag.retrievers.filters import apply_filters
 from financial_rag.retrievers import persistence
+from financial_rag.core.ingestion_scorer import IngestionScoreCard
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ class HybridRetriever:
         # 内部状态
         self.documents: List[Dict] = []
         self.doc_embeddings: Optional[List[List[float]]] = None
+        self._last_ingestion_score: Optional[IngestionScoreCard] = None
 
     # ===================== 索引 =====================
 
@@ -101,6 +103,31 @@ class HybridRetriever:
             f"{' (含 embedding)' if self.doc_embeddings else ''}"
             f"{' (含 rerank)' if self.reranker else ''}"
         )
+
+        # Ingestion scoring
+        try:
+            card = IngestionScoreCard()
+            card.record_preprocessing(documents)
+            empty = sum(1 for d in documents if len(d.get("text", "").strip()) < 10)
+            total_vocab = len(set(t for toks in self._bm25._corpus_tokens for t in toks))
+            card.record_tokenization(self._bm25._corpus_tokens)
+            card.record_index(
+                doc_count=len(documents),
+                total_vocab=total_vocab,
+                bm25_built=self._bm25.is_built,
+                chroma_built=self._vector._collection is not None,
+                embedding_dim=len(self.doc_embeddings[0]) if self.doc_embeddings else 0,
+                empty_docs=empty,
+            )
+            card.compute()
+            card.log_summary()
+            self._last_ingestion_score = card
+        except Exception as e:
+            logger.warning(f"IngestionScoreCard failed: {e}")
+
+    def get_ingestion_score(self) -> Optional[IngestionScoreCard]:
+        """Return the last ingestion scorecard (after index() or add())"""
+        return self._last_ingestion_score
 
     def add(self, documents: List[Dict], use_chunker: bool = True):
         """增量添加文档"""
