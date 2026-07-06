@@ -15,7 +15,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
-import re
 import logging
 
 logger = logging.getLogger(__name__)
@@ -203,65 +202,77 @@ class ReflectionLoop(ABC):
         return self.state.synthesis or "无法生成回答"
 
 
-# ===================== 四层防幻觉中间件 =====================
+# ===================== 六层防幻觉中间件 =====================
+# 各层实现已拆分到独立模块:
+# - L1-L4 (规则层): guard/rule_layers.py
+# - L5 (LLM质疑): guard/llm_critique.py
+# - L6 (LLM协助): guard/llm_assist.py
 
-def _tokenize_zh(text: str) -> List[str]:
-    """jieba 分词，无 jieba 时回退到按字分"""
-    try:
-        import jieba
-        return [w for w in jieba.cut(text) if len(w.strip()) > 1]
-    except ImportError:
-        return [c for c in text if c.strip()]
-
-
-# 常见停用词（功能词、标点、虚词）
-_STOP_WORDS = frozenset(
-    "的 了 在 是 我 有 和 就 不 人 都 一 一个 上 也 很 到 说 要 去 你 会 着 "
-    "没有 看 好 自己 这 他 她 它 们 那 被 从 以 对 而 与 及 或 但 还 其 之 "
-    "为 于 把 向 让 给 用 过 能 可 应 将 所 如 果 因 此 等 且 已 又 再 更 最".split()
+from .rule_layers import (
+    l1_source_grounding,
+    l2_numerical_fidelity,
+    l3_citation_integrity,
+    l4_structure_compliance,
+    GROUNDING_THRESHOLD,
 )
-
-# 数字+单位 正则（匹配 "50.3亿元"、"20%"、"2024年" 等）
-_NUM_UNIT_RE = re.compile(
-    r'(\d+(?:\.\d+)?)\s*([%％万亿元亿万美元美元美刀港元港币人民币块个台套条家万人人次份月年日季])?',
-    re.UNICODE,
-)
+from .llm_critique import llm_critique
+from .llm_assist import llm_assist
 
 
 class HallucinationGuard:
     """
-    四层防幻觉校验 — 每层做实，分数透明
+    六层防幻觉校验 — 规则层(L1-L4) + LLM层(L5-L6)，分数透明
 
     L1: 来源锚定 — jieba 分词 + token 重叠率，逐句追溯到检索源
     L2: 数值一致 — 提取 answer 中的「数字+单位」对，交叉比对 source
     L3: 引用完整 — [N] 标记存在且 N 对应有效来源
     L4: 结构规范 — 输出是否包含预期段落（摘要/要点/风险等）
+    L5: LLM质疑 — LLM 审查规则层结果，找出规则盲区（假阳性/假阴性）
+    L6: LLM协助 — LLM 独立逐句扫描，发现规则抓不到的幻觉
 
     接口向后兼容: check() / precheck() / format_report()
     """
 
     LAYER_WEIGHTS = {
-        "L1_source_grounding": 0.35,
-        "L2_numerical_fidelity": 0.25,
-        "L3_citation_integrity": 0.20,
-        "L4_structure_compliance": 0.20,
+        "L1_source_grounding": 0.25,
+        "L2_numerical_fidelity": 0.15,
+        "L3_citation_integrity": 0.10,
+        "L4_structure_compliance": 0.10,
+        "L5_llm_critique": 0.20,
+        "L6_llm_assist": 0.20,
     }
 
     # 来源锚定阈值：句子 token 与某 source 重叠 >= 此值视为"锚定"
     GROUNDING_THRESHOLD = 0.15
 
-    def __init__(self, threshold: float = 0.6):
+    # LLM 层触发阈值：规则层总分低于此值时触发 L5+L6
+    LLM_TRIGGER_THRESHOLD = 0.85
+
+    def __init__(self, threshold: float = 0.6, llm=None):
         self.threshold = threshold
+        self._llm = llm
 
     # ================== 公共接口 ==================
 
     def check(self, answer: str, sources: List[Dict]) -> Dict:
-        """执行四层全量检查"""
+        """执行六层全量检查（L1-L4 规则层 + L5-L6 LLM层）"""
         checks = {}
-        checks["L1_source_grounding"] = self._l1_source_grounding(answer, sources)
-        checks["L2_numerical_fidelity"] = self._l2_numerical_fidelity(answer, sources)
-        checks["L3_citation_integrity"] = self._l3_citation_integrity(answer, sources)
-        checks["L4_structure_compliance"] = self._l4_structure_compliance(answer)
+        checks["L1_source_grounding"] = l1_source_grounding(answer, sources)
+        checks["L2_numerical_fidelity"] = l2_numerical_fidelity(answer, sources)
+        checks["L3_citation_integrity"] = l3_citation_integrity(answer, sources)
+        checks["L4_structure_compliance"] = l4_structure_compliance(answer)
+
+        # L5+L6: LLM 层 — 条件触发
+        rule_score = self._compute_rule_score(checks)
+        if self._llm is not None and rule_score < self.LLM_TRIGGER_THRESHOLD:
+            checks["L5_llm_critique"] = llm_critique(answer, sources, checks, self._llm)
+            checks["L6_llm_assist"] = llm_assist(answer, sources, self._llm)
+        else:
+            if self._llm is None:
+                logger.debug("L5/L6 skipped: no LLM injected")
+            else:
+                logger.debug(f"L5/L6 skipped: rule score {rule_score:.2f} >= {self.LLM_TRIGGER_THRESHOLD}")
+
         checks["overall"] = self._compute_overall(checks)
 
         overall_score = checks["overall"]["score"]
@@ -273,179 +284,29 @@ class HallucinationGuard:
             "checks": checks,
             "unverified": checks.get("L1_source_grounding", {}).get("unanchored", []),
             "report": self.format_report(overall_score, checks),
+            "llm_layers_active": "L5_llm_critique" in checks,
         }
+
+    def _compute_rule_score(self, checks: Dict) -> float:
+        """仅计算 L1-L4 规则层的加权总分（用于 LLM 层触发判断）"""
+        rule_weights = {
+            "L1_source_grounding": 0.35,
+            "L2_numerical_fidelity": 0.25,
+            "L3_citation_integrity": 0.20,
+            "L4_structure_compliance": 0.20,
+        }
+        total = 0.0
+        for layer, w in rule_weights.items():
+            if layer in checks:
+                total += checks[layer].get("score", 0) * w
+        return total
 
     def precheck(self, answer: str, sources: List[Dict]) -> Dict:
         """快速预检（仅 L1 + L2）"""
-        l1 = self._l1_source_grounding(answer, sources)
-        l2 = self._l2_numerical_fidelity(answer, sources)
+        l1 = l1_source_grounding(answer, sources)
+        l2 = l2_numerical_fidelity(answer, sources)
         score = l1["score"] * 0.6 + l2["score"] * 0.4
         return {"quick_score": score, "warning": score < 0.5}
-
-    # ================== L1: 来源锚定 ==================
-
-    def _l1_source_grounding(self, answer: str, sources: List[Dict]) -> Dict:
-        """每个声明是否能追溯到某篇 source"""
-        if not sources:
-            return {"score": 0.0, "passed": False,
-                    "anchored": 0, "total": 0, "unanchored": []}
-
-        # 预处理: 对每篇 source 做 jieba 分词
-        source_tokens_list = []
-        for s in sources:
-            text = s.get("text", "")
-            tokens = set(_tokenize_zh(text)) - _STOP_WORDS
-            source_tokens_list.append(tokens)
-
-        # 逐句检查
-        sentences = [s.strip() for s in re.split(r'[。！？\n]', answer)
-                     if len(s.strip()) > 8]
-        if not sentences:
-            return {"score": 1.0, "passed": True,
-                    "anchored": 0, "total": 0, "unanchored": []}
-
-        anchored, unanchored = 0, []
-        for sent in sentences:
-            sent_tokens = set(_tokenize_zh(sent)) - _STOP_WORDS
-            if len(sent_tokens) < 2:
-                anchored += 1  # 太短的跳过
-                continue
-
-            # 找最佳匹配的 source
-            best_overlap = 0.0
-            for src_tokens in source_tokens_list:
-                if not src_tokens:
-                    continue
-                overlap = len(sent_tokens & src_tokens) / len(sent_tokens)
-                best_overlap = max(best_overlap, overlap)
-
-            if best_overlap >= self.GROUNDING_THRESHOLD:
-                anchored += 1
-            else:
-                unanchored.append(sent[:80])
-
-        total = len(sentences)
-        ratio = anchored / total if total > 0 else 1.0
-        return {
-            "score": ratio,
-            "passed": ratio >= 0.6,
-            "anchored": anchored,
-            "total": total,
-            "unanchored": unanchored,
-        }
-
-    # ================== L2: 数值一致性 ==================
-
-    def _l2_numerical_fidelity(self, answer: str, sources: List[Dict]) -> Dict:
-        """answer 中的数字是否能在 source 中找到"""
-        if not sources:
-            # 没有 source 时，answer 里有数字就是问题
-            ans_nums = self._extract_numbers(answer)
-            return {"score": 0.0 if ans_nums else 1.0,
-                    "passed": not bool(ans_nums),
-                    "verified": 0, "total": len(ans_nums), "unmatched": ans_nums}
-
-        all_source_text = " ".join(s.get("text", "") for s in sources)
-        src_nums = set(self._extract_numbers(all_source_text))
-        ans_nums = self._extract_numbers(answer)
-
-        if not ans_nums:
-            return {"score": 1.0, "passed": True,
-                    "verified": 0, "total": 0, "unmatched": []}
-
-        verified = sum(1 for n in ans_nums if n in src_nums)
-        unmatched = [n for n in ans_nums if n not in src_nums]
-        ratio = verified / len(ans_nums)
-        return {
-            "score": ratio,
-            "passed": ratio >= 0.5,
-            "verified": verified,
-            "total": len(ans_nums),
-            "unmatched": unmatched[:5],
-        }
-
-    @staticmethod
-    def _extract_numbers(text: str) -> List[str]:
-        """提取数字（含单位），返回标准化字符串列表"""
-        matches = _NUM_UNIT_RE.findall(text)
-        results = []
-        for num_str, unit in matches:
-            # 标准化: 去掉末尾的 .0
-            try:
-                num = float(num_str)
-                normalized = str(int(num)) if num == int(num) else num_str
-            except ValueError:
-                normalized = num_str
-            results.append(f"{normalized}{unit}")
-        return results
-
-    # ================== L3: 引用完整性 ==================
-
-    def _l3_citation_integrity(self, answer: str, sources: List[Dict]) -> Dict:
-        """检查 [N] 引用标记是否存在且对应有效来源"""
-        # 找所有 [N] 标记
-        citations = re.findall(r'\[(\d+)\]', answer)
-        if not citations:
-            # 没有 [N] 标记 — 检查是否有文字引用
-            has_text_ref = any(m in answer for m in
-                               ["来源", "引用", "参考", "根据", "数据显示",
-                                "据报", "资料", "报告"])
-            score = 0.6 if has_text_ref else 0.2
-            return {"score": score, "passed": score >= 0.5,
-                    "citations_found": 0, "valid": 0, "invalid": 0,
-                    "has_text_reference": has_text_ref}
-
-        n_sources = len(sources)
-        valid, invalid = 0, 0
-        for c in citations:
-            idx = int(c)
-            if 1 <= idx <= n_sources:
-                valid += 1
-            else:
-                invalid += 1
-
-        total = valid + invalid
-        ratio = valid / total if total > 0 else 0.0
-        # 有正确引用给基础分，invalid 扣分
-        score = ratio * 0.9 + (0.1 if total >= 2 else 0.0)
-        score = min(1.0, score)
-        return {
-            "score": score,
-            "passed": score >= 0.5,
-            "citations_found": total,
-            "valid": valid,
-            "invalid": invalid,
-        }
-
-    # ================== L4: 结构规范性 ==================
-
-    def _l4_structure_compliance(self, answer: str) -> Dict:
-        """输出是否包含预期的结构段落"""
-        # 期望的结构标记（Markdown 标题 或 常见关键词段）
-        expected_sections = [
-            (r'(?:^|\n)#+\s*(?:摘要|概述|总结|Summary|Overview)', "摘要/概述"),
-            (r'(?:^|\n)#+\s*(?:要点|关键|发现|Key|Finding)', "要点/发现"),
-            (r'(?:^|\n)#+\s*(?:分析|Analysis|详情)', "分析/详情"),
-            (r'(?:^|\n)#+\s*(?:风险|注意|提示|Risk|Warning|Caution)', "风险/提示"),
-        ]
-
-        found = []
-        missing = []
-        for pattern, name in expected_sections:
-            if re.search(pattern, answer, re.IGNORECASE):
-                found.append(name)
-            else:
-                missing.append(name)
-
-        # 至少有 2 个结构段落算合格
-        ratio = len(found) / len(expected_sections)
-        score = min(1.0, ratio + 0.2) if len(found) >= 2 else ratio
-        return {
-            "score": score,
-            "passed": score >= 0.5,
-            "found_sections": found,
-            "missing_sections": missing,
-        }
 
     # ================== 综合 + 格式化 ==================
 
@@ -532,5 +393,29 @@ class HallucinationGuard:
             lines.append("\n⚠️ **警告**:")
             for w in warnings:
                 lines.append(f"  - {w}")
+
+        # L5 LLM质疑
+        l5 = checks.get("L5_llm_critique")
+        if l5:
+            l5_score = l5.get("score", 0)
+            fp = l5.get("false_positives", [])
+            fn = l5.get("false_negatives", [])
+            lines.append(f"├ LLM质疑: {l5_score:.0%} — 发现 {len(fp)} 条假阳性, {len(fn)} 条假阴性")
+            for item in (fp + fn)[:3]:
+                lines.append(f"  - {item}")
+
+        # L6 LLM协助
+        l6 = checks.get("L6_llm_assist")
+        if l6:
+            l6_score = l6.get("score", 0)
+            unsupported = l6.get("unsupported_claims", [])
+            fabricated = l6.get("fabricated_claims", [])
+            total_claims = l6.get("total_claims", 0)
+            supported = l6.get("supported_claims", 0)
+            lines.append(f"└ LLM协助: {l6_score:.0%} — {supported}/{total_claims} 句有语义支撑")
+            for item in fabricated[:3]:
+                lines.append(f"  - 编造: \"{item}\"")
+            for item in unsupported[:3]:
+                lines.append(f"  - 无据: \"{item}\"")
 
         return "\n".join(lines)

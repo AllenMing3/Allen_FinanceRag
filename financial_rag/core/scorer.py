@@ -20,7 +20,11 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional, Tuple
 from enum import Enum
+import re
 import time
+
+_INGESTION_CHINESE = re.compile(r'[\u4e00-\u9fff]')
+_INGESTION_PUNCT = set('，。！？、；：""''（）…—·《》\n\r\t ')
 
 
 # ===================== 评分等级 =====================
