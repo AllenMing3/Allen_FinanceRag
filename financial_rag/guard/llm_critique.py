@@ -10,7 +10,6 @@ guard/llm_critique.py — L5 LLM质疑层
 LLM 输入：answer + sources + L1-L4 检测结果摘要
 LLM 输出：结构化 JSON（发现列表 + 严重程度 + 置信度）
 """
-import re
 import logging
 from typing import Dict, List
 

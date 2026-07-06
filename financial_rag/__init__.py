@@ -28,7 +28,7 @@ from financial_rag.config import config, AppConfig
 from financial_rag.core import (
     AgentOrchestrator, ExecutionMode,
     PipelineOrchestrator, PipelineConfig, PipelineStatus,
-    ReflectionLoop, ReflectionConfig, HallucinationGuard,
+    HallucinationGuard,
     PipelineScoreCard, StageScore, ScoreGrade, create_scorecard,
 )
 from financial_rag.agents import (
@@ -66,8 +66,8 @@ __all__ = [
     "AgentOrchestrator", "ExecutionMode",
     # Core - Indexer
     "PipelineOrchestrator", "PipelineConfig", "PipelineStatus",
-    # Core - Reflection
-    "ReflectionLoop", "ReflectionConfig", "HallucinationGuard",
+    # Core - Guard
+    "HallucinationGuard",
     # Core - Scorer
     "PipelineScoreCard", "StageScore", "ScoreGrade", "create_scorecard",
     # Agents

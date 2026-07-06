@@ -239,3 +239,49 @@ CONCEPT_MAP = {
     "降息": ["央行", "LPR", "MLF", "降准", "流动性"],
     "GDP": ["经济", "增长", "CPI", "PMI"],
 }
+
+
+# ===================== Registry 初始化 =====================
+# 在模块加载时，将内置词表注册到 DictionaryRegistry，
+# 并加载 data/dictionaries/*.json 外部文件合并。
+# 所有 from .dictionaries import XXX 自动获得增强版本。
+
+def _apply_external():
+    """加载外部词典并合并到模块级变量"""
+    from financial_rag.retrievers.dictionary_registry import initialize_registry
+
+    _reg = initialize_registry({
+        "financial_terms": FINANCIAL_TERMS,
+        "industry_terms": INDUSTRY_TERMS,
+        "action_terms": ACTION_TERMS,
+        "stop_words": STOP_WORDS,
+        "stock_map": STOCK_MAP,
+        "synonym_lookup": SYNONYM_LOOKUP,
+        "concept_map": CONCEPT_MAP,
+        "doc_type_keywords": DOC_TYPE_KEYWORDS,
+        "doc_type_patterns": DOC_TYPE_PATTERNS,
+        "jieba_words": JIEBA_FINANCE_WORDS,
+    })
+
+    return _reg
+
+
+try:
+    _registry = _apply_external()
+    # 用合并后的版本覆盖模块级变量（向后兼容）
+    STOCK_MAP = _registry.get("stock_map")
+    FINANCIAL_TERMS = _registry.get("financial_terms")
+    INDUSTRY_TERMS = _registry.get("industry_terms")
+    ACTION_TERMS = _registry.get("action_terms")
+    STOP_WORDS = _registry.get("stop_words")
+    SYNONYM_LOOKUP = _registry.get("synonym_lookup")
+    CONCEPT_MAP = _registry.get("concept_map")
+    DOC_TYPE_KEYWORDS = _registry.get("doc_type_keywords")
+    DOC_TYPE_PATTERNS = _registry.get("doc_type_patterns")
+    JIEBA_FINANCE_WORDS = _registry.get("jieba_words")
+except Exception as _e:
+    import logging
+    logging.getLogger(__name__).warning(
+        f"DictionaryRegistry 初始化失败，使用内置默认值: {_e}"
+    )
+    _registry = None

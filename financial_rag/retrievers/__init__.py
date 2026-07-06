@@ -12,6 +12,7 @@ from .dictionaries import (
     STOP_WORDS, QUERY_TYPE_PATTERNS, JIEBA_FINANCE_WORDS,
     DOC_TYPE_KEYWORDS, DOC_TYPE_PATTERNS,
 )
+from .dictionary_registry import get_registry, DictionaryRegistry
 
 __all__ = [
     # Core
@@ -32,4 +33,6 @@ __all__ = [
     "STOCK_MAP", "FINANCIAL_TERMS", "INDUSTRY_TERMS", "ACTION_TERMS",
     "STOP_WORDS", "QUERY_TYPE_PATTERNS", "JIEBA_FINANCE_WORDS",
     "DOC_TYPE_KEYWORDS", "DOC_TYPE_PATTERNS",
+    # Registry
+    "get_registry", "DictionaryRegistry",
 ]

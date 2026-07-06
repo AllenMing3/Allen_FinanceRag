@@ -10,7 +10,7 @@
 - scorer:         全链路打分卡
 - protocol:       Agent 间消息总线 (MessageBus)
 
-注: reflector (HallucinationGuard / ReflectionLoop) 已迁移至 financial_rag.guard
+注: HallucinationGuard 已迁移至 financial_rag.guard
 """
 from .base import BaseAgent, AgentContext, AgentResult, AgentStatus, ExecutionMode
 from .orchestrator import AgentOrchestrator, CoordinatorConfig, ExecutionResult
@@ -23,10 +23,8 @@ from .scorer import PipelineScoreCard, StageScore, ScoreGrade, StageGroup, creat
 from .protocol import AgentMessage, MessageBus, MessageAdapter
 from .data_orchestrator import DataOrchestrator, KnowledgePool, DataRouter, IngestStats
 
-# Backward-compat: reflector 已迁移至 financial_rag.guard，此处 re-export 避免旧代码报键
-from financial_rag.guard.reflector import (  # noqa: F401
-    ReflectionLoop, ReflectionConfig, ThoughtStep, ActionType, ReflectionState, HallucinationGuard,
-)
+# Backward-compat: reflector 已迁移至 financial_rag.guard
+from financial_rag.guard.reflector import HallucinationGuard  # noqa: F401
 
 __all__ = [
     # Base
@@ -44,7 +42,6 @@ __all__ = [
     # Indexer
     "PipelineOrchestrator", "PipelineConfig", "PipelineResult", "PipelineStatus",
     # Reflector
-    "ReflectionLoop", "ReflectionConfig", "ThoughtStep", "ActionType", "ReflectionState",
     "HallucinationGuard",
     # Scorer
     "PipelineScoreCard", "StageScore", "ScoreGrade", "StageGroup", "create_scorecard",

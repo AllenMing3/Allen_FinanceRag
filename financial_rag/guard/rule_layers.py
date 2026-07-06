@@ -18,10 +18,22 @@ logger = logging.getLogger(__name__)
 GROUNDING_THRESHOLD = 0.15  # 来源锚定阈值：句子 token 与某 source 重叠 >= 此值视为"锚定"
 
 
+_jieba_loaded = False
+
+
 def _tokenize_zh(text: str) -> List[str]:
     """jieba 分词，无 jieba 时回退到按字分"""
+    global _jieba_loaded
     try:
         import jieba
+        if not _jieba_loaded:
+            # 通过 DictionaryRegistry 注入领域词典（内置 + 外部 JSON）
+            try:
+                from financial_rag.retrievers.dictionary_registry import get_registry
+                get_registry().set_jieba(jieba)
+            except Exception:
+                pass  # registry 不可用时静默跳过
+            _jieba_loaded = True
         return [w for w in jieba.cut(text) if len(w.strip()) > 1]
     except ImportError:
         return [c for c in text if c.strip()]

@@ -1,205 +1,20 @@
 """
-架构三: Reflection — ReAct 反思循环 + 多维评分 + 六层防幻觉
+架构三: HallucinationGuard — 六层防幻觉校验
 
 核心设计:
-1. ReAct 循环 = Think → Retrieve → Act → Observe → Judge
-2. 多维度置信度评分: 检索轮次、结果数量、相关度、一致性
-3. 六层递进式防幻觉校验
-4. 与业务脱钩: 只定义评分维度和检查层级，不绑定领域
+1. 六层递进式防幻觉: 规则层(L1-L4) + LLM层(L5-L6)
+2. 与业务脱钩: 只定义评分维度和检查层级，不绑定领域
+3. 透明评分: 每层得分 + 理由嵌入最终输出
 
-两大组件:
-- ReflectionLoop: ReAct 反思 + 多轮检索 + 置信度评估
-- HallucinationGuard: 六层防幻觉中间件
+各层实现已拆分到独立模块:
+- L1-L4 (规则层): guard/rule_layers.py
+- L5 (LLM质疑): guard/llm_critique.py
+- L6 (LLM协助): guard/llm_assist.py
 """
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Tuple
-from enum import Enum
+from typing import List, Dict
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-# ===================== ReAct 循环 =====================
-
-class ActionType(Enum):
-    RETRIEVE = "retrieve"           # 检索知识库
-    REFINE_QUERY = "refine_query"   # 优化查询
-    ANALYZE = "analyze"             # 分析数据
-    SYNTHESIZE = "synthesize"       # 综合答案
-    FINISH = "finish"               # 完成
-    RETRY = "retry"                 # 重试
-
-
-@dataclass
-class ThoughtStep:
-    """ReAct 循环中每一步的思考记录"""
-    step: int
-    thought: str                     # 当前思考
-    action: ActionType               # 决定动作
-    action_input: str                # 动作输入
-    observation: str = ""            # 动作结果观察
-    reflection: str = ""             # 对结果的反思
-
-    def to_dict(self) -> Dict:
-        return {
-            "step": self.step,
-            "thought": self.thought,
-            "action": self.action.value,
-            "action_input": self.action_input,
-            "observation": self.observation,
-            "reflection": self.reflection,
-        }
-
-
-@dataclass
-class ReflectionState:
-    """反思状态 — 维护多维度评分"""
-    task: str = ""
-    current_query: str = ""
-    retrieved_contexts: List[Dict] = field(default_factory=list)
-    synthesis: str = ""
-    # 多维度评分
-    confidence: float = 0.0          # 综合置信度
-    retrieval_quality: float = 0.0   # 检索质量分
-    consistency_score: float = 0.0   # 一致性分
-    completeness_score: float = 0.0  # 完整性分
-    citation_score: float = 0.0      # 引用准确度分
-    # 控制
-    should_continue: bool = True
-    max_steps_reached: bool = False
-
-
-@dataclass
-class ReflectionConfig:
-    max_retrievals: int = 3           # 最多检索次数
-    retrieval_top_k: int = 5          # 每次检索数量
-    max_steps: int = 6                # 最大循环步数
-    min_confidence: float = 0.6       # 最低置信度阈值
-    min_relevance: float = 0.3        # 最低相关度
-    enable_self_reflection: bool = True
-
-
-class ReflectionLoop(ABC):
-    """
-    Reflection — ReAct 反思循环引擎
-
-    流程: Think → Act → Observe → Judge → (loop/stop)
-
-    子类实现:
-    - _do_retrieve(): 具体检索逻辑
-    - _do_synthesize(): 答案综合逻辑
-    - _assess_confidence(): 自定义置信度评估
-    """
-
-    def __init__(self, config: Optional[ReflectionConfig] = None):
-        self.config = config or ReflectionConfig()
-        self.state: Optional[ReflectionState] = None
-        self.thought_history: List[ThoughtStep] = []
-
-    # ========== ReAct 主循环 ==========
-
-    def run(self, task: str, context: Optional[Dict] = None) -> Dict:
-        """运行 Reflection 循环，返回最终答案 + 多维评分"""
-        self.state = ReflectionState(task=task)
-        self.thought_history = []
-
-        step = 0
-        while self.state.should_continue and step < self.config.max_steps:
-            step += 1
-
-            # 1. Think — 分析当前状态
-            thought = self._think(step)
-
-            # 2. Act — 执行动作
-            observation = self._act(thought)
-
-            # 3. 记录
-            thought.observation = observation
-            self.thought_history.append(thought)
-
-            # 4. Judge — 反思 + 多维评分
-            should_continue, reason = self._judge(thought)
-            self.state.should_continue = should_continue
-
-        # 最终综合
-        final = self._synthesize_final()
-        return {
-            "answer": final,
-            "confidence": self.state.confidence,
-            "scores": {
-                "retrieval_quality": self.state.retrieval_quality,
-                "consistency": self.state.consistency_score,
-                "completeness": self.state.completeness_score,
-                "citation": self.state.citation_score,
-            },
-            "steps": len(self.thought_history),
-            "thought_chain": [t.to_dict() for t in self.thought_history],
-        }
-
-    def _think(self, step: int) -> ThoughtStep:
-        """Think 阶段: 决定下一步动作"""
-        if self.state.synthesis and self.state.confidence >= self.config.min_confidence:
-            return ThoughtStep(step=step, thought="信息充足，结束循环",
-                               action=ActionType.FINISH, action_input="done")
-
-        if not self.state.retrieved_contexts or step <= len(self.state.retrieved_contexts) + 1:
-            return ThoughtStep(step=step, thought="需要检索更多信息",
-                               action=ActionType.RETRIEVE, action_input=self._next_query())
-
-        return ThoughtStep(step=step, thought="综合已有信息",
-                           action=ActionType.SYNTHESIZE, action_input="synthesize")
-
-    def _act(self, thought: ThoughtStep) -> str:
-        """Act 阶段: 执行动作"""
-        if thought.action == ActionType.RETRIEVE:
-            return self._do_retrieve(thought.action_input)
-        elif thought.action == ActionType.SYNTHESIZE:
-            return self._do_synthesize()
-        elif thought.action == ActionType.FINISH:
-            return self.state.synthesis
-        return "unknown_action"
-
-    def _judge(self, thought: ThoughtStep) -> Tuple[bool, str]:
-        """Judge 阶段: 多维评分 + 停止决策"""
-        if thought.action == ActionType.SYNTHESIZE and self.state.synthesis:
-            if self.state.confidence >= self.config.min_confidence:
-                return False, f"置信度{self.state.confidence:.2f}达标，停止"
-        if thought.step >= self.config.max_steps:
-            self.state.max_steps_reached = True
-            return False, "达到最大步数"
-        if len(self.state.retrieved_contexts) >= self.config.max_retrievals:
-            return False, "检索次数达上限"
-        return True, "继续"
-
-    # ========== 子类必须实现 ==========
-
-    @abstractmethod
-    def _do_retrieve(self, query: str) -> str:
-        """执行一次检索"""
-        pass
-
-    def _do_synthesize(self) -> str:
-        """综合检索结果为答案"""
-        self.state.synthesis = "（子类实现综合逻辑）"
-        self.state.confidence = self._assess_confidence()
-        return self.state.synthesis
-
-    def _assess_confidence(self) -> float:
-        """多维度置信度评估（子类可重写）"""
-        n = sum(len(ctx) for ctx in self.state.retrieved_contexts)
-        confidence = 0.3 + min(0.2, n * 0.05) + min(0.3, 0.1 * len(self.state.retrieved_contexts))
-        return min(0.95, confidence)
-
-    def _next_query(self) -> str:
-        """生成下一轮查询（子类可重写）"""
-        return self.state.task
-
-    def _synthesize_final(self) -> str:
-        """最终综合"""
-        if not self.state.synthesis:
-            self._do_synthesize()
-        return self.state.synthesis or "无法生成回答"
 
 
 # ===================== 六层防幻觉中间件 =====================
@@ -213,7 +28,6 @@ from .rule_layers import (
     l2_numerical_fidelity,
     l3_citation_integrity,
     l4_structure_compliance,
-    GROUNDING_THRESHOLD,
 )
 from .llm_critique import llm_critique
 from .llm_assist import llm_assist

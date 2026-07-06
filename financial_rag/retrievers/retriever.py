@@ -426,21 +426,19 @@ except ImportError:
 
 
 def jieba_tokenizer() -> callable:
-    """创建 jieba 分词函数（自动加载金融词典）"""
+    """创建 jieba 分词函数（通过 DictionaryRegistry 注入全量领域词典）"""
     if not _has_jieba:
         raise ImportError("请安装 jieba: pip install jieba")
 
-    from financial_rag.retrievers.dictionaries import JIEBA_FINANCE_WORDS
-
-    jieba.setLogLevel(20)
-    for w in JIEBA_FINANCE_WORDS:
-        jieba.add_word(w)
+    from financial_rag.retrievers.dictionary_registry import get_registry
+    reg = get_registry()
+    reg.set_jieba(jieba)  # 注入全部 jieba_words（内置 + 外部 JSON）
 
     def _tokenize(text: str) -> List[str]:
         if not text:
             return []
         words = jieba.lcut(text.lower())
         return [w.strip() for w in words
-                if w.strip() and not all(c in '，。！？、；：""''（）…—·《》' for c in w)]
+                if w.strip() and not all(c in '，。！？、；：“”‘’（）…—·《》' for c in w)]
 
     return _tokenize
