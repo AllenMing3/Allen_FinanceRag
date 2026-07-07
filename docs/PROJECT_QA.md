@@ -399,17 +399,70 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ---
 
+## Q25: QueryPlanner 是怎么做的？为什么不做复杂的 DAG？
+
+**问题**：现有流程是 QueryParser（纯规则）→ 检索 → LLM 回答。对于复杂查询（对比、时间线、深度分析），单次检索不够——需要先拆解为多个子查询，分别检索再合并。
+
+**市面做法**：很多 RAG 系统用 DAG（有向无环图）做计划，子查询之间有依赖关系，支持顺序执行 + 结果传递。但 DAG 复杂度高，调试困难，对于我们的场景太重。
+
+**我们的做法**：一次 LLM call，JSON 输出：
+- **5 种意图**：factual / comparison / timeline / deep_dive / summary
+- **每个子查询**带 source（kb/news/graph/all）和 mode（local/global/hybrid/mix）
+- **执行策略**：parallel（并行检索）或 sequential（顺序检索）
+
+**关键决策**：
+- **不做 DAG**：单次 LLM call 生成的计划已经足够。子查询之间大部分是并行关系，不需要复杂依赖图
+- **完全解耦**：`query_planner.py` 不改现有 `query_parser.py` 或 `retriever.py`，坐在新的一层
+- **自动降级**：LLM 调用失败时回退为单子查询，不影响简单查询的响应速度
+- **`is_simple` 属性**：单子查询跳过规划开销，零延迟
+
+**效果**：
+
+| 查询类型 | 示例 | 子查询数 | 策略 |
+|----------|------|---------|------|
+| factual | "矛台收盘价多少" | 1 | 直接检索 |
+| comparison | "英伟达和华为芯片谁强" | 3 | 并行 |
+| timeline | "OpenAI融资历程" | 3 | 顺序 |
+| deep_dive | "商汤生成式AI前景" | 4 | 并行 |
+
+**设计原则**：简单、可靠、不增加系统复杂度。如果将来需要子查询之间的依赖关系，可以在 QueryPlan 中加 `depends_on` 字段，不需要重写架构。
+
+---
+
+## Q26: LightRAG 图谱实验做了什么？
+
+**目标**：验证 LightRAG SDK 能否从中文财经新闻中抽取知识图谱，支持跨文档的实体关系推理。
+
+**踩坑**：
+
+1. **API Key 优先级问题**：系统环境变量 `DASHSCOPE_API_KEY` 是旧的过期 key，但 dashscope SDK 优先读全局 `dashscope.api_key`，导致 `.env` 中的新 key 无效。解决：读 `.env` 文件优先，然后 `dashscope.api_key = API_KEY` 强制覆盖
+
+2. **Tokenizer decode 返回空字符串**：LightRAG 用 `tiktoken`（需下载网络资源，国内不稳定），我们做了自定义 Tokenizer（字符索引，不需要下载）。但 decode() 返回空 → chunks 全空。根因：decode 必须用 min/max token 索引切片原始文本，而不是返回空
+
+3. **Embedding 返回 Python list**：LightRAG 的 NanoVectorDB 用 `result.size` 属性，但 Python list 没有 `.size`。解决：`return np.array(embeddings, dtype=np.float32)`
+
+**结果**（5 篇 AI 新闻）：
+- 60 个实体、59 条关系、10 种实体类型
+- 高连接度实体：Blackwell Ultra (14), SenseTime (10), OpenAI (9)
+- 4 种查询模式（local/global/hybrid/mix）均能返回有意义的图谱增强答案
+
+**状态**：独立 PoC，尚未集成到主系统。集成路径：作为 `graph` 数据源加入 QueryPlanner 的子查询来源。
+
+---
+
 ## 关键数字（面试时可引用）
 
 | 指标 | 数据 |
 |---|---|
-| 总 commit 数 | ~60 |
+| 总 commit 数 | ~65 |
 | Agent 数量 | 4（从 7 精简） |
 | 注册工具 | 28 个，跨 9 个模块 |
 | 测试覆盖 | 521 tests（21 个测试文件） |
 | 知识库文档 | ~500+ 篇（去重后） |
 | 检索延迟 | BM25 < 50ms，ChromaDB ANN < 200ms |
+| 查询规划 | QueryPlanner: 5 种意图 + 来源/模式感知子查询，LLM 失败自动降级 |
 | 查询扩展 | 52 组同义词 + 20 个概念关联，DictionaryRegistry 统一管理，规则层 0ms + LLM 层可选 |
+| 知识图谱 | LightRAG PoC: 60 实体 + 59 关系 + 4 种查询模式（local/global/hybrid/mix） |
 | 全链路评分 | 6 层防幻觉（4 规则 + 2 LLM）+ 5 阶段打分 |
 | API 架构 | 4 个 FastAPI Router（KB / Ingest / Analysis / Query） |
 | 意图路由 | 5 种意图（kline / event_impact / report / news / general） |

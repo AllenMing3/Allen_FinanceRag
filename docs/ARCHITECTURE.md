@@ -385,6 +385,16 @@ reg.save_external()          # 持久化到 JSON
 
 ## File-by-File Guide
 
+### `experiments/` — Standalone Experiments
+
+| File | Role |
+|------|------|
+| `lightrag_experiment.py` | LightRAG SDK PoC: DashScope LLM/embedding adapters, custom tokenizer (no tiktoken), entity-relation extraction from Chinese financial news (60 entities, 59 relations from 5 articles) |
+| `analyze_graph.py` | Parse GraphML output — entity type distribution, connectivity ranking, relationship analysis |
+| `verify_fixes.py` | Diagnose LightRAG integration issues (API key priority `.env` > system env, tokenizer roundtrip, embedding numpy return) |
+| `test_planner.py` | QueryPlanner test harness — 5 query types (factual/comparison/timeline/deep_dive/policy) |
+| `lightrag_demo/` | LightRAG output: `rag_storage/graph_chunk_entity_relation.graphml` (60 entities, 59 relations, 10 entity types) |
+
 ### Root
 
 | File | Role |
@@ -484,6 +494,7 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `chunker.py` | `TextChunker`: document splitting with overlap + metadata tagging |
 | `preprocessor.py` | `TextPreprocessor` (cleaning, boilerplate removal, paragraph dedup — enabled by default), `RelevanceGate` (relevance filtering), `DocTypeClassifier` (fast classification) |
 | `query_parser.py` | `QueryParser`: intent detection, entity extraction, date parsing from queries |
+| `query_planner.py` | `QueryPlanner`: LLM-driven query decomposition — 5 intents (summary/comparison/timeline/deep_dive/factual), source-aware sub-queries (kb/news/graph/all), single LLM call with JSON output, fallback to single query |
 | `dictionaries.py` | Built-in keyword dictionaries: `STOCK_MAP`, `FINANCIAL_TERMS`, `INDUSTRY_TERMS`, `SYNONYM_LOOKUP`, etc. Auto-merged with external JSON via `DictionaryRegistry` |
 | `dictionary_registry.py` | `DictionaryRegistry`: centralized hub for all domain dicts. Loads external `data/dictionaries/*.json`, injects jieba words, provides `get_registry()` singleton |
 | `persistence.py` | `save_index()`, `load_index()`: index serialization |
@@ -521,6 +532,94 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `index.html` | Web UI structure (273 lines) |
 | `styles.css` | Dark theme styling (209 lines) |
 | `app.js` | Frontend logic + API interaction (920 lines) |
+
+---
+
+## Query Planning — QueryPlanner
+
+`QueryPlanner` sits between `QueryParser` (pure rules) and the retrieval pipeline. It uses a single LLM call to decompose complex queries into structured sub-queries before retrieval.
+
+### Design
+
+- **Single LLM call** → JSON output with intent + sub-queries
+- **Decoupled** — does not modify existing `QueryParser` or `HybridRetriever`
+- **Fallback** — LLM failure → single sub-query with `source=all`, `mode=mix`
+
+### 5 Intent Types
+
+| Intent | Example | Sub-queries |
+|--------|---------|-------------|
+| `factual` | "矛台今天收盘价多少" | 1 (simple) |
+| `comparison` | "英伟达和华为芯片谁强" | 3 (parallel) |
+| `timeline` | "OpenAI的融资历程" | 3 (sequential) |
+| `deep_dive` | "商汤科技生成式AI前景" | 4 (parallel) |
+| `summary` | "AI行业最近怎么样" | 2-3 (parallel) |
+
+### Sub-Query Structure
+
+```python
+@dataclass
+class SubQuery:
+    query: str          # sub-query text
+    source: str = "all" # kb / news / graph / all
+    mode: str = "hybrid" # local / global / hybrid / mix
+    purpose: str = ""   # purpose of this sub-query
+```
+
+### Data Flow
+
+```
+User Query
+  → QueryParser (rules: entity extraction, keyword weighting, query expansion)
+  → QueryPlanner (LLM: intent classification + sub-query decomposition)
+    → sub-query 1: source=kb, mode=hybrid
+    → sub-query 2: source=news, mode=local
+    → sub-query 3: source=graph, mode=global
+  → HybridRetriever (per sub-query)
+  → Result merge + LLM answer
+```
+
+**Rule**: queries with `is_simple=True` (single sub-query) skip the planning overhead at retrieval time.
+
+---
+
+## Graph RAG Experiment — LightRAG
+
+Standalone PoC in `experiments/lightrag_experiment.py` demonstrating LightRAG SDK integration for knowledge graph extraction from Chinese financial news.
+
+### What It Does
+
+1. **Ingest** 5 Chinese AI news articles
+2. **Extract** entities and relations via LLM (qwen-plus)
+3. **Build** knowledge graph (60 entities, 59 relations, 10 entity types)
+4. **Query** with 4 modes: local, global, hybrid, mix
+
+### Entity Types Extracted
+
+| Type | Count | Examples |
+|------|-------|----------|
+| organization | 13 | SenseTime, OpenAI, NVIDIA, Huawei |
+| data | 9 | revenue, funding amount, market share |
+| artifact | 8 | Blackwell Ultra, GPT-5, SenseNova |
+| concept | 8 | generative AI, AGI, multimodal |
+| person | 6 | Jensen Huang, Sam Altman |
+| event | 5 | Series A, CEO appointment |
+
+### 4 Query Modes
+
+| Mode | Description | Best For |
+|------|-------------|----------|
+| `local` | Entity-level attribute lookup | "SenseTime's revenue" |
+| `global` | Cross-document patterns | "AI industry trends" |
+| `hybrid` | Multi-hop entity relations | "OpenAI and SenseTime connection" |
+| `mix` | All paths combined | "Who benefits from China AI policy" |
+
+### Technical Decisions
+
+- **Custom Tokenizer**: Character-index based (no tiktoken download required in China)
+- **API Key Priority**: `.env` file read first → override `dashscope.api_key` globally (system env var may be stale)
+- **Embedding Return**: `np.array(embeddings, dtype=np.float32)` — NanoVectorDB requires numpy array, not Python list
+- **DashScope SDK native**: Direct `Generation.call()` instead of OpenAI-compatible wrapper (avoids LightRAG-specific kwarg conflicts)
 
 ---
 

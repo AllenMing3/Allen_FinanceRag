@@ -36,13 +36,15 @@ python -m financial_rag.main web
 | **数据管理** | 导入数据 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库（后台 LLM 分析 + 进度显示） |
 | **数据管理** | 构建索引 | 点击「构建索引」 | BM25 + ChromaDB 向量双通道索引（jieba trigram 分词 + TextChunker 自动切分，Chroma 持久化到 `data/knowledge_base/chroma/`） |
 | **数据管理** | 管理知识库 | 按来源/关键词搜索删除 | 查看各来源文档数，一键删除匹配关键词的文档 |
-| **智能查询** | RAG 查询 | 输入问题 | QueryParser **查询扩展**（同义词 + 概念关联）→ AgentRouter 自动路由 → 检索知识库 → LLM 回答（带引用和分数明细） |
+| **智能查询** | RAG 查询 | 输入问题 | QueryParser **查询扩展**（同义词 + 概念关联）→ QueryPlanner **LLM 拆解**（复杂查询分解为子查询）→ AgentRouter 自动路由 → 检索知识库 → LLM 回答（带引用和分数明细） |
 | **智能查询** | K线分析 | 输入股票代码或名称 | 生成 MACD/RSI/KDJ/布林带技术分析报告 |
 | **深度分析** | 新闻解读 | 粘贴新闻文本 | 多维影响评估 + 关键信号 + 风险提示 |
 | **深度分析** | 话题调研 | 输入话题关键词 | 子话题聚类 + 情绪趋势 + 反向信号 |
 | **深度分析** | 追问 | 分析完成后输入追问 | 基于原始分析上下文的多轮对话，支持对新闻/话题结果深入追问 |
 
 > **智能路由**：查询自动分类为 5 种意图（kline / event_impact / report / news / general），系统选择最优 Agent 执行链，无需手动指定。
+>
+> **查询规划**：复杂查询（对比、时间线、深度分析）先经 `QueryPlanner` 拆解为多个子查询，每个子查询带有来源（kb/news/graph/all）和模式（local/global/hybrid/mix），简单查询直接检索。
 
 **数据来源：**
 - 文件放 `./data/financial` 目录
@@ -190,6 +192,32 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 - 每条链都以 ScoringAgent 结尾，确保输出质量
 - 所有 LLM 调用经过 LLMCaller 保护层（重试 + 平衡括号 JSON 解析 + 缓存 + 防幻觉约束）
 - 防幻觉校验为 6 层透明检查：L1 来源锚定（jieba 分词重叠）、L2 数值一致、L3 引用完整、L4 结构规范、L5 LLM 质疑（LLM 审查答案 + 来源，输出结构化发现）、L6 LLM 协助（低分时 LLM 修复问题）
+- `QueryPlanner` 在 QueryParser 之后、检索之前：用一次 LLM call 将复杂查询拆解为子查询，简单查询跳过规划直接检索
+
+---
+
+## 6.5 查询规划 (QueryPlanner)
+
+复杂查询（对比分析、时间线梳理、深度调研）在检索之前先经过 `QueryPlanner` 拆解：
+
+| 查询类型 | 示例 | 子查询数 | 策略 |
+|----------|------|---------|------|
+| factual | "矛台收盘价多少" | 1 | 直接检索 |
+| comparison | "英伟达 vs 华为芯片" | 3 | 并行 |
+| timeline | "OpenAI 融资历程" | 3 | 顺序 |
+| deep_dive | "商汤生成式AI前景" | 4 | 并行 |
+| summary | "AI行业最近怎么样" | 2-3 | 并行 |
+
+**每个子查询包含**：
+- `query`: 子查询文本
+- `source`: 数据来源 (kb / news / graph / all)
+- `mode`: 检索模式 (local / global / hybrid / mix)
+- `purpose`: 查询目的
+
+**设计原则**：
+- 一次 LLM call，JSON 输出，解耦现有 QueryParser / Retriever
+- LLM 调用失败时自动降级为单子查询（全来源 + mix 模式）
+- `is_simple=True`（单子查询）时跳过规划开销
 
 ---
 
@@ -226,7 +254,34 @@ print(get_registry().summary())  # 一眼看清哪里弱
 
 ---
 
-## 8. 常见问题
+## 8.5 LightRAG 图谱实验
+
+`experiments/lightrag_experiment.py` 是一个独立 PoC，用 LightRAG SDK 从中文财经新闻中抽取知识图谱：
+
+**运行**：
+```cmd
+python experiments/lightrag_experiment.py
+```
+
+**结果**（5 篇 AI 新闻）：
+- 60 个实体、59 条关系
+- 10 种实体类型（organization / data / artifact / concept / person / event 等）
+- 导出 GraphML 格式，可用 Gephi 可视化
+
+**4 种查询模式**：
+
+| 模式 | 适用场景 | 示例 |
+|------|---------|------|
+| `local` | 实体属性查询 | "商汤科技的营收" |
+| `global` | 跨文档全局模式 | "AI行业发展趋势" |
+| `hybrid` | 多跳实体关系 | "OpenAI 和商汤的关系" |
+| `mix` | 多路融合 | "中国AI政策受益者" |
+
+**注意**：这是独立实验，尚未集成到主系统。运行前需安装 `pip install lightrag-hku numpy`。
+
+---
+
+## 9. 常见问题
 
 **Rerank 403** — `qwen3-rerank` 需在 [阿里云百炼控制台](https://bailian.console.aliyun.com/) 手动开通，未开通时自动降级为 RRF 融合。
 
