@@ -5,7 +5,7 @@ dashscope>=1.20.0
 # LlamaIndex 
 llama-index>=0.12.0
 
-# chromadb>=0.5.0
+chromadb>=0.5.0
 
 # ==================== Financial RAG ====================
 # pypdf>=4.0.0            

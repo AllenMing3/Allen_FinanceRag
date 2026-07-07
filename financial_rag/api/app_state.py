@@ -47,6 +47,19 @@ _ingest_progress: dict = {
 }
 
 
+def _record_init_error(component: str, error: Exception, severity: str = "warning"):
+    """Record an initialization error for frontend diagnostics."""
+    entry = {
+        "component": component,
+        "error": str(error),
+        "severity": severity,  # warning | error | critical
+        "timestamp": __import__("time").time(),
+    }
+    _state.setdefault("init_errors", []).append(entry)
+    log_fn = logger.error if severity == "critical" else logger.warning
+    log_fn(f"[Init] {component}: {error}")
+
+
 def _ensure_init():
     """Lazy-init heavy components on first request (thread-safe)"""
     if "ready" in _state:
@@ -115,7 +128,9 @@ def _ensure_init():
                     r.save_index(_INDEX_PATH)
                     logger.info(f"KB built & index saved ({len(_state['kb_docs'])} docs)")
             except Exception as e:
-                logger.warning(f"KB auto-build failed: {e}")
+                _record_init_error("kb_build", e, "error")
+        elif not _state["kb_docs"]:
+            logger.info("[Init] KB empty — no docs to index")
         _state["kb_path"] = _KB_PATH
         _state["meta_store"] = _load_meta()
 

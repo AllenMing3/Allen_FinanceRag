@@ -60,6 +60,71 @@ function updateMetaStatus(count) {
 
 function showKBStorage() {}
 
+function renderHealthBanners(kbStatus, initErrors) {
+  const container = document.getElementById('healthBanners');
+  const banners = [];
+
+  // KB status banner
+  if (kbStatus) {
+    if (kbStatus.state === 'failed') {
+      banners.push({
+        cls: 'hb-error', icon: '🚨',
+        msg: `知识库索引失败: ${kbStatus.reason}`,
+        action: '前往数据管理', onClick: () => {
+          document.querySelector('[data-panel="data"]').click();
+        }
+      });
+    } else if (kbStatus.state === 'empty') {
+      banners.push({
+        cls: 'hb-warn', icon: '📚',
+        msg: '知识库为空 — 查询和分析功能将受限',
+        action: '前往导入', onClick: () => {
+          document.querySelector('[data-panel="data"]').click();
+        }
+      });
+    }
+  }
+
+  // Init error banners (non-KB errors)
+  for (const err of initErrors) {
+    if (err.component === 'kb_build') continue; // already shown above
+    banners.push({
+      cls: err.severity === 'critical' ? 'hb-error' : 'hb-warn',
+      icon: err.severity === 'critical' ? '🚨' : '⚠️',
+      msg: `${err.component}: ${err.error}`,
+    });
+  }
+
+  // Config load failure
+  if (!kbStatus && initErrors.length === 0) {
+    // no issues
+  } else if (!kbStatus) {
+    // config itself failed
+  }
+
+  if (banners.length === 0) {
+    container.classList.remove('active');
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = banners.map((b, i) => `
+    <div class="health-banner ${b.cls}">
+      <span class="hb-icon">${b.icon}</span>
+      <span class="hb-msg">${escHtml(b.msg)}</span>
+      ${b.action ? `<button class="hb-action" data-idx="${i}">${escHtml(b.action)}</button>` : ''}
+    </div>
+  `).join('');
+  container.classList.add('active');
+
+  // Attach click handlers
+  banners.forEach((b, i) => {
+    if (b.onClick) {
+      container.querySelector(`[data-idx="${i}"]`).addEventListener('click', b.onClick);
+    }
+  });
+}
+
 function updateKBDashboard(data) {
   const docs = data.doc_count || 0;
   const built = data.kb_built || false;
@@ -787,11 +852,24 @@ async function refreshKBStatus() {
 fetch('/api/config').then(r=>r.json()).then(d => {
   document.getElementById('modelInfo').textContent = `${d.llm_model} | ${d.embedding_model} | ${d.rerank_model}`;
   if (d.mock_mode) document.getElementById('mockBadge').classList.add('active');
-  if (d.has_api_key) { document.getElementById('kbBadge').querySelector('.dot').className = 'dot dot-ok'; document.getElementById('kbStatus').textContent = 'API 已连接'; }
+  // Health-aware KB status
+  const kbs = d.kb_status || {};
+  if (kbs.state === 'ready') {
+    document.getElementById('kbBadge').querySelector('.dot').className = 'dot dot-ok';
+    document.getElementById('kbStatus').textContent = `${kbs.doc_count} 篇文档`;
+  } else if (kbs.state === 'failed') {
+    document.getElementById('kbBadge').querySelector('.dot').className = 'dot dot-off';
+    document.getElementById('kbStatus').textContent = '索引失败';
+  }
+  // Show diagnostic banners
+  renderHealthBanners(d.kb_status, d.init_errors || []);
   refreshKBStatus();
   refreshKBManager();
   loadDirBrowser();
-}).catch(() => {});
+}).catch(e => {
+  console.error('[Init] Config load failed:', e);
+  renderHealthBanners(null, [{ component: 'config', error: e.message, severity: 'critical' }]);
+});
 
 // ===== Chat / Conversation =====
 

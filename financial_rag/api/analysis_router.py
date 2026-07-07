@@ -50,6 +50,21 @@ async def api_config():
         return _config_cache
     cfg = _state["cfg"]
     from financial_rag.config import is_mock_enabled
+
+    # KB health status
+    kb_built = _state.get("kb_built", False)
+    kb_docs = _state.get("kb_docs", [])
+    init_errors = _state.get("init_errors", [])
+    if kb_built:
+        kb_status = {"state": "ready", "doc_count": len(kb_docs)}
+    elif len(kb_docs) == 0:
+        kb_status = {"state": "empty", "reason": "知识库为空，请先导入数据"}
+    else:
+        # Docs exist but index failed
+        kb_err = next((e for e in init_errors if e["component"] == "kb_build"), None)
+        reason = kb_err["error"] if kb_err else "索引构建失败"
+        kb_status = {"state": "failed", "reason": reason}
+
     _config_cache = {
         "llm_model": cfg.llm.model,
         "embedding_model": cfg.llm.embedding_model,
@@ -57,6 +72,8 @@ async def api_config():
         "provider": cfg.llm.provider,
         "has_api_key": _state["has_key"],
         "mock_mode": is_mock_enabled(),
+        "kb_status": kb_status,
+        "init_errors": init_errors,
     }
     _config_cache_time = now
     return _config_cache
