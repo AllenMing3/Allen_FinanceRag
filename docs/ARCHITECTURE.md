@@ -418,7 +418,7 @@ Drop any `*.json` file here → auto-loaded at startup and merged into `Dictiona
 |------|------|-------------|
 | `__init__.py` | Package entry, version `2.0.0` | Re-exports all public APIs |
 | `main.py` | CLI entry (argparse) | `main()` |
-| `config.py` | Global config dataclasses | `config`, `AppConfig`, `LLMConfig` |
+| `config.py` | Global config dataclasses | `config`, `AppConfig`, `LLMConfig`, `LightRAGConfig` |
 | `prompts.py` | AI-sector LLM prompt templates + few-shot examples (SenseTime / NVIDIA / ZhipuAI) | — |
 | `templates.py` | 4 slot templates: QUICK_QA, FINANCIAL_REPORT, NEWS_BRIEF, DEEP_ANALYSIS | `SlottedTemplate`, `ALL_TEMPLATES` |
 | `slot_filler.py` | Parallel slot filling engine with LLMCaller wrapper (retry + cache) + measured TTFT | `SlotFiller`, `create_slot_filler` |
@@ -432,10 +432,10 @@ Drop any `*.json` file here → auto-loaded at startup and merged into `Dictiona
 | File | Role |
 |------|------|
 | `__init__.py` | Package marker |
-| `app_state.py` | Shared singleton state (`_state` dict), lazy `_ensure_init()` with double-check locking, `_persist_state()` |
+| `app_state.py` | Shared singleton state (`_state` dict), lazy `_ensure_init()` with double-check locking, `_persist_state()`. Initializes LightRAG adapter + injects graph_tools closure |
 | `models.py` | Pydantic request models (QueryRequest, NewsRequest, KlineRequest, etc.) |
 | `kb_router.py` | KB management: status, query, build, clear, delete by source/keyword, learning history/stats |
-| `ingest_router.py` | File preview, directory listing, file/news ingestion with background thread analysis |
+| `ingest_router.py` | File preview, directory listing, file/news ingestion with background thread analysis. PDF/image files auto-routed to LightRAG for graph build after parsing |
 | `analysis_router.py` | Config (TTL cached), news/topic analysis, metadata clear/status, news, kline endpoints |
 | `query_router.py` | Pipeline, slot fill, scoring endpoints |
 
@@ -462,12 +462,12 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | File | Role |
 |------|------|
 | `coordinator_agent.py` | Intent classification + chain selection via `call_tool(classify_query_intent, select_agent_chain)` |
-| `ingestion_agent.py` | Data ingestion → `call_tool(extract_document_metadata, detect_document_type)` |
+| `ingestion_agent.py` | Data ingestion → `call_tool(extract_document_metadata, detect_document_type)`. PDF/image files via `call_tool(parse_pdf_file, describe_image_file)` then standard text flow |
 | `analysis_agent.py` | Unified analysis: routes by `context.metadata["intent"]` — extraction, K-line, event impact, deep news analysis |
 | `scoring_agent.py` | Quality scoring → `call_tool(evaluate_pipeline_quality, check_hallucination, generate_score_report)` |
 | `utils.py` | Shared: `build_news_context()` |
 
-### `financial_rag/tools/` — 28 Registered Tools across 9 Modules
+### `financial_rag/tools/` — 32 Registered Tools across 11 Modules
 
 | File | Tools | Role |
 |------|-------|------|
@@ -480,7 +480,9 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `coordinator_tools.py` | 2 | Classify query intent, select agent chain |
 | `report_tools.py` | 1 | Synthesize report (LLM-driven or heuristic fallback) |
 | `analysis_tools.py` | 2 | Deep analysis: `analyze_news_deep` (wraps services/analysis.py for multi-dim impact), `analyze_topic_deep` (sub-topics, key players, sentiment trend) |
-| `__init__.py` | — | `create_financial_registry()` — registers all 28 tools; re-exports `STOCK_MAP` |
+| `document_parse_tools.py` | 2 | Multi-modal document parsing: `describe_image_file` (qwen-vl-plus multimodal, structured prompts from `prompts.py`), `parse_pdf_file` (PyMuPDF local extraction). Closure injection pattern: `_llm_ref` + `inject_document_parse_llm()` |
+| `graph_tools.py` | 2 | Knowledge graph query: `query_knowledge_graph` (4 modes: local/global/hybrid/mix, returns `retrieved_items`-aligned format with `_source: graph`), `get_graph_stats` (entity count, label distribution). Closure injection: `_adapter_ref` + `inject_graph_adapter()` |
+| `__init__.py` | — | `create_financial_registry()` — registers all 32 tools; re-exports `STOCK_MAP` |
 
 ### `financial_rag/retrievers/` — Modular Retrieval Stack
 
@@ -499,6 +501,7 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `dictionary_registry.py` | `DictionaryRegistry`: centralized hub for all domain dicts. Loads external `data/dictionaries/*.json`, injects jieba words, provides `get_registry()` singleton |
 | `persistence.py` | `save_index()`, `load_index()`: index serialization |
 | `embedding_cache.py` | `EmbeddingCache`: content-hash (MD5) embedding cache, disk persistence (JSON), LRU eviction, batch miss → bulk embed → cache writeback |
+| `lightrag_adapter.py` | `LightRAGAdapter`: sync wrapper for async LightRAG SDK — DashScope LLM/embedding adapters, SimpleTokenizer (no tiktoken), `asyncio.run()` bridge, JSON + GraphML file storage. Called by `ingest_router` (graph build on PDF/image ingest) and `graph_tools` (agent-driven query) |
 
 ### `financial_rag/llm/` — LLM Layer
 
@@ -583,27 +586,44 @@ User Query
 
 ---
 
-## Graph RAG Experiment — LightRAG
+## Graph RAG — LightRAG Knowledge Graph
 
-Standalone PoC in `experiments/lightrag_experiment.py` demonstrating LightRAG SDK integration for knowledge graph extraction from Chinese financial news.
+LightRAG is integrated into the ingestion pipeline for structured content (PDF/image parsed documents). It extracts entity-relation graphs and exposes them via Function Calling tools for agent-driven queries.
 
-### What It Does
+### Architecture
 
-1. **Ingest** 5 Chinese AI news articles
-2. **Extract** entities and relations via LLM (qwen-plus)
-3. **Build** knowledge graph (60 entities, 59 relations, 10 entity types)
-4. **Query** with 4 modes: local, global, hybrid, mix
+```
+PDF / Image file
+  → ingest_router (parse_pdf_file / describe_image_file)
+    → LightRAGAdapter.insert_texts()  [entity-relation extraction via LLM]
+      → JSON + GraphML file storage (data/knowledge_base/lightrag/)
 
-### Entity Types Extracted
+User query with graph intent
+  → QueryPlanner (source: graph)
+    → Agent calls query_knowledge_graph(mode=hybrid)
+      → LightRAGAdapter.query()  [retrieved_items-aligned output]
+```
 
-| Type | Count | Examples |
-|------|-------|----------|
-| organization | 13 | SenseTime, OpenAI, NVIDIA, Huawei |
-| data | 9 | revenue, funding amount, market share |
-| artifact | 8 | Blackwell Ultra, GPT-5, SenseNova |
-| concept | 8 | generative AI, AGI, multimodal |
-| person | 6 | Jensen Huang, Sam Altman |
-| event | 5 | Series A, CEO appointment |
+### Key Design Decisions
+
+- **Only PDF + image content goes to graph** — plain text/news stays in BM25+Vector. Graph is for structured, entity-rich content
+- **Agent-driven query, not forced** — graph query happens via `graph_tools.py` Function Calling, not hardcoded in `_phase_index()`. QueryPlanner's `source: graph` routes on demand
+- **Sync wrapper for async SDK** — `LightRAGAdapter._run_async()` uses `asyncio.run()` (all callers run in threadpool without running event loop)
+- **SimpleTokenizer** — character-index based tokenizer avoids `tiktoken` download issues in China
+- **DashScope SDK native** — direct `Generation.call()` / `TextEmbedding.call()` instead of OpenAI-compatible wrapper
+- **File-based storage** — `kv_store_*.json`, `vdb_*.json`, `graph_chunk_entity_relation.graphml` in `working_dir`. No external database
+
+### Storage Layout
+
+```
+data/knowledge_base/lightrag/
+├── kv_store_full_entities.json    # entity attributes
+├── kv_store_full_relations.json   # relation attributes
+├── kv_store_text_chunks.json      # chunked input texts
+├── vdb_entities.json              # entity embeddings
+├── vdb_relationships.json         # relation embeddings
+└── graph_chunk_entity_relation.graphml  # graph topology
+```
 
 ### 4 Query Modes
 
@@ -614,12 +634,9 @@ Standalone PoC in `experiments/lightrag_experiment.py` demonstrating LightRAG SD
 | `hybrid` | Multi-hop entity relations | "OpenAI and SenseTime connection" |
 | `mix` | All paths combined | "Who benefits from China AI policy" |
 
-### Technical Decisions
+### Standalone Experiment
 
-- **Custom Tokenizer**: Character-index based (no tiktoken download required in China)
-- **API Key Priority**: `.env` file read first → override `dashscope.api_key` globally (system env var may be stale)
-- **Embedding Return**: `np.array(embeddings, dtype=np.float32)` — NanoVectorDB requires numpy array, not Python list
-- **DashScope SDK native**: Direct `Generation.call()` instead of OpenAI-compatible wrapper (avoids LightRAG-specific kwarg conflicts)
+The original PoC remains in `experiments/lightrag_experiment.py` for reference — 5 Chinese AI news articles → 60 entities, 59 relations, 10 entity types.
 
 ---
 
@@ -658,6 +675,7 @@ All config in `financial_rag/config.py`. Global instance: `from financial_rag.co
 | `config.llm` | model, embedding_model, rerank_model, temperature | qwen-plus, text-embedding-v3, qwen3-rerank, 0.0 |
 | `config.coordinator` | execution_mode, max_parallel_agents, max_retries | sequential, 3, 1 |
 | `config.pipeline` | hybrid_top_k, rrf_k, bm25_weight, vector_weight | 10, 60, 0.3, 0.7 |
+| `config.lightrag` | enable, working_dir, query_mode, chunk_token_size, chunk_overlap_token_size, entity_extract_max_gleaning | True, ./data/knowledge_base/lightrag, hybrid, 300, 50, 1 |
 
 Env vars (`.env`):
 

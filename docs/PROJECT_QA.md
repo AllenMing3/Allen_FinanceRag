@@ -446,7 +446,55 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 - 高连接度实体：Blackwell Ultra (14), SenseTime (10), OpenAI (9)
 - 4 种查询模式（local/global/hybrid/mix）均能返回有意义的图谱增强答案
 
-**状态**：独立 PoC，尚未集成到主系统。集成路径：作为 `graph` 数据源加入 QueryPlanner 的子查询来源。
+**状态**：已从独立 PoC 升级为主系统集成组件。摄取端通过 `ingest_router` 将 PDF/图片解析内容送入 LightRAG；查询端通过 `graph_tools.py` Function Calling 按需查询，由 QueryPlanner 的 `source: graph` 路由。
+
+---
+
+## Q27: 为什么做文档多模态解析？怎么设计的？
+
+**问题**：原来的文件导入只支持纯文本（.txt / .csv）。但财报通常是 PDF，图片中也有重要信息（如架构图、表格截图）。纯文本导入丢失了这些结构化内容。
+
+**设计**：
+- **PDF 解析**：PyMuPDF 本地提取文本 + 表格，无需 API 调用，速度快
+- **图片解析**：qwen-vl-plus 多模态模型，用结构化 prompt（`prompts.py` 的 `IMAGE_UNDERSTANDING_SYSTEM` + `IMAGE_UNDERSTANDING_PROMPT` + few-shot 正反例）
+- **工具化**：`document_parse_tools.py` 用闭包注入模式（`_llm_ref` + `inject_document_parse_llm()`），对齐存量架构
+- **双路径复用**：`IngestionAgent` 通过 `call_tool()` 委托，`ingest_router` 复用同一工具函数，保持 Agent 路径和 API 路径一致
+
+**架构原则**：
+- prompt 集中管理在 `prompts.py`，不散落在工具代码里
+- 工具用闭包注入 + FunctionDef 注册，不直接依赖 LLM 实例
+- Agent 只做编排（`call_tool`），解析逻辑在工具层
+
+---
+
+## Q28: LightRAG 图谱集成是怎么做的？为什么不每次都走图谱？
+
+**问题**：LightRAG PoC 验证了知识图谱的可行性，但怎么集成到主系统是个问题。最初的做法是在 `_phase_index()` 里强制每次查询都走 LightRAG，导致：
+- 图谱为空时白白浪费延迟
+- 图谱和 BM25+Vector 评分体系不同，强制融合效果反而差
+- 不符合 QueryPlanner 已经预留的 `source: graph` 路由设计
+
+**重构后的设计**：
+
+**摄取端（建图）**：
+- PDF/图片解析后的文本在 `ingest_router` 中送入 `LightRAGAdapter.insert_texts()`
+- 普通文本/新闻不走图谱，保持 BM25+Vector 通道
+- 图谱存储在 JSON + GraphML 文件（`data/knowledge_base/lightrag/`），无需外部数据库
+
+**查询端（问图）**：
+- Agent 通过 Function Calling 按需调用 `query_knowledge_graph` / `get_graph_stats`
+- QueryPlanner 根据查询意图决定是否路由到图谱（如实体关系推理类查询）
+- 图谱结果返回 `retrieved_items` 对齐格式（`meta._source: graph`），Agent 可区分来源
+
+**踩坑与修正**：
+1. **async 桥接过度工程化**：最初用 `ThreadPoolExecutor` 绕过 event loop 死锁。实际上所有调用方（FastAPI sync handler、graph_tools）都在无 running loop 的线程中，直接 `asyncio.run()` 就行
+2. **Pipeline 强制注入**：最初往 `PipelineScheduler` 里塞 `lightrag` 参数，每次查询都走图谱。违反“按需路由”原则，撤回
+3. **死代码清理**：撤回 pipeline 注入后，`app_state.py` 里的 `scheduler.lightrag = adapter` 也变成了死代码，一并清理
+
+**设计原则**：
+- 图谱适合实体关系推理，不适合所有查询。QueryPlanner 路由 > Pipeline 硬编码
+- async SDK 用 `asyncio.run()` 桥接，不用复杂的 loop 检测
+- 闭包注入 + FunctionDef 注册，对齐其他工具的架构风格
 
 ---
 
@@ -456,13 +504,14 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 |---|---|
 | 总 commit 数 | ~65 |
 | Agent 数量 | 4（从 7 精简） |
-| 注册工具 | 28 个，跨 9 个模块 |
+| 注册工具 | 32 个，跨 11 个模块 |
 | 测试覆盖 | 521 tests（21 个测试文件） |
 | 知识库文档 | ~500+ 篇（去重后） |
 | 检索延迟 | BM25 < 50ms，ChromaDB ANN < 200ms |
 | 查询规划 | QueryPlanner: 5 种意图 + 来源/模式感知子查询，LLM 失败自动降级 |
 | 查询扩展 | 52 组同义词 + 20 个概念关联，DictionaryRegistry 统一管理，规则层 0ms + LLM 层可选 |
-| 知识图谱 | LightRAG PoC: 60 实体 + 59 关系 + 4 种查询模式（local/global/hybrid/mix） |
+| 知识图谱 | LightRAG 集成: PDF/图片 → 实体关系抽取 → Function Calling 查询（local/global/hybrid/mix） |
+| 文档解析 | PyMuPDF (PDF, 本地) + qwen-vl-plus (图片多模态)，闭包注入 + FunctionDef 注册 |
 | 全链路评分 | 6 层防幻觉（4 规则 + 2 LLM）+ 5 阶段打分 |
 | API 架构 | 4 个 FastAPI Router（KB / Ingest / Analysis / Query） |
 | 意图路由 | 5 种意图（kline / event_impact / report / news / general） |

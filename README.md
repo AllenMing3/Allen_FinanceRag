@@ -2,7 +2,7 @@
 
 **Not all queries are equal.** A stock price question needs K-line data. A breaking-news question needs event impact scoring. An earnings question needs report synthesis. FinRAG routes each query to the right agent chain automatically — no manual pipeline selection.
 
-![Tests](https://img.shields.io/badge/tests-507%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-521%20passing-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
@@ -31,13 +31,15 @@
 
 **Intent-aware routing.** The same word "Apple" routes to K-line analysis for stock price queries, event impact scoring for acquisition news, or report synthesis for earnings data — decided by the Coordinator agent, not the user.
 
-**Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 28 registered tools across 9 modules. Agents stay thin and testable.
+**Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 32 registered tools across 11 modules. Agents stay thin and testable.
 
 **Every chain ends with a quality gate.** The Scoring agent runs a 6-layer hallucination guard (4 rule layers: source grounding, numerical fidelity, citation integrity, structure compliance + 2 LLM layers: LLM critique, LLM assist) and pipeline quality evaluation before any result reaches the user. No silent failures.
 
 **Query planning before retrieval.** `QueryPlanner` uses a single LLM call to decompose complex queries (comparisons, timelines, deep dives) into structured sub-queries — each with a source (kb/news/graph/all) and mode (local/global/hybrid/mix). Simple factual queries skip planning and go straight to retrieval.
 
-**Graph RAG experiment.** LightRAG SDK integration extracts knowledge graphs from Chinese financial news (60 entities, 59 relations from 5 articles) and supports 4 query modes — local (entity-level), global (cross-document), hybrid (multi-hop), mix (all paths). Standalone PoC in `experiments/`.
+**Multi-modal document parsing.** PDF files parsed via PyMuPDF (local, no API) and images analyzed via qwen-vl-plus multimodal model. Parsed content from PDFs and images is automatically routed to the knowledge graph for entity-relation extraction.
+
+**Graph RAG — integrated, not just an experiment.** LightRAG knowledge graph is wired into the ingestion pipeline: PDF/image parsed content triggers entity-relation extraction. Agents query the graph on-demand via Function Calling tools (`query_knowledge_graph`, `get_graph_stats`), routed by QueryPlanner's `source: graph` — not forced into every query. Storage is JSON + GraphML files, no external database needed.
 
 **Hybrid retrieval that actually works.** BM25 + ChromaDB ANN vector search (1024-dim) + RRF fusion + qwen3-rerank reranking + metadata filtering + **query expansion** (52 synonym groups + 20 concept association maps, LLM-enhanced for short queries) — six signals combined instead of relying on any single one.
 
@@ -78,7 +80,7 @@
 │ Retrieval│ Data APIs       │ LLM Layer                        │
 │ BM25+Chroma│ Tushare         │ LLMCaller (retry+cache+JSON)    │
 │ RRF+Rerank│ 10jqka/Eastmoney│ ModelRouter (4 tiers, Qwen)    │
-│ +Graph   │ LightRAG (exp.) │                                  │
+│ +Graph   │ LightRAG (integrated) │                                  │
 └──────────┴─────────────────┴─────────────────────────────────┘
 ```
 
@@ -111,7 +113,8 @@ The user types a natural language question. The system decides everything else.
 | Data APIs | Tushare, 10jqka, Sina, EastMoney |
 | Retrieval | BM25 + ChromaDB (ANN) + RRF + TextChunker + QueryParser (52 synonym groups + 20 concept maps) |
 | Query Planning | QueryPlanner (LLM decomposition, 5 intents, source/mode-aware sub-queries) |
-| Graph RAG | LightRAG SDK (experimental PoC: entity-relation extraction, 4 query modes) |
+| Document Parse | PyMuPDF (PDF, local) + qwen-vl-plus (image multimodal) |
+| Graph RAG | LightRAG (integrated: PDF/image → entity-relation extraction → graph query via Function Calling) |
 | Domain Dicts | DictionaryRegistry (10 types, JSON-extensible: `data/dictionaries/*.json`) |
 | Vector DB | ChromaDB (HNSW ANN, cosine distance, persistent storage) |
 | Testing | pytest — 521 tests across 21 files |

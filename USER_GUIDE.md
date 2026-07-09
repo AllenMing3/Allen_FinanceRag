@@ -33,7 +33,7 @@ python -m financial_rag.main web
 |--------|------|------|------|
 | **系统概览** | 架构展示 | 查看 4 Agent 协作链 | Coordinator → Ingestion → Analysis → Scoring，意图路由示例 |
 | **数据管理** | 导入数据 | 搜索新闻（如 "AI人工智能"） | 收集元数据，辅助后续文件解析。新闻**不进知识库** |
-| **数据管理** | 导入数据 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库（后台 LLM 分析 + 进度显示） |
+| **数据管理** | 导入数据 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库（后台 LLM 分析 + 进度显示）。**PDF 文件**自动用 PyMuPDF 解析（本地，无需 API）；**图片文件**用 qwen-vl-plus 多模态模型解析。解析后的 PDF/图片内容自动送入知识图谱构建实体关系 |
 | **数据管理** | 构建索引 | 点击「构建索引」 | BM25 + ChromaDB 向量双通道索引（jieba trigram 分词 + TextChunker 自动切分，Chroma 持久化到 `data/knowledge_base/chroma/`） |
 | **数据管理** | 管理知识库 | 按来源/关键词搜索删除 | 查看各来源文档数，一键删除匹配关键词的文档 |
 | **智能查询** | RAG 查询 | 输入问题 | QueryParser **查询扩展**（同义词 + 概念关联）→ QueryPlanner **LLM 拆解**（复杂查询分解为子查询）→ AgentRouter 自动路由 → 检索知识库 → LLM 回答（带引用和分数明细） |
@@ -45,6 +45,8 @@ python -m financial_rag.main web
 > **智能路由**：查询自动分类为 5 种意图（kline / event_impact / report / news / general），系统选择最优 Agent 执行链，无需手动指定。
 >
 > **查询规划**：复杂查询（对比、时间线、深度分析）先经 `QueryPlanner` 拆解为多个子查询，每个子查询带有来源（kb/news/graph/all）和模式（local/global/hybrid/mix），简单查询直接检索。
+>
+> **知识图谱查询**：Agent 可通过 Function Calling 主动查询知识图谱（`query_knowledge_graph`），支持 local/global/hybrid/mix 四种模式。图谱查询由 QueryPlanner 按意图路由，不会强制每次查询都走图谱。
 
 **数据来源：**
 - 文件放 `./data/financial` 目录
@@ -254,30 +256,44 @@ print(get_registry().summary())  # 一眼看清哪里弱
 
 ---
 
-## 8.5 LightRAG 图谱实验
+## 8.5 文档多模态解析
 
-`experiments/lightrag_experiment.py` 是一个独立 PoC，用 LightRAG SDK 从中文财经新闻中抽取知识图谱：
+系统支持 PDF 和图片文件的解析，解析后的结构化内容自动进入知识图谱：
 
-**运行**：
-```cmd
-python experiments/lightrag_experiment.py
-```
+| 文件类型 | 解析方式 | 说明 |
+|----------|----------|------|
+| **PDF** | PyMuPDF 本地解析 | 无需 API，提取文本 + 表格内容 |
+| **图片** (PNG/JPG) | qwen-vl-plus 多模态 | LLM 视觉理解，结构化 prompt（`prompts.py` IMAGE_UNDERSTANDING_*） |
 
-**结果**（5 篇 AI 新闻）：
-- 60 个实体、59 条关系
-- 10 种实体类型（organization / data / artifact / concept / person / event 等）
-- 导出 GraphML 格式，可用 Gephi 可视化
+**数据流**：
+- `IngestionAgent` 通过 `call_tool(parse_pdf_file)` / `call_tool(describe_image_file)` 委托解析
+- `ingest_router` 复用同一工具函数，保持 Agent 路径和 API 路径一致
+- 解析后的 PDF/图片文本同时存入知识库（BM25+Vector）和知识图谱（LightRAG 实体关系抽取）
+- 普通文本/新闻不进图谱，只走 BM25+Vector
 
-**4 种查询模式**：
+---
 
-| 模式 | 适用场景 | 示例 |
-|------|---------|------|
-| `local` | 实体属性查询 | "商汤科技的营收" |
-| `global` | 跨文档全局模式 | "AI行业发展趋势" |
-| `hybrid` | 多跳实体关系 | "OpenAI 和商汤的关系" |
-| `mix` | 多路融合 | "中国AI政策受益者" |
+## 8.6 LightRAG 知识图谱
 
-**注意**：这是独立实验，尚未集成到主系统。运行前需安装 `pip install lightrag-hku numpy`。
+LightRAG 知识图谱已集成到主系统，不再是独立实验：
+
+**摄取端**：PDF/图片解析后的文本自动送入 LightRAG，触发 LLM 实体-关系抽取。
+
+**查询端**：Agent 通过 Function Calling 按需查询图谱（`query_knowledge_graph` + `get_graph_stats`），QueryPlanner 根据查询意图决定是否路由到图谱。
+
+**存储**：JSON + GraphML 文件，放在 `data/knowledge_base/lightrag/` 目录下，无需外部数据库。
+
+**配置**（`config.py` `LightRAGConfig`）：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `enable` | `True` | 是否启用图谱功能 |
+| `working_dir` | `./data/knowledge_base/lightrag` | 图谱文件存储目录 |
+| `query_mode` | `hybrid` | 默认查询模式（local/global/hybrid/mix） |
+| `chunk_token_size` | `300` | 文本分块大小 |
+| `entity_extract_max_gleaning` | `1` | 实体抽取最大轮次 |
+
+**注意**：原始 PoC 仍保留在 `experiments/lightrag_experiment.py` 供参考。
 
 ---
 
@@ -296,3 +312,7 @@ python experiments/lightrag_experiment.py
 **服务端启动慢** — 首次启动会在后台线程初始化知识库和组件（`_ensure_init()`），服务立即接受请求，若初始化未完成则端点会等待。
 
 **知识库删除后重建索引慢** — 已优化：按关键词/来源删除时使用 `HybridRetriever.remove()` 过滤文档 + 同步删除 ChromaDB 中对应向量，仅重建 BM25，无需全量重建 embedding。
+
+**图谱文件在哪里** — LightRAG 图谱存储在 `data/knowledge_base/lightrag/` 目录下，包括 JSON（实体/关系属性）和 GraphML（图拓扑）文件。可通过 `get_graph_stats` 工具查看图谱状态。
+
+**图谱什么时候被查询** — 不是每次查询都走图谱。Agent 通过 Function Calling 按需调用 `query_knowledge_graph`，QueryPlanner 根据查询意图（如实体关系推理）决定是否路由到图谱。
