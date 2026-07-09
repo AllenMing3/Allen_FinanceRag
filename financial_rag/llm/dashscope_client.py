@@ -187,6 +187,65 @@ class DashScopeLLM:
                 f"message={resp.message}"
             )
 
+    # ---------- 多模态 (图片理解) ----------
+
+    def describe_image(
+        self,
+        image_path: str,
+        prompt: str = "请详细描述这张图片的所有可见内容。",
+        model: str = "qwen-vl-plus",
+        max_tokens: int = 2048,
+    ) -> LLMResponse:
+        """用多模态模型理解图片内容（传输层，不含业务 prompt）。
+
+        业务层 prompt 由 tools/document_parse_tools.py 组装并传入。
+
+        Args:
+            image_path: 本地图片文件的绝对路径
+            prompt: 发给多模态模型的用户提示词（由上层 tool 组装）
+            model: 多模态模型，可选 qwen-vl-plus / qwen-vl-max
+            max_tokens: 最大输出 token 数
+
+        Returns:
+            LLMResponse，content 为模型返回的文本
+        """
+        import os
+        abs_path = os.path.abspath(image_path)
+        if not os.path.isfile(abs_path):
+            raise FileNotFoundError(f"图片文件不存在: {abs_path}")
+
+        messages = [
+            {"role": "user", "content": [
+                {"image": f"file://{abs_path}"},
+                {"text": prompt},
+            ]}
+        ]
+
+        resp = dashscope.MultiModalConversation.call(
+            api_key=self.api_key,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+        )
+
+        if resp.status_code == 200:
+            content = resp.output.choices[0].message.content
+            # qwen-vl 返回的 content 可能是 list 格式
+            if isinstance(content, list):
+                text_parts = [item.get("text", "") for item in content if isinstance(item, dict)]
+                content = "\n".join(text_parts)
+            return LLMResponse(
+                content=content,
+                model=model,
+                usage=resp.usage.__dict__ if resp.usage else {},
+                finish_reason=resp.output.choices[0].finish_reason or "",
+            )
+        else:
+            raise RuntimeError(
+                f"DashScope MultiModal error: code={resp.status_code}, "
+                f"message={resp.message}"
+            )
+
     # ---------- 流式 ----------
 
     def chat_stream(

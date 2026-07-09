@@ -109,6 +109,11 @@ async def api_directories():
                         preview = f.read(200).strip()
                 except Exception:
                     pass
+            # PDF/image files get a type label instead
+            elif ext == ".pdf":
+                preview = "[PDF文件]"
+            elif ext in (".png", ".jpg", ".jpeg", ".webp"):
+                preview = f"[图片文件] {ext[1:].upper()}"
             files.append({
                 "name": fname,
                 "ext": ext,
@@ -151,6 +156,7 @@ async def api_ingest_files(req: IngestFilesRequest):
     raw_docs = []
     file_stats = []
     selected_files = set(req.files) if req.files else None
+    llm = _state.get("llm")
     for fname in os.listdir(dir_path):
         # Skip files not in selection (if selection provided)
         if selected_files is not None and fname not in selected_files:
@@ -190,6 +196,18 @@ async def api_ingest_files(req: IngestFilesRequest):
                         text = data.get("content", data.get("text", ""))
                         if text:
                             raw_docs.append({"text": text, "meta": {"source": fname}})
+            elif fname.endswith(".pdf"):
+                text = _parse_pdf_text(fpath)
+                if text:
+                    raw_docs.append({"text": text, "meta": {
+                        "source": fname, "file": fpath, "parse_type": "pdf"
+                    }})
+            elif fname.endswith((".png", ".jpg", ".jpeg", ".webp")):
+                text = _describe_image(llm, fpath)
+                if text:
+                    raw_docs.append({"text": text, "meta": {
+                        "source": fname, "file": fpath, "parse_type": "image"
+                    }})
         except Exception as e:
             logger.warning(f"Skip {fname}: {e}")
             continue
@@ -258,6 +276,29 @@ async def api_ingest_files(req: IngestFilesRequest):
     }
 
 
+def _parse_pdf_text(path: str) -> str:
+    """解析 PDF 为纯文本（复用 document_parse_tools 的 parse_pdf_file）"""
+    from financial_rag.tools.document_parse_tools import parse_pdf_file
+    result = parse_pdf_file(path)
+    if result.get("_error"):
+        logger.warning(f"[Ingest] PDF 解析失败: {result['_error']}")
+        return ""
+    return result.get("text", "")
+
+
+def _describe_image(llm, path: str) -> str:
+    """用多模态模型解析图片（复用 document_parse_tools 的 describe_image_file）"""
+    from financial_rag.tools.document_parse_tools import describe_image_file, inject_document_parse_llm
+    # 确保 LLM 已注入闭包
+    if llm:
+        inject_document_parse_llm(llm)
+    result = describe_image_file(path)
+    if result.get("_error"):
+        logger.warning(f"[Ingest] 图片解析失败: {result['_error']}")
+        return ""
+    return result.get("description", "")
+
+
 def _run_ingest_analysis(raw_docs):
     """Background thread: run agent analysis on ingested documents."""
     try:
@@ -268,6 +309,7 @@ def _run_ingest_analysis(raw_docs):
         ingest_agent = IngestionAgent()
         extract_agent = AnalysisAgent()
 
+        # 工具已通过 bind_tools 注入（含 describe_image_file / parse_pdf_file）
         registry = _state.get("registry")
         executor = _state.get("executor")
         if registry and executor:

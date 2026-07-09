@@ -131,7 +131,7 @@ class IngestionAgent(BaseAgent):
     # ===================== 文件摄取 =====================
 
     def _ingest_file(self, path: str) -> List[Dict]:
-        """从文件摄取 — 支持 JSONL / TXT / PDF"""
+        """从文件摄取 — 支持 JSONL / TXT / PDF / PNG/JPG"""
         documents = []
         ext = os.path.splitext(path)[1].lower()
 
@@ -142,13 +142,9 @@ class IngestionAgent(BaseAgent):
                 text = f.read()
             documents = self._ingest_text(text)
         elif ext == ".pdf":
-            try:
-                text = self._parse_pdf(path)
-                documents = self._ingest_text(text)
-            except Exception as e:
-                logger.error(f"[IngestionAgent] PDF parse failed: {path} — {e}")
-                documents = [{"text": f"[PDF未解析] {os.path.basename(path)}",
-                              "meta": {"source": path, "doc_type": "PDF文件", "error": str(e)}}]
+            documents = self._ingest_pdf(path)
+        elif ext in (".png", ".jpg", ".jpeg", ".webp"):
+            documents = self._ingest_image(path)
         else:
             try:
                 with open(path, "r", encoding="utf-8") as f:
@@ -160,6 +156,57 @@ class IngestionAgent(BaseAgent):
                               "meta": {"source": path, "doc_type": "未知格式"}}]
 
         return documents
+
+    def _ingest_pdf(self, path: str) -> List[Dict]:
+        """解析 PDF 文件并走文本摄取流程（委托给 parse_pdf_file 工具）"""
+        try:
+            result = self.call_tool("parse_pdf_file", pdf_path=path)
+            text = result.get("text", "")
+            if not text or not text.strip():
+                error = result.get("_error", "")
+                warning = result.get("_warning", "")
+                note = error or warning or "无文本内容"
+                return [{"text": f"[PDF未解析] {os.path.basename(path)}: {note}",
+                         "meta": {"source": path, "doc_type": "PDF文件", "parse_type": "pdf"}}]
+            # PDF 解析成功，走标准文本摄取（清洗 + 分类 + 元数据抽取）
+            docs = self._ingest_text(text)
+            # 补充 PDF 元数据
+            for doc in docs:
+                doc.setdefault("meta", {})
+                doc["meta"]["source"] = doc["meta"].get("source", path)
+                doc["meta"]["parse_type"] = "pdf"
+                doc["meta"]["original_file"] = os.path.basename(path)
+                doc["meta"]["pdf_page_count"] = result.get("page_count", 0)
+            return docs
+        except RuntimeError as e:
+            logger.error(f"[IngestionAgent] PDF tool call failed: {path} — {e}")
+            return [{"text": f"[PDF未解析] {os.path.basename(path)}",
+                     "meta": {"source": path, "doc_type": "PDF文件", "error": str(e)}}]
+
+    def _ingest_image(self, path: str) -> List[Dict]:
+        """用多模态模型解析图片并走文本摄取流程（委托给 describe_image_file 工具）"""
+        try:
+            result = self.call_tool("describe_image_file", image_path=path)
+            description = result.get("description", "")
+            if not description or not description.strip():
+                error = result.get("_error", "无描述")
+                return [{"text": f"[图片未解析] {os.path.basename(path)}: {error}",
+                         "meta": {"source": path, "doc_type": "图片", "parse_type": "image"}}]
+
+            # 图片描述走标准文本摄取（清洗 + 分类 + 元数据抽取）
+            docs = self._ingest_text(description)
+            # 补充图片元数据
+            for doc in docs:
+                doc.setdefault("meta", {})
+                doc["meta"]["source"] = doc["meta"].get("source", path)
+                doc["meta"]["parse_type"] = "image"
+                doc["meta"]["original_file"] = os.path.basename(path)
+                doc["meta"]["vision_model"] = result.get("vision_model", "")
+            return docs
+        except RuntimeError as e:
+            logger.error(f"[IngestionAgent] Image tool call failed: {path} — {e}")
+            return [{"text": f"[图片未解析] {os.path.basename(path)}",
+                     "meta": {"source": path, "doc_type": "图片", "error": str(e)}}]
 
     def _load_jsonl(self, path: str) -> List[Dict]:
         """加载 JSONL 文件，每行一个 JSON 对象"""
@@ -193,19 +240,6 @@ class IngestionAgent(BaseAgent):
             logger.warning(f"[IngestionAgent] JSONL {path}: {no_text_lines} lines missing 'text' field")
         logger.info(f"[IngestionAgent] Loaded {len(documents)} docs from {path}")
         return documents
-
-    def _parse_pdf(self, path: str) -> str:
-        """解析 PDF 文件为纯文本"""
-        try:
-            import pymupdf  # PyMuPDF
-            doc = pymupdf.open(path)
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            doc.close()
-            return text
-        except ImportError:
-            raise ImportError("PDF 解析需要安装 PyMuPDF: pip install PyMuPDF")
 
     # ===================== 文本摄取 (核心 — 调用工具) =====================
 
@@ -279,7 +313,7 @@ class IngestionAgent(BaseAgent):
     def _ingest_directory(self, dir_path: str) -> List[Dict]:
         """从目录批量摄取 — 遍历文件，按公司/季度归类"""
         documents = []
-        supported_exts = {".jsonl", ".txt", ".pdf"}
+        supported_exts = {".jsonl", ".txt", ".pdf", ".png", ".jpg", ".jpeg", ".webp"}
         failed_files = 0
 
         for root, dirs, files in os.walk(dir_path):

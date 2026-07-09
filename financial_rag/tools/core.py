@@ -758,6 +758,13 @@ def create_financial_registry(retriever=None, llm=None) -> FunctionRegistry:
     for tool_def in ANALYSIS_TOOLS:
         registry.add(tool_def)
 
+    # ---- 文档解析工具（PDF + 图片多模态）----
+    from financial_rag.tools.document_parse_tools import DOCUMENT_PARSE_TOOLS, inject_document_parse_llm
+    if llm:
+        inject_document_parse_llm(llm)
+    for tool_def in DOCUMENT_PARSE_TOOLS:
+        registry.add(tool_def)
+
     return registry
 
 
