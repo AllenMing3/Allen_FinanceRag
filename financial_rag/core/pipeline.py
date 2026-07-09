@@ -309,9 +309,10 @@ class PipelineScheduler:
                         print(f"  [索引] 新增 {len(docs)} 篇文档 (知识库共 {total} 篇)")
                 items = self.retriever.search(query, top_k=max_retrieve) if self.retriever else []
 
-            result.retrieved_items = items
             if self.config.verbose:
                 print(f"  [检索] 命中 {len(items)} 条")
+
+            result.retrieved_items = items
         except Exception as e:
             self._logger.warning(f"阶段2 索引失败: {e}")
             result.errors.append(f"索引阶段: {e}")

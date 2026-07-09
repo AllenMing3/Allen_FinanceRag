@@ -217,6 +217,22 @@ async def api_ingest_files(req: IngestFilesRequest):
 
     logger.info(f"[Ingest] 文件读取完成: {len(file_stats)} 个文件, {len(raw_docs)} 篇文档")
 
+    # LightRAG 图谱构建: PDF/图片解析内容送入知识图谱
+    lightrag = _state.get("lightrag")
+    if lightrag:
+        graph_docs = [
+            d for d in raw_docs
+            if d.get("meta", {}).get("parse_type") in ("pdf", "image")
+        ]
+        if graph_docs:
+            try:
+                texts = [d["text"] for d in graph_docs]
+                metas = [d.get("meta", {}) for d in graph_docs]
+                lightrag.insert_texts(texts, metas)
+                logger.info(f"[Ingest] {len(graph_docs)} 篇 PDF/图片文档已送入 LightRAG 图谱")
+            except Exception as e:
+                logger.warning(f"[Ingest] LightRAG 插入失败: {e}")
+
     # Phase 2: Assign doc_ids, dedup, then store in KB
     _assign_doc_ids(raw_docs)
     with _state_lock:

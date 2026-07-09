@@ -134,6 +134,30 @@ def _ensure_init():
         _state["kb_path"] = _KB_PATH
         _state["meta_store"] = _load_meta()
 
+        # LightRAG 知识图谱（仅 PDF/图片内容）
+        _state["lightrag"] = None
+        if _cfg.lightrag.enable and _state["has_key"]:
+            try:
+                from financial_rag.retrievers.lightrag_adapter import LightRAGAdapter
+                adapter = LightRAGAdapter(
+                    working_dir=_cfg.lightrag.working_dir,
+                    api_key=_cfg.llm.api_key,
+                    llm_model=_cfg.llm.model,
+                    embedding_model=_cfg.llm.embedding_model,
+                    chunk_token_size=_cfg.lightrag.chunk_token_size,
+                    chunk_overlap_token_size=_cfg.lightrag.chunk_overlap_token_size,
+                    entity_extract_max_gleaning=_cfg.lightrag.entity_extract_max_gleaning,
+                )
+                adapter.initialize()
+                _state["lightrag"] = adapter
+            except Exception as e:
+                _record_init_error("lightrag", e, "warning")
+
+        # 注入 graph_tools 闭包（让 Agent 可通过 Function Calling 查询图谱）
+        if _state.get("lightrag"):
+            from financial_rag.tools.graph_tools import inject_graph_adapter
+            inject_graph_adapter(_state["lightrag"])
+
         # Conversation manager
         from financial_rag.services.conversation import ConversationManager
         _state["conversation_manager"] = ConversationManager()
@@ -169,6 +193,13 @@ def _persist_state():
                     _state["retriever"].save_index(_INDEX_PATH)
                 except Exception as e:
                     logger.warning(f"[Shutdown] Index save failed: {e}")
+            # Finalize LightRAG storages
+            lightrag = _state.get("lightrag")
+            if lightrag:
+                try:
+                    lightrag.finalize()
+                except Exception as e:
+                    logger.warning(f"[Shutdown] LightRAG finalize failed: {e}")
         logger.info("[Shutdown] State saved.")
     except Exception as e:
         logger.warning(f"[Shutdown] Save failed: {e}")

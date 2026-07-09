@@ -72,6 +72,17 @@ class ReflectionConfig:
 
 
 @dataclass
+class LightRAGConfig:
+    """LightRAG 知识图谱配置 — 仅 PDF/图片解析内容走图谱"""
+    enable: bool = True
+    working_dir: str = "./data/knowledge_base/lightrag"
+    query_mode: str = "hybrid"          # local / global / hybrid / mix
+    chunk_token_size: int = 300
+    chunk_overlap_token_size: int = 50
+    entity_extract_max_gleaning: int = 1
+
+
+@dataclass
 class MockConfig:
     """Mock 模式配置 — 仅模拟数据源 API（Tushare/RSS），LLM 始终使用真实 API"""
     # 总开关: MOCK_MODE=true 时数据源 API 返回模拟数据
@@ -109,6 +120,7 @@ class AppConfig:
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     reflection: ReflectionConfig = field(default_factory=ReflectionConfig)
     tushare: TushareConfig = field(default_factory=TushareConfig)
+    lightrag: LightRAGConfig = field(default_factory=LightRAGConfig)
     mock: MockConfig = field(default_factory=MockConfig)
 
     def __post_init__(self):

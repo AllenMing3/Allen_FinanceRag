@@ -511,12 +511,13 @@ def _estimate_tokens(text: str) -> int:
 
 # ===================== 注册中心工厂 =====================
 
-def create_financial_registry(retriever=None, llm=None) -> FunctionRegistry:
+def create_financial_registry(retriever=None, llm=None, lightrag_adapter=None) -> FunctionRegistry:
     """创建预置金融能力的注册中心
 
     Args:
         retriever: 可选的 HybridRetriever 实例 (注入搜索工具)
         llm: 可选的 DashScopeLLM 实例 (注入抽取工具)
+        lightrag_adapter: 可选的 LightRAGAdapter 实例 (注入图谱查询工具)
     """
     registry = FunctionRegistry(name="financial")
 
@@ -763,6 +764,13 @@ def create_financial_registry(retriever=None, llm=None) -> FunctionRegistry:
     if llm:
         inject_document_parse_llm(llm)
     for tool_def in DOCUMENT_PARSE_TOOLS:
+        registry.add(tool_def)
+
+    # ---- 知识图谱查询工具 (LightRAG) ----
+    from financial_rag.tools.graph_tools import GRAPH_TOOLS, inject_graph_adapter
+    if lightrag_adapter:
+        inject_graph_adapter(lightrag_adapter)
+    for tool_def in GRAPH_TOOLS:
         registry.add(tool_def)
 
     return registry
