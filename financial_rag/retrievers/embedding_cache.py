@@ -97,9 +97,9 @@ class EmbeddingCache:
         new_vectors: Dict[str, List[float]] = {}
         if uncached_texts and embedder is not None:
             batch_results = []
-            for j in range(0, len(uncached_texts), 25):
+            for j in range(0, len(uncached_texts), 10):
                 batch_results.extend(
-                    embedder.embed_documents(uncached_texts[j:j + 25])
+                    embedder.embed_documents(uncached_texts[j:j + 10])
                 )
             for idx, vec in zip(uncached_indices, batch_results):
                 key = keys[idx]

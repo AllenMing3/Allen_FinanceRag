@@ -290,10 +290,10 @@ class DashScopeEmbedding:
     """阿里百炼 Text Embedding 客户端
 
     支持模型: text-embedding-v3 (1024维 默认)
-    批量处理，自动分批（单次最多 25 条）
+    批量处理，自动分批（单次最多 10 条）
     """
 
-    BATCH_SIZE = 25
+    BATCH_SIZE = 10
 
     def __init__(
         self,
