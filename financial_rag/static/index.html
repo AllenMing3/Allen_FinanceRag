@@ -4,465 +4,353 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FinRAG</title>
-<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/styles/base.css">
+<link rel="stylesheet" href="/static/styles/components.css">
+<link rel="stylesheet" href="/static/styles/overview.css">
+<link rel="stylesheet" href="/static/styles/ingest.css">
+<link rel="stylesheet" href="/static/styles/query.css">
+<link rel="stylesheet" href="/static/styles/chat.css">
 </head>
 <body>
 
-<!-- Top bar -->
+<!-- ── Top bar ── -->
 <div class="topbar">
-  <div class="logo">FinRAG</div>
+  <div class="logo">FinRAG <small>Financial RAG System</small></div>
   <div class="kb-badge" id="kbBadge"><span class="dot dot-off"></span> <span id="kbStatus">未构建知识库</span></div>
-  <div class="kb-badge" id="metaBadge" style="background:rgba(255,217,61,.1)"><span style="font-size:14px">📰</span> <span id="metaStatus">元数据: 0</span></div>
+  <div class="kb-badge" style="background:rgba(255,217,61,.08)"><span style="font-size:13px">📰</span> <span id="metaStatus">元数据: 0</span></div>
   <div class="mock-badge" id="mockBadge"><span class="mock-dot"></span> MOCK</div>
   <div class="spacer"></div>
   <div class="model-info" id="modelInfo">Loading...</div>
 </div>
 
-<!-- Health diagnostic banners (populated by JS) -->
+<!-- ── Health banners ── -->
 <div id="healthBanners"></div>
 
-<!-- Pipeline flow navigation -->
-<div class="pipeline-flow">
-  <div class="flow-step" data-panel="overview"><span class="step-icon">🤖</span> <span class="step-label">系统概览<span class="step-sub">Architecture</span></span></div>
-  <span class="flow-arrow">|</span>
-  <div class="flow-step" data-panel="data"><span class="step-icon">📚</span> <span class="step-label">数据管理 <span class="step-count" id="ingestCount">0</span><span class="step-sub">Import / Build / Manage</span></span></div>
-  <span class="flow-arrow">→</span>
-  <div class="flow-step active" data-panel="query"><span class="step-icon">🔍</span> <span class="step-label">智能查询 <span class="step-count" id="queryCount">0</span><span class="step-sub">RAG 检索</span></span></div>
-  <span class="flow-arrow">→</span>
-  <div class="flow-step" data-panel="analyze"><span class="step-icon">🧠</span> <span class="step-label">深度分析<span class="step-sub">News / Topic / Follow-up</span></span></div>
-</div>
+<!-- ── App shell ── -->
+<div class="app-shell">
 
-<div class="main">
-<div class="content">
-
-  <!-- ========== SYSTEM OVERVIEW ========== -->
-  <div class="panel" id="panel-overview">
-  
-    <!-- Section 1: System stats bar -->
-    <div class="overview-stats" id="overviewStats">
-      <div class="stat-chip"><span class="stat-num" id="statAgents">4</span><span class="stat-label">Agents</span></div>
-      <div class="stat-chip"><span class="stat-num" id="statTools">28</span><span class="stat-label">Tools</span></div>
-      <div class="stat-chip"><span class="stat-num" id="statTests">521</span><span class="stat-label">Tests</span></div>
-      <div class="stat-chip"><span class="stat-num" id="statDocs">-</span><span class="stat-label">KB Docs</span></div>
-      <div class="stat-chip"><span class="stat-num" id="statIndex">-</span><span class="stat-label">Index</span></div>
-      <div class="stat-chip"><span class="stat-num" id="statModel">-</span><span class="stat-label">LLM</span></div>
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="nav-group-label">System</div>
+    <div class="nav-item active" data-panel="overview">
+      <span class="nav-icon">🤖</span>
+      <span class="nav-label">系统概览<span class="nav-sub">Architecture & Tech</span></span>
     </div>
-  
-    <!-- Section 2: 5-Phase Pipeline -->
-    <div class="ov-section">
-      <h3 class="ov-title">5-Phase Pipeline</h3>
-      <div class="pipeline-vis">
-        <div class="pv-step">
-          <div class="pv-icon">📡</div>
-          <div class="pv-name">Fetch</div>
-          <div class="pv-desc">Function Calling 自动选择数据源获取数据</div>
-        </div>
-        <div class="pv-arrow">→</div>
-        <div class="pv-step">
-          <div class="pv-icon">📚</div>
-          <div class="pv-name">Index</div>
-          <div class="pv-desc">BM25 + ChromaDB 双通道索引 + 文本预处理</div>
-        </div>
-        <div class="pv-arrow">→</div>
-        <div class="pv-step">
-          <div class="pv-icon">🧠</div>
-          <div class="pv-name">Process</div>
-          <div class="pv-desc">AgentRouter 意图分类 → Agent 链执行分析</div>
-        </div>
-        <div class="pv-arrow">→</div>
-        <div class="pv-step">
-          <div class="pv-icon">📝</div>
-          <div class="pv-name">Output</div>
-          <div class="pv-desc">SlotFiller 槽位填充（Agent 已有输出时跳过）</div>
-        </div>
-        <div class="pv-arrow">→</div>
-        <div class="pv-step">
-          <div class="pv-icon">🛡️</div>
-          <div class="pv-name">Evolve</div>
-          <div class="pv-desc">ScoreCard 全链路评分 + 6 层防幻觉校验</div>
-        </div>
+    <div class="nav-divider"></div>
+    <div class="nav-group-label">Pipeline</div>
+    <div class="nav-item" data-panel="data">
+      <span class="nav-icon">📚</span>
+      <span class="nav-label">数据管理<span class="nav-sub">Import · Build · Manage</span></span>
+      <span class="nav-count" id="ingestCount">0</span>
+    </div>
+    <div class="nav-item" data-panel="query">
+      <span class="nav-icon">🔍</span>
+      <span class="nav-label">智能查询<span class="nav-sub">RAG 检索 · K线分析</span></span>
+      <span class="nav-count" id="queryCount">0</span>
+    </div>
+    <div class="nav-item" data-panel="analyze">
+      <span class="nav-icon">🧠</span>
+      <span class="nav-label">深度分析<span class="nav-sub">News · Topic · Chat</span></span>
+    </div>
+    <div class="sidebar-footer">
+      <div style="font-size:10px;color:var(--text3);line-height:1.6">
+        BM25 + ChromaDB Hybrid<br>
+        6-Layer Hallucination Guard<br>
+        Multi-Agent Pipeline
       </div>
-    </div>
-  
-    <!-- Section 3: Agent-Tool Mapping -->
-    <div class="ov-section">
-      <h3 class="ov-title">Agent-Tool 协作映射</h3>
-      <div class="agent-row">
-        <div class="agent-card">
-          <div class="agent-icon">🧭</div>
-          <div class="agent-name">Coordinator</div>
-          <div class="agent-role">意图分类 + Agent 链选择</div>
-          <div class="agent-tools">
-            <span class="tool-tag">classify_query_intent</span>
-            <span class="tool-tag">select_agent_chain</span>
-          </div>
-        </div>
-        <div class="agent-arrow">→</div>
-        <div class="agent-card">
-          <div class="agent-icon">📥</div>
-          <div class="agent-name">Ingestion</div>
-          <div class="agent-role">数据加载 + 预处理</div>
-          <div class="agent-tools">
-            <span class="tool-tag">extract_document_metadata</span>
-            <span class="tool-tag">detect_document_type</span>
-          </div>
-        </div>
-        <div class="agent-arrow">→</div>
-        <div class="agent-card" style="border-color:#7c3aed">
-          <div class="agent-icon">🧠</div>
-          <div class="agent-name">Analysis</div>
-          <div class="agent-role">统一分析引擎 (按 intent 路由)</div>
-          <div class="agent-tools">
-            <div class="intent-chain"><span class="ic-label">kline:</span> fetch_kline_report → analyze_kline → generate_kline_analysis</div>
-            <div class="intent-chain"><span class="ic-label">event:</span> fetch_date_events → assess_event_impact</div>
-            <div class="intent-chain"><span class="ic-label">news:</span> analyze_news_deep (多维影响 + 关键信号)</div>
-            <div class="intent-chain"><span class="ic-label">general:</span> extract_metrics → extract_entities → synthesize_report</div>
-          </div>
-        </div>
-        <div class="agent-arrow">→</div>
-        <div class="agent-card" style="border-color:var(--danger)">
-          <div class="agent-icon">🛡️</div>
-          <div class="agent-name">Scoring</div>
-          <div class="agent-role">质量校验 + 幻觉防护</div>
-          <div class="agent-tools">
-            <span class="tool-tag">evaluate_pipeline_quality</span>
-            <span class="tool-tag">check_hallucination</span>
-            <span class="tool-tag">generate_score_report</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  
-    <!-- Section 4: Retrieval Pipeline -->
-    <div class="ov-section">
-      <h3 class="ov-title">Hybrid Retrieval Pipeline</h3>
-      <div class="retrieval-chain">
-        <div class="rc-node">
-          <div class="rc-icon">🔤</div>
-          <div class="rc-name">BM25</div>
-          <div class="rc-detail">jieba trigram 分词<br>权重 0.3</div>
-        </div>
-        <div class="rc-plus">+</div>
-        <div class="rc-node">
-          <div class="rc-icon">🧮</div>
-          <div class="rc-name">ChromaDB</div>
-          <div class="rc-detail">HNSW ANN 语义检索<br>1024-dim · 权重 0.7</div>
-        </div>
-        <div class="rc-arrow">→</div>
-        <div class="rc-node">
-          <div class="rc-icon">🔀</div>
-          <div class="rc-name">RRF Fusion</div>
-          <div class="rc-detail">Reciprocal Rank Fusion<br>k=60 · MD5 去重</div>
-        </div>
-        <div class="rc-arrow">→</div>
-        <div class="rc-node">
-          <div class="rc-icon">🎯</div>
-          <div class="rc-name">qwen3-rerank</div>
-          <div class="rc-detail">精排重排序<br>无 API 时降级 RRF</div>
-        </div>
-        <div class="rc-arrow">→</div>
-        <div class="rc-node">
-          <div class="rc-icon">🏷️</div>
-          <div class="rc-name">Metadata Filter</div>
-          <div class="rc-detail">来源/日期/类型<br>QueryParser 自动提取</div>
-        </div>
-      </div>
-    </div>
-  
-    <!-- Section 5: Hallucination Guard -->
-    <div class="ov-section">
-      <h3 class="ov-title">6-Layer Hallucination Guard</h3>
-      <div class="guard-layers">
-        <div class="gl-row">
-          <div class="gl-bar-wrap"><div class="gl-bar" style="width:100%;background:var(--accent)"></div></div>
-          <div class="gl-info">
-            <span class="gl-name">L1 来源锚定</span>
-            <span class="gl-weight">25%</span>
-            <span class="gl-desc">jieba 分词 → 逐句 token 重叠率 ≥ 15% 视为有来源支撑</span>
-          </div>
-        </div>
-        <div class="gl-row">
-          <div class="gl-bar-wrap"><div class="gl-bar" style="width:60%;background:var(--accent2)"></div></div>
-          <div class="gl-info">
-            <span class="gl-name">L2 数值一致</span>
-            <span class="gl-weight">15%</span>
-            <span class="gl-desc">提取「数字+单位」对，交叉比对检索源，防止编造数据</span>
-          </div>
-        </div>
-        <div class="gl-row">
-          <div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--ok)"></div></div>
-          <div class="gl-info">
-            <span class="gl-name">L3 引用完整</span>
-            <span class="gl-weight">10%</span>
-            <span class="gl-desc">[N] 标记存在且 N 对应有效来源，防止伪引用</span>
-          </div>
-        </div>
-        <div class="gl-row">
-          <div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--warn)"></div></div>
-          <div class="gl-info">
-            <span class="gl-name">L4 结构规范</span>
-            <span class="gl-weight">10%</span>
-            <span class="gl-desc">检测摘要/要点/分析/风险等预期段落是否存在</span>
-          </div>
-        </div>
-        <div class="gl-row">
-          <div class="gl-bar-wrap"><div class="gl-bar" style="width:80%;background:var(--danger)"></div></div>
-          <div class="gl-info">
-            <span class="gl-name">L5 LLM 质疑</span>
-            <span class="gl-weight">20%</span>
-            <span class="gl-desc">LLM 审查规则层结果，找出假阳性/假阴性</span>
-          </div>
-        </div>
-        <div class="gl-row">
-          <div class="gl-bar-wrap"><div class="gl-bar" style="width:80%;background:#b388ff"></div></div>
-          <div class="gl-info">
-            <span class="gl-name">L6 LLM 协助</span>
-            <span class="gl-weight">20%</span>
-            <span class="gl-desc">LLM 独立逐句扫描，发现规则抓不到的幻觉</span>
-          </div>
-        </div>
-      </div>
-      <p style="font-size:11px;color:var(--text2);margin-top:8px">规则层(L1-L4) 总分低于 85% 时自动触发 LLM 层(L5-L6) · 每层得分透明嵌入最终输出</p>
-    </div>
-  
-    <!-- Section 6: Live KB Status -->
-    <div class="ov-section">
-      <h3 class="ov-title">Knowledge Base <button class="btn btn-secondary btn-sm" onclick="loadOverviewStats()" style="margin-left:8px;padding:2px 10px;font-size:11px">刷新</button></h3>
-      <div class="kb-live" id="kbLivePanel">
-        <div class="kb-live-grid" id="kbLiveGrid">
-          <div class="kbl-item"><span class="kbl-label">文档总数</span><strong id="kblDocs">-</strong></div>
-          <div class="kbl-item"><span class="kbl-label">索引状态</span><strong id="kblIndex">-</strong></div>
-          <div class="kbl-item"><span class="kbl-label">ChromaDB</span><strong id="kblChroma">-</strong></div>
-          <div class="kbl-item"><span class="kbl-label">元数据</span><strong id="kblMeta">-</strong></div>
-        </div>
-        <div id="kblSources" style="margin-top:10px;font-size:12px;color:var(--text2)"></div>
-      </div>
-    </div>
-  
-    <!-- Routing Examples -->
-    <div style="margin-top:16px;padding:12px 16px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.8">
-      <strong style="color:var(--text1)">🔀 意图路由示例</strong> — 用户只需输入问题，系统自动决定执行路径<br>
-      "茅台走势" → K线分析链 &nbsp;|&nbsp;
-      "收购是利好还是利空" → 事件影响链 &nbsp;|&nbsp;
-      "最新AI动态" → 完整分析链（摄取 + 分析 + 评分）
     </div>
   </div>
 
-  <!-- ========== DATA MANAGEMENT ========== -->
-  <div class="panel" id="panel-data">
-    <!-- Section: Data Import -->
-    <div class="section-divider">
-      <span class="sd-title">📥 数据导入</span>
-      <span class="sd-desc">将文件或新闻加载到系统</span>
+  <!-- Main content -->
+  <div class="main-content">
+
+    <!-- ══════════ SYSTEM OVERVIEW ══════════ -->
+    <div class="panel active" id="panel-overview">
+      <div class="panel-header">
+        <h2>系统概览</h2>
+        <p>FinRAG — 基于多 Agent 协作的金融 RAG 系统，集成 5-Phase Pipeline + 混合检索 + 6 层防幻觉</p>
+      </div>
+
+      <div class="overview-stats" id="overviewStats">
+        <div class="stat-chip"><span class="stat-num" id="statAgents">4</span><span class="stat-label">Agents</span></div>
+        <div class="stat-chip"><span class="stat-num" id="statTools">28</span><span class="stat-label">Tools</span></div>
+        <div class="stat-chip"><span class="stat-num" id="statTests">521</span><span class="stat-label">Tests</span></div>
+        <div class="stat-chip"><span class="stat-num" id="statDocs">-</span><span class="stat-label">KB Docs</span></div>
+        <div class="stat-chip"><span class="stat-num" id="statIndex">-</span><span class="stat-label">Index</span></div>
+        <div class="stat-chip"><span class="stat-num" id="statModel">-</span><span class="stat-label">LLM</span></div>
+      </div>
+
+      <div class="ov-section">
+        <h3 class="ov-title">5-Phase Pipeline</h3>
+        <div class="pipeline-vis">
+          <div class="pv-step"><div class="pv-icon">📡</div><div class="pv-name">Fetch</div><div class="pv-desc">Function Calling 自动选择数据源获取数据</div></div>
+          <div class="pv-arrow">→</div>
+          <div class="pv-step"><div class="pv-icon">📚</div><div class="pv-name">Index</div><div class="pv-desc">BM25 + ChromaDB 双通道索引 + 文本预处理</div></div>
+          <div class="pv-arrow">→</div>
+          <div class="pv-step"><div class="pv-icon">🧠</div><div class="pv-name">Process</div><div class="pv-desc">AgentRouter 意图分类 → Agent 链执行分析</div></div>
+          <div class="pv-arrow">→</div>
+          <div class="pv-step"><div class="pv-icon">📝</div><div class="pv-name">Output</div><div class="pv-desc">SlotFiller 槽位填充（Agent 已有输出时跳过）</div></div>
+          <div class="pv-arrow">→</div>
+          <div class="pv-step"><div class="pv-icon">🛡️</div><div class="pv-name">Evolve</div><div class="pv-desc">ScoreCard 全链路评分 + 6 层防幻觉校验</div></div>
+        </div>
+      </div>
+
+      <div class="ov-section">
+        <h3 class="ov-title">Agent-Tool 协作映射</h3>
+        <div class="agent-row">
+          <div class="agent-card">
+            <div class="agent-icon">🧭</div><div class="agent-name">Coordinator</div>
+            <div class="agent-role">意图分类 + Agent 链选择</div>
+            <div class="agent-tools"><span class="tool-tag">classify_query_intent</span><span class="tool-tag">select_agent_chain</span></div>
+          </div>
+          <div class="agent-arrow">→</div>
+          <div class="agent-card">
+            <div class="agent-icon">📥</div><div class="agent-name">Ingestion</div>
+            <div class="agent-role">数据加载 + 预处理</div>
+            <div class="agent-tools"><span class="tool-tag">extract_document_metadata</span><span class="tool-tag">detect_document_type</span></div>
+          </div>
+          <div class="agent-arrow">→</div>
+          <div class="agent-card" style="border-color:#7c3aed">
+            <div class="agent-icon">🧠</div><div class="agent-name">Analysis</div>
+            <div class="agent-role">统一分析引擎 (按 intent 路由)</div>
+            <div class="agent-tools">
+              <div class="intent-chain"><span class="ic-label">kline:</span> fetch_kline_report → analyze_kline → generate_kline_analysis</div>
+              <div class="intent-chain"><span class="ic-label">event:</span> fetch_date_events → assess_event_impact</div>
+              <div class="intent-chain"><span class="ic-label">news:</span> analyze_news_deep (多维影响 + 关键信号)</div>
+              <div class="intent-chain"><span class="ic-label">general:</span> extract_metrics → extract_entities → synthesize_report</div>
+            </div>
+          </div>
+          <div class="agent-arrow">→</div>
+          <div class="agent-card" style="border-color:var(--danger)">
+            <div class="agent-icon">🛡️</div><div class="agent-name">Scoring</div>
+            <div class="agent-role">质量校验 + 幻觉防护</div>
+            <div class="agent-tools"><span class="tool-tag">evaluate_pipeline_quality</span><span class="tool-tag">check_hallucination</span><span class="tool-tag">generate_score_report</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ov-section">
+        <h3 class="ov-title">Hybrid Retrieval Pipeline</h3>
+        <div class="retrieval-chain">
+          <div class="rc-node"><div class="rc-icon">🔤</div><div class="rc-name">BM25</div><div class="rc-detail">jieba trigram 分词<br>权重 0.3</div></div>
+          <div class="rc-plus">+</div>
+          <div class="rc-node"><div class="rc-icon">🧮</div><div class="rc-name">ChromaDB</div><div class="rc-detail">HNSW ANN 语义检索<br>1024-dim · 权重 0.7</div></div>
+          <div class="rc-arrow">→</div>
+          <div class="rc-node"><div class="rc-icon">🔀</div><div class="rc-name">RRF Fusion</div><div class="rc-detail">Reciprocal Rank Fusion<br>k=60 · MD5 去重</div></div>
+          <div class="rc-arrow">→</div>
+          <div class="rc-node"><div class="rc-icon">🎯</div><div class="rc-name">qwen3-rerank</div><div class="rc-detail">精排重排序<br>无 API 时降级 RRF</div></div>
+          <div class="rc-arrow">→</div>
+          <div class="rc-node"><div class="rc-icon">🏷️</div><div class="rc-name">Metadata Filter</div><div class="rc-detail">来源/日期/类型<br>QueryParser 自动提取</div></div>
+        </div>
+      </div>
+
+      <div class="ov-section">
+        <h3 class="ov-title">6-Layer Hallucination Guard</h3>
+        <div class="guard-layers">
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:100%;background:var(--accent)"></div></div><div class="gl-info"><span class="gl-name">L1 来源锚定</span><span class="gl-weight">25%</span><span class="gl-desc">jieba 分词 → 逐句 token 重叠率 ≥ 15% 视为有来源支撑</span></div></div>
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:60%;background:var(--accent2)"></div></div><div class="gl-info"><span class="gl-name">L2 数值一致</span><span class="gl-weight">15%</span><span class="gl-desc">提取「数字+单位」对，交叉比对检索源，防止编造数据</span></div></div>
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--ok)"></div></div><div class="gl-info"><span class="gl-name">L3 引用完整</span><span class="gl-weight">10%</span><span class="gl-desc">[N] 标记存在且 N 对应有效来源，防止伪引用</span></div></div>
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--warn)"></div></div><div class="gl-info"><span class="gl-name">L4 结构规范</span><span class="gl-weight">10%</span><span class="gl-desc">检测摘要/要点/分析/风险等预期段落是否存在</span></div></div>
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:80%;background:var(--danger)"></div></div><div class="gl-info"><span class="gl-name">L5 LLM 质疑</span><span class="gl-weight">20%</span><span class="gl-desc">LLM 审查规则层结果，找出假阳性/假阴性</span></div></div>
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:80%;background:#b388ff"></div></div><div class="gl-info"><span class="gl-name">L6 LLM 协助</span><span class="gl-weight">20%</span><span class="gl-desc">LLM 独立逐句扫描，发现规则抓不到的幻觉</span></div></div>
+        </div>
+        <p style="font-size:10px;color:var(--text3);margin-top:8px">规则层(L1-L4) 总分低于 85% 时自动触发 LLM 层(L5-L6) · 每层得分透明嵌入最终输出</p>
+      </div>
+
+      <div class="ov-section">
+        <h3 class="ov-title">Knowledge Base <button class="btn btn-secondary btn-xs" onclick="window._loadOverviewStats()" style="margin-left:8px">刷新</button></h3>
+        <div id="kbLivePanel">
+          <div class="kb-live-grid" id="kbLiveGrid">
+            <div class="kbl-item"><span class="kbl-label">文档总数</span><strong id="kblDocs">-</strong></div>
+            <div class="kbl-item"><span class="kbl-label">索引状态</span><strong id="kblIndex">-</strong></div>
+            <div class="kbl-item"><span class="kbl-label">ChromaDB</span><strong id="kblChroma">-</strong></div>
+            <div class="kbl-item"><span class="kbl-label">元数据</span><strong id="kblMeta">-</strong></div>
+          </div>
+          <div id="kblSources" style="margin-top:10px;font-size:11px;color:var(--text3)"></div>
+        </div>
+      </div>
+
+      <div class="routing-examples">
+        <strong>🔀 意图路由示例</strong> — 用户只需输入问题，系统自动决定执行路径<br>
+        "茅台走势" → K线分析链 &nbsp;|&nbsp; "收购是利好还是利空" → 事件影响链 &nbsp;|&nbsp; "最新AI动态" → 完整分析链
+      </div>
     </div>
-    <div class="card" style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-        <h3 style="margin:0">📁 文件导入</h3>
-        <span class="tag tag-ok" style="font-size:11px">→ 知识库</span>
+
+    <!-- ══════════ DATA MANAGEMENT ══════════ -->
+    <div class="panel" id="panel-data">
+      <div class="panel-header">
+        <h2>数据管理</h2>
+        <p>导入文件到知识库 · 抓取新闻元数据 · 构建检索索引</p>
       </div>
-    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">导入的文件经分析后进入知识库，用于后续 RAG 检索</p>
-      <!-- Analysis mode toggle -->
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:8px 12px;background:var(--bg2);border-radius:8px">
-        <span style="font-size:12px;font-weight:600">分析模式：</span>
-        <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px">
-          <input type="radio" name="ingestMode" value="analyze" checked> 🔍 深度分析 (LLM 抽取指标+实体)
-        </label>
-        <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px">
-          <input type="radio" name="ingestMode" value="quick"> ⚡ 快速导入 (跳过 LLM)
-        </label>
+
+      <div class="section-divider"><span class="sd-icon">📥</span><span class="sd-title">数据导入</span><span class="sd-desc">将文件或新闻加载到系统</span></div>
+
+      <div class="card">
+        <h3><span class="card-icon">📁</span> 文件导入 <span class="tag tag-ok" style="font-size:10px;margin-left:4px">→ 知识库</span></h3>
+        <p class="card-desc">导入的文件经分析后进入知识库，用于后续 RAG 检索</p>
+        <div class="mode-toggle">
+          <span style="font-size:12px;font-weight:600">分析模式：</span>
+          <label><input type="radio" name="ingestMode" value="analyze" checked> 🔍 深度分析</label>
+          <label><input type="radio" name="ingestMode" value="quick"> ⚡ 快速导入</label>
+        </div>
+        <div id="dirBrowser"><div style="text-align:center;color:var(--text3);padding:16px"><div class="spinner" style="margin:0 auto"></div></div></div>
+        <div style="margin-top:14px">
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px">📂 自定义目录</div>
+          <div class="form-row">
+            <input class="input" id="ingest-dir" placeholder="输入目录路径，如 D:\docs\reports" />
+            <button class="btn btn-secondary btn-sm" onclick="window._browseCustomDir()">浏览</button>
+            <button class="btn btn-primary btn-sm" onclick="window._ingestCustomDir()">导入</button>
+          </div>
+          <div id="ingest-file-result"></div>
+        </div>
       </div>
-      <!-- Directory browser -->
-      <div id="dirBrowser"><div style="text-align:center;color:var(--text2);padding:16px"><div class="spinner" style="margin:0 auto"></div></div></div>
-      <!-- Custom directory -->
-      <div style="margin-top:14px">
-        <div style="font-size:12px;font-weight:600;margin-bottom:6px">📂 自定义目录</div>
+
+      <div class="card">
+        <h3><span class="card-icon">📰</span> 新闻抓取 <span class="tag tag-warn" style="font-size:10px;margin-left:4px">→ 元数据</span></h3>
+        <p class="card-desc">从同花顺 / 新浪 / 东方财富拉取实时新闻标题，存入元数据供查询时作为上下文补充</p>
         <div class="form-row">
-          <input class="input" id="ingest-dir" placeholder="输入目录路径，如 D:\docs\reports 或 ./data/custom" />
-          <button class="btn btn-secondary btn-sm" onclick="browseCustomDir()">浏览</button>
-          <button class="btn btn-primary btn-sm" onclick="ingestCustomDir()">导入</button>
+          <input class="input" id="ingest-news-q" placeholder="主题: AI、茅台、降准..." />
+          <select class="input" id="ingest-news-count" style="flex:none;width:80px">
+            <option value="10">10条</option><option value="20">20条</option><option value="30" selected>30条</option><option value="50">50条</option>
+          </select>
+          <button class="btn btn-primary" onclick="window._ingestNews()">抓取</button>
         </div>
-        <div id="ingest-file-result"></div>
+        <div id="ingest-news-result"></div>
+      </div>
+
+      <div class="section-divider"><span class="sd-icon">📚</span><span class="sd-title">索引与管理</span><span class="sd-desc">构建检索索引 · 管理知识库内容</span></div>
+
+      <div class="card" id="kbDashboard" style="border-color:rgba(78,205,196,.2)">
+        <div class="card-header"><h3 style="margin:0"><span class="card-icon">📚</span> KB Status</h3><button class="btn btn-secondary btn-xs" onclick="window._refreshKBStatus()">刷新</button></div>
+        <div class="stats" id="kbDashboardStats">
+          <div class="stat">文档 <strong id="kbDashDocs">0</strong></div>
+          <div class="stat">索引 <strong id="kbDashIndex"><span class="tag tag-warn" style="font-size:10px">未构建</span></strong></div>
+          <div class="stat">大小 <strong id="kbDashSize">0 KB</strong></div>
+          <div class="stat">元数据 <strong id="kbDashMeta">0</strong></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><span class="card-icon">🏗️</span> 知识库构建 <span class="tag tag-info" style="font-size:10px">BM25 + Embedding + RRF</span></h3>
+        <p class="card-desc">将已摄取的文档进行索引构建，支持混合检索</p>
+        <div class="form-row">
+          <button class="btn btn-primary" onclick="window._buildKB()">构建索引</button>
+          <button class="btn btn-secondary" onclick="window._clearKB()">清空知识库</button>
+        </div>
+        <div class="loading" id="build-loading"><div class="spinner"></div><p>正在构建索引 (含 Embedding 预计算)...</p></div>
+        <div id="build-result"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 style="margin:0"><span class="card-icon">🗂️</span> 知识库管理</h3><button class="btn btn-secondary btn-xs" onclick="window._refreshKBManager()">刷新</button></div>
+        <p class="card-desc">按来源分组查看和删除知识库文档</p>
+        <div class="form-row">
+          <input type="text" class="input" id="kbKeywordInput" placeholder="输入关键词搜索/删除" />
+          <button class="btn btn-secondary btn-sm" onclick="window._searchKBKeyword()">搜索</button>
+          <button class="btn btn-sm btn-danger" onclick="window._deleteKBKeyword()">删除匹配</button>
+        </div>
+        <div id="kbSearchResults" style="display:none;margin-bottom:8px"></div>
+        <div id="kbSourceList"></div>
+      </div>
+
+      <div class="card">
+        <h3><span class="card-icon">📚</span> 知识库内容 <span class="tag tag-info" id="kbDocCount">0 篇文档</span></h3>
+        <div class="doc-list" id="docList"></div>
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-        <h3 style="margin:0">📰 新闻抓取</h3>
-        <span class="tag tag-warn" style="font-size:11px">→ 元数据 · 不进入知识库</span>
+    <!-- ══════════ SMART QUERY ══════════ -->
+    <div class="panel" id="panel-query">
+      <div class="panel-header">
+        <h2>智能查询</h2>
+        <p>基于知识库的 RAG 检索 · K线技术指标分析</p>
       </div>
-    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">从同花顺 / 新浪 / 东方财富拉取实时新闻标题，存入元数据供查询时作为上下文补充。<strong style="color:var(--text2)">不做分析，不进入知识库。</strong></p>
-      <div class="form-row">
-        <input class="input" id="ingest-news-q" placeholder="主题: AI、茅台、降准..." />
-        <select class="input" id="ingest-news-count" style="flex:none;width:80px">
-          <option value="10">10条</option><option value="20">20条</option><option value="30" selected>30条</option><option value="50">50条</option>
+
+      <div class="query-box">
+        <input class="input" id="query-input" placeholder="基于知识库查询，如：商汤科技2024年营收多少？" onkeydown="if(event.key==='Enter'){event.preventDefault();window._runKBQuery()}" />
+        <select class="input" id="query-topk" style="flex:none;width:80px">
+          <option value="3">Top 3</option><option value="5" selected>Top 5</option><option value="10">Top 10</option>
         </select>
-        <button class="btn btn-primary" onclick="ingestNews()">抓取</button>
+        <button class="btn btn-primary" onclick="window._runKBQuery()">查询</button>
       </div>
-      <div class="form-row" style="margin-top:6px">
-        <input class="input" id="ingest-news-filter" placeholder="过滤关键词（可选，逗号分隔）" style="font-size:12px" />
+      <div class="loading" id="query-loading"><div class="spinner"></div><p>RAG 检索中...</p></div>
+      <div id="query-result"></div>
+
+      <div class="section-divider" style="margin-top:32px"><span class="sd-icon">📈</span><span class="sd-title">K线分析</span><span class="sd-desc">技术指标分析</span></div>
+      <div class="card" style="opacity:.9">
+        <h3><span class="card-icon">📈</span> K线技术分析</h3>
+        <p class="card-desc">输入股票名称或代码，查看 MACD / RSI / KDJ / 布林带等技术指标</p>
+        <div class="form-row">
+          <input class="input" id="tool-kline-q" placeholder="股票名称或代码" />
+          <select class="input" id="tool-kline-days" style="flex:none;width:80px"><option value="30">30天</option><option value="60" selected>60天</option><option value="120">120天</option></select>
+          <select class="input" id="tool-kline-period" style="flex:none;width:80px"><option value="daily">日K</option><option value="weekly">周K</option></select>
+          <button class="btn btn-primary btn-sm" onclick="window._runKlineTool()">分析</button>
+        </div>
+        <div class="dev-notice"><span>🚧</span><span>该功能持续开发中，部分技术指标可能尚未完善</span></div>
+        <div id="tool-kline-result" class="kline-result"></div>
       </div>
-      <div id="ingest-news-result"></div>
     </div>
 
-    <!-- Section: Index & Management -->
-    <div class="section-divider">
-      <span class="sd-title">📚 索引与管理</span>
-      <span class="sd-desc">构建检索索引 · 管理知识库内容</span>
-    </div>
-    <div class="card" id="kbDashboard" style="margin-bottom:16px;border-color:rgba(78,205,196,.3)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <h3 style="margin:0">📚 KB Status</h3>
-        <button class="btn btn-secondary btn-sm" onclick="refreshKBStatus()">刷新</button>
+    <!-- ══════════ DEEP ANALYSIS ══════════ -->
+    <div class="panel" id="panel-analyze">
+      <div class="panel-header">
+        <h2>深度分析</h2>
+        <p>粘贴新闻全文或输入话题，获取结构化研判 · 追问对话 · 学习积累</p>
       </div>
-      <div class="stats" id="kbDashboardStats">
-        <div class="stat">文档 <strong id="kbDashDocs">0</strong></div>
-        <div class="stat">索引 <strong id="kbDashIndex"><span class="tag tag-warn" style="font-size:11px">未构建</span></strong></div>
-        <div class="stat">大小 <strong id="kbDashSize">0 KB</strong></div>
-        <div class="stat">元数据 <strong id="kbDashMeta">0</strong></div>
-      </div>
-    </div>
-    <div class="card">
-      <h3>🏗️ 知识库构建 <span class="tag tag-info" style="font-size:11px;margin-left:4px">BM25 + Embedding + RRF</span></h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">将已摄取的文档进行索引构建，支持混合检索</p>
-      <div class="form-row">
-        <button class="btn btn-primary" onclick="buildKB()">构建索引</button>
-        <button class="btn btn-secondary" onclick="clearKB()">清空知识库</button>
-      </div>
-      <div class="loading" id="build-loading"><div class="spinner"></div><p>正在构建索引 (含 Embedding 预计算)...</p></div>
-      <div id="build-result"></div>
-    </div>
-    <div class="card" id="kbManageCard">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <h3 style="margin:0">🗂️ 知识库管理</h3>
-        <button class="btn btn-secondary btn-sm" onclick="refreshKBManager()">刷新</button>
-      </div>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:8px">按来源分组查看和删除知识库文档</p>
-      <div style="display:flex;gap:6px;margin-bottom:8px">
-        <input type="text" id="kbKeywordInput" placeholder="输入关键词搜索/删除（如“茅台”）" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
-        <button class="btn btn-secondary btn-sm" onclick="searchKBKeyword()">搜索</button>
-        <button class="btn btn-sm" style="background:#d93025;color:#fff" onclick="deleteKBKeyword()">删除匹配</button>
-      </div>
-      <div id="kbSearchResults" style="display:none;margin-bottom:8px"></div>
-      <div id="kbSourceList"><div class="empty-state" style="padding:12px"><p style="margin:0">加载中...</p></div></div>
-    </div>
-    <div class="card">
-      <h3>📚 知识库内容 <span class="tag tag-info" id="kbDocCount">0 篇文档</span></h3>
-      <div class="doc-list" id="docList"><div class="empty-state"><div class="icon">📭</div><p>知识库为空</p><div class="hint">先在「数据管理」导入数据</div></div></div>
-    </div>
-  </div>
 
-  <!-- ========== SMART QUERY ========== -->
-  <div class="panel active" id="panel-query">
-    <div class="query-box">
-      <input class="input" id="query-input" placeholder="基于知识库查询，如：商汤科技2024年营收多少？" />
-      <select class="input" id="query-topk" style="flex:none;width:80px">
-        <option value="3">Top 3</option><option value="5" selected>Top 5</option><option value="10">Top 10</option>
-      </select>
-      <button class="btn btn-primary" onclick="runKBQuery()">查询</button>
-    </div>
-    <div class="loading" id="query-loading"><div class="spinner"></div><p>RAG 检索中...</p></div>
-    <div id="query-result"></div>
+      <div class="section-divider"><span class="sd-icon">📥</span><span class="sd-title">输入分析</span><span class="sd-desc">粘贴新闻全文或输入话题</span></div>
 
-    <!-- Section: K-line Analysis -->
-    <div class="section-divider" style="margin-top:32px">
-      <span class="sd-title">📈 K线分析</span>
-      <span class="sd-desc">技术指标分析</span>
-    </div>
-    <div class="card" style="border-color:var(--border);opacity:.85">
-      <h3>📈 K线技术分析</h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">输入股票名称或代码，查看 MACD / RSI / KDJ / 布林带等技术指标</p>
-      <div class="form-row">
-        <input class="input" id="tool-kline-q" placeholder="股票名称或代码" />
-        <select class="input" id="tool-kline-days" style="flex:none;width:80px">
-          <option value="30">30天</option><option value="60" selected>60天</option><option value="120">120天</option>
-        </select>
-        <select class="input" id="tool-kline-period" style="flex:none;width:80px">
-          <option value="daily">日K</option><option value="weekly">周K</option>
-        </select>
-        <button class="btn btn-primary btn-sm" onclick="runKlineTool()">分析</button>
+      <div class="card">
+        <h3><span class="card-icon">📰</span> 新闻解读 <span class="tag tag-info" style="font-size:10px">全文 → 结构化解析 → 利好利空</span></h3>
+        <p class="card-desc">粘贴新闻全文，系统自动抽取指标实体、结合知识库上下文，给出利好/利空/中性研判</p>
+        <textarea class="input" id="analyze-news-text" rows="5" placeholder="粘贴新闻全文..." style="width:100%;min-height:100px"></textarea>
+        <div class="form-row" style="margin-top:10px">
+          <input class="input" id="analyze-news-q" placeholder="补充说明（可选）" />
+          <button class="btn btn-primary" onclick="window._analyzeNews()">🧠 分析</button>
+        </div>
+        <div class="loading" id="analyze-news-loading"><div class="spinner"></div><p>正在解析新闻并查询知识库...</p></div>
+        <div id="analyze-news-result"></div>
       </div>
-      <div class="dev-notice">
-        <span class="dev-icon">🚧</span>
-        <span>该功能持续开发中，部分技术指标可能尚未完善</span>
-      </div>
-      <div id="tool-kline-result" style="max-height:500px;overflow-y:auto;margin-top:10px"></div>
-    </div>
-  </div>
 
-  <!-- ========== DEEP ANALYSIS ========== -->
-  <div class="panel" id="panel-analyze">
-    <!-- Section: Input Analysis -->
-    <div class="section-divider">
-      <span class="sd-title">📥 输入分析</span>
-      <span class="sd-desc">粘贴新闻全文或输入话题，获取结构化研判</span>
-    </div>
-    <div class="card" style="margin-bottom:20px">
-      <h3>📰 新闻解读 <span class="tag tag-info" style="font-size:11px;margin-left:4px">粘贴新闻全文 → 结构化解析 → 利好利空研判</span></h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">粘贴新闻全文，系统自动抽取指标实体、结合知识库上下文，给出利好/利空/中性研判</p>
-      <textarea class="input" id="analyze-news-text" rows="5" placeholder="粘贴新闻全文..." style="width:100%;min-height:100px;resize:vertical;font-size:13px;line-height:1.6"></textarea>
-      <div class="form-row" style="margin-top:10px">
-        <input class="input" id="analyze-news-q" placeholder="补充说明（可选）" />
-        <button class="btn btn-primary" onclick="analyzeNews()">🧠 分析</button>
+      <div class="card">
+        <h3><span class="card-icon">🔍</span> 话题调研 <span class="tag tag-info" style="font-size:10px">话题 → 抓新闻 → 综合研判</span></h3>
+        <p class="card-desc">输入话题，系统自动抓取新闻、查询知识库、综合研判</p>
+        <div class="form-row">
+          <input class="input" id="analyze-topic-input" placeholder="话题：如 DeepSeek、半导体..." />
+          <select class="input" id="analyze-topic-count" style="flex:none;width:80px"><option value="10">10条</option><option value="20" selected>20条</option><option value="30">30条</option></select>
+          <button class="btn btn-primary" onclick="window._analyzeTopic()">🔍 调研</button>
+        </div>
+        <div class="loading" id="analyze-topic-loading"><div class="spinner"></div><p>正在抓取新闻并综合研判...</p></div>
+        <div id="analyze-topic-result"></div>
       </div>
-      <div class="loading" id="analyze-news-loading"><div class="spinner"></div><p>正在解析新闻并查询知识库...</p></div>
-      <div id="analyze-news-result"></div>
-    </div>
-    <div class="card">
-      <h3>🔍 话题调研 <span class="tag tag-info" style="font-size:11px;margin-left:4px">输入话题 → 抓新闻 → 综合研判</span></h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:14px">输入话题，系统自动抓取新闻、查询知识库、综合研判</p>
-      <div class="form-row">
-        <input class="input" id="analyze-topic-input" placeholder="话题：如 DeepSeek、半导体..." />
-        <select class="input" id="analyze-topic-count" style="flex:none;width:80px">
-          <option value="10">10条</option><option value="20" selected>20条</option><option value="30">30条</option>
-        </select>
-        <button class="btn btn-primary" onclick="analyzeTopic()">🔍 调研</button>
-      </div>
-      <div class="loading" id="analyze-topic-loading"><div class="spinner"></div><p>正在抓取新闻并综合研判...</p></div>
-      <div id="analyze-topic-result"></div>
-    </div>
 
-    <!-- Section: Follow-up Conversation -->
-    <div class="section-divider">
-      <span class="sd-title">💬 追问对话</span>
-      <span class="sd-desc">基于已有分析结果继续深入探讨</span>
-    </div>
-    <div class="card" id="chatSection" style="display:none;margin-bottom:20px">
-      <div style="display:flex;gap:16px;height:100%">
-        <!-- Session Sidebar -->
-        <div class="chat-sidebar" id="chatSidebar">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <span style="font-size:13px;font-weight:600">💬 会话</span>
-            <button class="btn btn-secondary btn-sm" onclick="loadChatSessions()" style="padding:2px 8px;font-size:11px">刷新</button>
+      <div class="section-divider"><span class="sd-icon">💬</span><span class="sd-title">追问对话</span><span class="sd-desc">基于已有分析结果继续深入探讨</span></div>
+      <div class="card" id="chatSection" style="display:none">
+        <div class="chat-section">
+          <div class="chat-sidebar" id="chatSidebar">
+            <div class="chat-sidebar-header">💬 会话 <button class="btn btn-secondary btn-xs" onclick="window._loadChatSessions()">刷新</button></div>
+            <div id="chatSessionList"></div>
           </div>
-          <div id="chatSessionList"></div>
-        </div>
-        <!-- Chat Area -->
-        <div class="chat-main">
-          <div class="chat-messages" id="chatMessages"></div>
-          <div class="chat-input-row">
-            <input class="input" id="chatFollowupInput" placeholder="追问细节、相关问题、其他角度..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendFollowup()}" />
-            <button class="btn btn-primary btn-sm" onclick="sendFollowup()" id="chatSendBtn">发送</button>
+          <div class="chat-main">
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-row">
+              <input class="input" id="chatFollowupInput" placeholder="追问细节、相关问题、其他角度..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();window._sendFollowup()}" />
+              <button class="btn btn-primary btn-sm" onclick="window._sendFollowup()" id="chatSendBtn">发送</button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    <!-- Section: Learning History -->
-    <div class="section-divider">
-      <span class="sd-title">📚 学习积累</span>
-      <span class="sd-desc">系统从分析中自动积累的知识</span>
-    </div>
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <h3 style="margin:0">📖 学习历史 <span class="tag tag-info" style="font-size:11px;margin-left:4px">系统从分析中积累的知识</span></h3>
-        <button class="btn btn-secondary btn-sm" onclick="refreshLearningHistory()">刷新</button>
+
+      <div class="section-divider"><span class="sd-icon">📚</span><span class="sd-title">学习积累</span><span class="sd-desc">系统从分析中自动积累的知识</span></div>
+      <div class="card">
+        <div class="card-header"><h3 style="margin:0"><span class="card-icon">📖</span> 学习历史</h3><button class="btn btn-secondary btn-xs" onclick="window._refreshLearningHistory()">刷新</button></div>
+        <div id="learningHistoryList"></div>
       </div>
-      <div id="learningHistoryList"><div class="empty-state" style="padding:16px"><div class="icon">🧠</div><p>尚未积累学习记录</p><div class="hint">每次新闻解读或话题调研的结论会自动存入知识库，供未来分析参考</div></div></div>
     </div>
-  </div>
 
-</div>
-</div>
+  </div><!-- /main-content -->
+</div><!-- /app-shell -->
 
-<script src="/static/app.js"></script>
+<script type="module" src="/static/app.js"></script>
 </body>
 </html>

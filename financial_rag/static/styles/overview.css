@@ -1,0 +1,196 @@
+/* FinRAG — overview.css | System overview panel */
+
+/* ── Stats chips row ── */
+.overview-stats {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.stat-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 90px;
+  transition: border-color var(--transition);
+}
+.stat-chip:hover { border-color: var(--accent); }
+.stat-chip .stat-num { font-size: 20px; font-weight: 700; color: var(--accent); }
+.stat-chip .stat-label {
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 3px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  font-weight: 500;
+}
+
+/* ── Sections ── */
+.ov-section { margin-bottom: 28px; }
+.ov-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+/* ── Pipeline visualization ── */
+.pipeline-vis {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pv-step {
+  flex: 1;
+  min-width: 130px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  transition: all var(--transition);
+}
+.pv-step:hover { border-color: var(--accent2); transform: translateY(-2px); box-shadow: var(--shadow); }
+.pv-icon { font-size: 26px; margin-bottom: 8px; }
+.pv-name { font-size: 13px; font-weight: 700; color: var(--accent2); margin-bottom: 4px; }
+.pv-desc { font-size: 11px; color: var(--text2); line-height: 1.5; }
+.pv-arrow { display: flex; align-items: center; color: var(--text3); font-size: 18px; flex-shrink: 0; }
+
+/* ── Agent cards ── */
+.agent-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.agent-card {
+  flex: 1;
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  position: relative;
+  transition: all var(--transition);
+}
+.agent-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+.agent-card .agent-icon { font-size: 26px; margin-bottom: 8px; }
+.agent-card .agent-name { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.agent-card .agent-role { font-size: 11px; color: var(--text2); margin-bottom: 10px; line-height: 1.5; }
+.agent-card .agent-tools {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.agent-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: var(--text3);
+  flex-shrink: 0;
+  width: 24px;
+}
+.tool-tag {
+  font-size: 10px;
+  padding: 2px 7px;
+  background: rgba(108,140,255,.08);
+  color: var(--accent);
+  border-radius: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.intent-chain {
+  font-size: 10px;
+  color: var(--text2);
+  line-height: 1.8;
+  width: 100%;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.ic-label { color: var(--accent2); font-weight: 600; }
+
+/* ── Retrieval chain ── */
+.retrieval-chain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rc-node {
+  flex: 1;
+  min-width: 100px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  text-align: center;
+  transition: all var(--transition);
+}
+.rc-node:hover { border-color: var(--warn); transform: translateY(-2px); }
+.rc-icon { font-size: 20px; margin-bottom: 4px; }
+.rc-name { font-size: 11px; font-weight: 700; color: var(--warn); margin-bottom: 4px; }
+.rc-detail { font-size: 10px; color: var(--text3); line-height: 1.5; }
+.rc-plus { color: var(--text3); font-size: 16px; font-weight: 700; flex-shrink: 0; }
+.rc-arrow { color: var(--text3); opacity: .4; font-size: 18px; flex-shrink: 0; }
+
+/* ── Hallucination guard layers ── */
+.guard-layers { display: flex; flex-direction: column; gap: 8px; }
+.gl-row { display: flex; align-items: center; gap: 12px; }
+.gl-bar-wrap {
+  width: 80px;
+  height: 5px;
+  background: var(--surface2);
+  border-radius: 3px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.gl-bar { height: 100%; border-radius: 3px; }
+.gl-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+.gl-name { font-weight: 600; color: var(--text); min-width: 80px; }
+.gl-weight { color: var(--accent); font-weight: 700; min-width: 32px; }
+.gl-desc { color: var(--text2); flex: 1; min-width: 180px; }
+
+/* ── KB live panel ── */
+.kb-live-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.kbl-item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 16px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  min-width: 100px;
+}
+.kbl-label { font-size: 10px; color: var(--text3); margin-bottom: 3px; text-transform: uppercase; letter-spacing: .5px; }
+.kbl-item strong { font-size: 14px; color: var(--accent2); }
+
+/* ── Routing examples box ── */
+.routing-examples {
+  margin-top: 20px;
+  padding: 14px 18px;
+  background: var(--surface2);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.8;
+}
+.routing-examples strong { color: var(--text); }

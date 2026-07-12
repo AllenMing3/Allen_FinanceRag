@@ -1,0 +1,164 @@
+/* FinRAG — ingest.css | Data import panel */
+
+/* ── Directory browser ── */
+.dir-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  background: var(--surface);
+  transition: border-color var(--transition);
+  margin-bottom: 12px;
+}
+.dir-card:hover { border-color: var(--border-hover); }
+.dir-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dir-header .dir-label {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dir-header .dir-label .dir-icon { font-size: 18px; }
+.dir-header .dir-path { font-size: 11px; color: var(--text3); margin-left: 4px; }
+.dir-files {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.dir-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 5px 4px;
+  border-radius: 4px;
+  transition: background var(--transition);
+}
+.dir-file:hover { background: var(--surface2); }
+.dir-file .file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dir-file .file-size { color: var(--text3); flex-shrink: 0; font-size: 11px; }
+.dir-file .file-preview-btn {
+  flex-shrink: 0;
+  color: var(--accent);
+  cursor: pointer;
+  opacity: .5;
+  transition: opacity var(--transition);
+  background: none;
+  border: none;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+.dir-file .file-preview-btn:hover { opacity: 1; }
+
+/* ── Import mode toggle ── */
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+}
+.mode-toggle label {
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text2);
+}
+.mode-toggle label:has(input:checked) { color: var(--accent); font-weight: 600; }
+
+/* ── Import progress ── */
+.ingest-progress {
+  padding: 12px 16px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  margin-top: 10px;
+}
+.ingest-progress .progress-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 6px;
+}
+.ingest-progress .progress-text strong { color: var(--accent); }
+
+/* ── File preview box ── */
+.file-preview {
+  display: none;
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 4px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+/* ── Document list ── */
+.doc-list { max-height: 400px; overflow-y: auto; }
+.doc-item {
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 12px;
+  transition: background var(--transition);
+}
+.doc-item:hover { background: var(--surface3); }
+.doc-item .doc-meta { color: var(--text3); font-size: 10px; white-space: nowrap; }
+.doc-item .doc-text { flex: 1; line-height: 1.5; }
+.doc-source-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  background: rgba(108,140,255,.1);
+  color: var(--accent);
+  margin-right: 6px;
+}
+
+/* ── KB management ── */
+.kb-source-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  margin-bottom: 4px;
+  transition: background var(--transition);
+}
+.kb-source-item:hover { background: var(--surface3); }
+.kb-source-item .src-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}

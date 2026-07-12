@@ -1,0 +1,230 @@
+/* FinRAG — query.css | Query results & analysis panel */
+
+/* ── Query input box ── */
+.query-box {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.query-box .input { flex: 1; }
+
+/* ── Pipeline stages (score strip) ── */
+.pipeline-stages {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 18px;
+  padding: 14px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.stage-item { flex: 1; text-align: center; padding: 8px 4px; }
+.stage-item .stage-name { font-size: 10px; color: var(--text3); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .3px; }
+.stage-item .stage-score { font-size: 14px; font-weight: 700; color: var(--accent); }
+.stage-item .stage-bar { height: 3px; background: var(--surface2); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.stage-item .stage-bar-fill { height: 100%; border-radius: 2px; transition: width .4s; }
+
+/* ── Result sections ── */
+.result-section {
+  margin-bottom: 20px;
+}
+.result-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+}
+.result-section-header .section-icon { font-size: 16px; }
+.result-section-header .section-count {
+  font-size: 10px;
+  background: var(--surface2);
+  color: var(--text3);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* ── Source citation cards ── */
+.source-result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 8px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  transition: border-color var(--transition);
+}
+.source-result:hover { border-color: var(--border-hover); }
+.source-rank {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.rank-high { background: rgba(107,203,119,.15); color: var(--ok); }
+.rank-mid  { background: rgba(255,217,61,.15);  color: var(--warn); }
+.rank-low  { background: rgba(255,107,107,.15); color: var(--danger); }
+.source-body { flex: 1; }
+.source-body .text { font-size: 13px; line-height: 1.6; margin-bottom: 8px; color: var(--text); }
+.source-body .meta {
+  font-size: 11px;
+  color: var(--text3);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.source-body .meta strong { color: var(--accent); }
+
+/* ── Answer section ── */
+.answer-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+  border-left: 3px solid var(--accent2);
+}
+.answer-section h3 {
+  font-size: 13px;
+  color: var(--accent2);
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.answer-text {
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+/* ── Analysis result: verdict ── */
+.verdict-center {
+  text-align: center;
+  margin-bottom: 18px;
+  padding: 16px;
+}
+.verdict-badge {
+  display: inline-block;
+  padding: 6px 20px;
+  border-radius: 24px;
+  font-size: 16px;
+  font-weight: 700;
+  border: 1px solid;
+}
+.confidence-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+  border: 1px solid;
+}
+
+/* ── Multi-dim impact grid ── */
+.impact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.impact-card {
+  padding: 10px 12px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.impact-card .impact-label {
+  font-weight: 600;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.impact-card .impact-desc { color: var(--text2); font-size: 11px; line-height: 1.4; }
+
+/* ── Signal list ── */
+.signal-list { margin-bottom: 16px; }
+.signal-list .signal-header {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.signal-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.signal-item:last-child { border-bottom: none; }
+.signal-item .signal-text { flex: 1; }
+.signal-item .signal-type {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ── Risk/Watch grid ── */
+.risk-watch-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+.risk-box, .watch-box {
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid;
+}
+.risk-box {
+  background: rgba(217,48,37,.04);
+  border-color: rgba(217,48,37,.15);
+}
+.risk-box .box-title { font-size: 12px; font-weight: 600; color: var(--danger); margin-bottom: 6px; }
+.watch-box {
+  background: rgba(78,205,196,.04);
+  border-color: rgba(78,205,196,.15);
+}
+.watch-box .box-title { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 6px; }
+.risk-box .box-item, .watch-box .box-item {
+  font-size: 11px;
+  color: var(--text);
+  padding: 2px 0;
+}
+
+/* ── K-line result ── */
+.kline-result {
+  max-height: 500px;
+  overflow-y: auto;
+  margin-top: 12px;
+}
+.kline-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.kline-stat-card {
+  padding: 10px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+.kline-stat-card .label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; }
+.kline-stat-card .value { font-size: 16px; font-weight: 700; color: var(--accent); margin-top: 2px; }

@@ -1,0 +1,163 @@
+/* FinRAG — chat.css | Conversation panel */
+
+/* ── Chat section wrapper ── */
+.chat-section {
+  display: flex;
+  gap: 16px;
+  height: 100%;
+  min-height: 480px;
+}
+
+/* ── Session sidebar ── */
+.chat-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding-right: 12px;
+  overflow-y: auto;
+  max-height: 460px;
+}
+.chat-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+/* ── Session list items ── */
+.chat-session-item {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-bottom: 3px;
+  font-size: 12px;
+  color: var(--text2);
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.chat-session-item:hover { background: var(--surface2); color: var(--text); }
+.chat-session-item.active {
+  background: rgba(108,140,255,.1);
+  color: var(--accent);
+  border: 1px solid rgba(108,140,255,.2);
+}
+.chat-session-item .session-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-session-item .session-del {
+  opacity: 0;
+  color: var(--danger);
+  font-size: 14px;
+  padding: 0 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity var(--transition);
+}
+.chat-session-item:hover .session-del { opacity: .5; }
+.chat-session-item .session-del:hover { opacity: 1; }
+.chat-session-type {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+.chat-session-type.news { background: rgba(108,140,255,.12); color: var(--accent); }
+.chat-session-type.topic { background: rgba(78,205,196,.12); color: var(--accent2); }
+
+/* ── Chat main area ── */
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 400px;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.chat-input-row .input { flex: 1; }
+
+/* ── Message bubbles ── */
+.chat-msg {
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.7;
+  animation: msgIn .2s ease;
+}
+@keyframes msgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.chat-msg.user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.chat-msg.assistant {
+  align-self: flex-start;
+  background: var(--surface2);
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+.chat-msg.assistant h2,
+.chat-msg.assistant h3 { font-size: 14px; margin: 10px 0 6px; color: var(--accent2); }
+.chat-msg.assistant strong { color: var(--accent); }
+.chat-msg.assistant code { background: rgba(0,0,0,.3); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+.chat-msg .msg-time { font-size: 10px; opacity: .4; margin-top: 4px; }
+.chat-msg.loading {
+  align-self: flex-start;
+  background: var(--surface2);
+  color: var(--text2);
+}
+.chat-msg.loading .spinner {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+/* ── Learning history ── */
+.history-item {
+  padding: 12px 14px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  margin-bottom: 6px;
+  transition: background var(--transition);
+}
+.history-item:hover { background: var(--surface3); }
+.history-item .history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.history-item .history-topic { font-weight: 600; font-size: 13px; }
+.history-item .history-verdict { font-size: 11px; font-weight: 600; }
+.history-item .history-time { font-size: 10px; color: var(--text3); margin-top: 4px; }
