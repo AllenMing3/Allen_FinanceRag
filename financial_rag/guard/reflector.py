@@ -68,13 +68,17 @@ class HallucinationGuard:
 
     # ================== 公共接口 ==================
 
-    def check(self, answer: str, sources: List[Dict]) -> Dict:
-        """执行六层全量检查（L1-L4 规则层 + L5-L6 LLM层）"""
+    def check(self, answer: str, sources: List[Dict], mode: str = "rag") -> Dict:
+        """执行六层全量检查（L1-L4 规则层 + L5-L6 LLM层）
+
+        Args:
+            mode: "rag" (RAG 查询) 或 "analysis" (深度分析，宽松引用+结构)
+        """
         checks = {}
         checks["L1_source_grounding"] = l1_source_grounding(answer, sources)
         checks["L2_numerical_fidelity"] = l2_numerical_fidelity(answer, sources)
-        checks["L3_citation_integrity"] = l3_citation_integrity(answer, sources)
-        checks["L4_structure_compliance"] = l4_structure_compliance(answer)
+        checks["L3_citation_integrity"] = l3_citation_integrity(answer, sources, mode=mode)
+        checks["L4_structure_compliance"] = l4_structure_compliance(answer, mode=mode)
 
         # L5+L6: LLM 层 — 条件触发
         rule_score = self._compute_rule_score(checks)

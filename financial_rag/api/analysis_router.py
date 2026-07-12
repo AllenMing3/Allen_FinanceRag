@@ -64,7 +64,7 @@ def _run_hallucination_check(result: dict, llm=None, extra_sources: list = None)
 
     try:
         guard = HallucinationGuard(llm=llm)
-        guard_result = guard.check(analysis_text, guard_sources)
+        guard_result = guard.check(analysis_text, guard_sources, mode="analysis")
         result["hallucination"] = {
             "overall_score": round(guard_result["overall_score"], 3),
             "risk": guard_result["risk"],

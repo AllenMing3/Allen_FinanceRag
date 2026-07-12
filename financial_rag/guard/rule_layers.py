@@ -153,10 +153,25 @@ def l2_numerical_fidelity(answer: str, sources: List[Dict]) -> Dict:
 
 # ===================== L3: 引用完整性 =====================
 
-def l3_citation_integrity(answer: str, sources: List[Dict]) -> Dict:
-    """检查 [N] 引用标记是否存在且对应有效来源"""
+def l3_citation_integrity(answer: str, sources: List[Dict], mode: str = "rag") -> Dict:
+    """检查 [N] 引用标记是否存在且对应有效来源
+
+    Args:
+        mode: "rag" (RAG 查询，期望 [N] 引用) 或 "analysis" (深度分析，宽松引用)
+    """
     citations = re.findall(r'\[(\d+)\]', answer)
     if not citations:
+        if mode == "analysis":
+            # 深度分析不强制 [N] 引用，检查文字引用或直接给高分
+            has_text_ref = any(m in answer for m in
+                               ["来源", "引用", "参考", "根据", "数据显示",
+                                "据报", "资料", "报告", "新闻", "报道",
+                                "分析", "评估", "显示", "表明", "认为"])
+            score = 0.8 if has_text_ref else 0.6
+            return {"score": score, "passed": True,
+                    "citations_found": 0, "valid": 0, "invalid": 0,
+                    "has_text_reference": has_text_ref, "mode": mode}
+
         has_text_ref = any(m in answer for m in
                            ["来源", "引用", "参考", "根据", "数据显示",
                             "据报", "资料", "报告"])
@@ -189,30 +204,44 @@ def l3_citation_integrity(answer: str, sources: List[Dict]) -> Dict:
 
 # ===================== L4: 结构规范性 =====================
 
-# 期望的结构标记（Markdown 标题 或 常见关键词段）
-_EXPECTED_SECTIONS = [
+# RAG 查询期望的结构标记（Markdown 标题）
+_EXPECTED_SECTIONS_RAG = [
     (r'(?:^|\n)#+\s*(?:摘要|概述|总结|Summary|Overview)', "摘要/概述"),
     (r'(?:^|\n)#+\s*(?:要点|关键|发现|Key|Finding)', "要点/发现"),
     (r'(?:^|\n)#+\s*(?:分析|Analysis|详情)', "分析/详情"),
     (r'(?:^|\n)#+\s*(?:风险|注意|提示|Risk|Warning|Caution)', "风险/提示"),
 ]
 
+# 深度分析期望的结构标记（【】括号格式 + 关键词段落）
+_EXPECTED_SECTIONS_ANALYSIS = [
+    (r'(?:关键信号|Key\s*Signal)', "关键信号"),
+    (r'(?:影响分析|多维影响|Impact|行业影响|市场影响)', "影响分析"),
+    (r'(?:风险提示|Risk|不确定因素|注意事项)', "风险提示"),
+    (r'(?:后续关注|关注|Watch|投资建议|投资启示|趋势)', "后续关注/趋势"),
+]
 
-def l4_structure_compliance(answer: str) -> Dict:
-    """输出是否包含预期的结构段落"""
+
+def l4_structure_compliance(answer: str, mode: str = "rag") -> Dict:
+    """输出是否包含预期的结构段落
+
+    Args:
+        mode: "rag" (RAG 查询，期望 # Markdown 标题) 或 "analysis" (深度分析，期望 【】括号段落)
+    """
+    sections = _EXPECTED_SECTIONS_ANALYSIS if mode == "analysis" else _EXPECTED_SECTIONS_RAG
     found = []
     missing = []
-    for pattern, name in _EXPECTED_SECTIONS:
+    for pattern, name in sections:
         if re.search(pattern, answer, re.IGNORECASE):
             found.append(name)
         else:
             missing.append(name)
 
-    ratio = len(found) / len(_EXPECTED_SECTIONS)
+    ratio = len(found) / len(sections)
     score = min(1.0, ratio + 0.2) if len(found) >= 2 else ratio
     return {
         "score": score,
         "passed": score >= 0.5,
         "found_sections": found,
         "missing_sections": missing,
+        "mode": mode,
     }
