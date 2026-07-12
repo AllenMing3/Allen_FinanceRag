@@ -162,3 +162,44 @@
   white-space: nowrap;
   color: var(--text);
 }
+
+/* ── Upload zone ── */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 28px 20px;
+  text-align: center;
+  background: var(--surface2);
+  transition: border-color var(--transition), background var(--transition);
+  cursor: pointer;
+}
+.upload-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(108,140,255,.06);
+}
+.upload-hint { font-size: 13px; color: var(--text2); }
+.upload-formats { font-size: 11px; color: var(--text3); margin-top: 6px; }
+.upload-link {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.upload-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.upload-file .uf-name { flex: 1; color: var(--text); }
+.upload-file .uf-size { color: var(--text3); font-size: 11px; }
+.upload-file .uf-remove {
+  cursor: pointer;
+  color: var(--text3);
+  font-size: 14px;
+  transition: color var(--transition);
+}
+.upload-file .uf-remove:hover { color: var(--danger); }

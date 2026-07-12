@@ -58,6 +58,54 @@ export async function runKBQuery() {
       h += `<div class="answer-section"><h3>💡 回答</h3><div class="answer-text">${escHtml(d.answer)}</div></div>`;
     }
 
+    // Quality scorecard: overall + hallucination + fill stats
+    if (d.scorecard || d.hallucination || d.fill_stats) {
+      const sc = d.scorecard || {};
+      const hal = d.hallucination || {};
+      const fs = d.fill_stats || {};
+      const ovPct = ((sc.overall_score || 0) * 100).toFixed(0);
+      const grade = sc.grade || '-';
+      const gradeColors = { A: 'var(--ok)', B: '#2563eb', C: '#f59e0b', D: '#f97316', F: 'var(--danger)' };
+      const gradeColor = gradeColors[grade] || 'var(--text2)';
+
+      const riskMap = { low: ['低风险', 'var(--ok)'], medium: ['中风险', '#f59e0b'], high: ['高风险', 'var(--danger)'] };
+      const [riskLabel, riskColor] = riskMap[hal.risk] || ['—', 'var(--text3)'];
+      const halPct = ((hal.overall_score || 0) * 100).toFixed(0);
+
+      h += '<div class="quality-scorecard">';
+      // Top row: overall + hallucination + fill
+      h += '<div class="qs-top">';
+      h += `<div class="qs-cell"><div class="qs-label">综合评分</div><div class="qs-value" style="color:${gradeColor}">${grade} <span style="font-size:13px;color:var(--text2)">${ovPct}%</span></div></div>`;
+      h += `<div class="qs-cell"><div class="qs-label">可信度</div><div class="qs-value" style="color:${riskColor}">${riskLabel} <span style="font-size:13px;color:var(--text2)">${halPct}%</span></div></div>`;
+      if (fs.filled_slots != null) {
+        const slotPct = (fs.filled_slots / Math.max(fs.total_slots || 1, 1) * 100).toFixed(0);
+        h += `<div class="qs-cell"><div class="qs-label">槽位填充</div><div class="qs-value">${fs.filled_slots}/${fs.total_slots} <span style="font-size:13px;color:var(--text2)">${slotPct}%</span></div></div>`;
+      }
+      h += '</div>';
+
+      // Layer scores (hallucination check detail)
+      if (hal.layers && Object.keys(hal.layers).length) {
+        const layerNames = {
+          L1_source_grounding: '来源锚定', L2_numerical_fidelity: '数值一致',
+          L3_citation_integrity: '引用完整', L4_structure_compliance: '结构规范',
+          L5_llm_critique: 'LLM质疑', L6_llm_assist: 'LLM协助',
+        };
+        h += '<div class="qs-layers">';
+        for (const [key, val] of Object.entries(hal.layers)) {
+          const label = layerNames[key] || key;
+          const pct = ((val.score || 0) * 100).toFixed(0);
+          const color = scoreColor(val.score || 0);
+          h += `<div class="qs-layer">
+            <div class="qs-layer-name">${label}</div>
+            <div class="qs-layer-bar"><div class="qs-layer-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+            <div class="qs-layer-score" style="color:${color}">${pct}%</div>
+          </div>`;
+        }
+        h += '</div>';
+      }
+      h += '</div>';
+    }
+
     // News context
     if (d.news_context && d.news_context.length) {
       h += `<div class="result-section">

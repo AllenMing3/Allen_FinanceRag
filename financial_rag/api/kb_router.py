@@ -183,6 +183,38 @@ async def api_kb_query(req: QueryRequest):
             "parallel_gain": round(fill_stats_obj.parallel_gain * 100),
             "elapsed_ms": round(fill_elapsed),
         }
+        # Record LLM fill quality in scorecard
+        card.record_llm(
+            score=fill_stats_obj.filled_slots / max(fill_stats_obj.total_slots, 1),
+            token_count=fill_stats_obj.total_tokens,
+            elapsed_ms=fill_elapsed,
+        )
+
+    # Hallucination guard: L1-L4 rule layers (L5-L6 only if LLM available + rule score low)
+    hallucination = None
+    if answer and retrieval:
+        try:
+            guard_llm = _state.get("llm") if _state.get("has_key") else None
+            guard = HallucinationGuard(llm=guard_llm)
+            guard_sources = [{"text": it["text"]} for it in retrieval]
+            guard_result = guard.check(answer, guard_sources)
+            card.record_hallucination(
+                overall_score=guard_result["overall_score"],
+                layer_scores={k: v.get("score", 0) for k, v in guard_result.get("checks", {}).items()},
+                risk=guard_result["risk"],
+            )
+            hallucination = {
+                "overall_score": round(guard_result["overall_score"], 3),
+                "risk": guard_result["risk"],
+                "passed": guard_result["passed"],
+                "layers": {
+                    k: {"score": round(v.get("score", 0), 3)}
+                    for k, v in guard_result.get("checks", {}).items()
+                    if k != "overall"
+                },
+            }
+        except Exception as e:
+            logger.warning(f"HallucinationGuard check failed: {e}")
 
     # Scorecard
     sc = {
@@ -213,6 +245,7 @@ async def api_kb_query(req: QueryRequest):
         "retrieval": retrieval,
         "news_context": news_context,
         "fill_stats": fill_stats,
+        "hallucination": hallucination,
         "scorecard": sc,
     }
 

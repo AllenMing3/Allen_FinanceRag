@@ -106,9 +106,15 @@ class VectorEngine:
             logger.warning(f"Chroma 初始化失败，降级为 Jaccard: {e}")
             self._chroma_client = None
 
-    def _doc_id(self, text: str) -> str:
-        """生成稳定的文档 ID (基于内容 hash，位置无关)"""
-        return hashlib.md5(text[:200].encode("utf-8", errors="replace")).hexdigest()[:16]
+    def _doc_id(self, doc_or_text) -> str:
+        """Generate stable Chroma ID from text + source (aligned with make_doc_id)."""
+        if isinstance(doc_or_text, dict):
+            text = doc_or_text.get("text", "")[:200]
+            source = doc_or_text.get("meta", {}).get("source", "unknown")
+            key = f"{source}|{text}"
+        else:
+            key = doc_or_text[:200]
+        return hashlib.md5(key.encode("utf-8", errors="replace")).hexdigest()[:16]
 
     # ===================== 索引操作 =====================
 
@@ -136,10 +142,23 @@ class VectorEngine:
             if all_ids:
                 self._collection.delete(ids=all_ids)
 
-        # 批量 upsert
+        # 批量 upsert (dedup by ID within batch)
         texts = [d.get("text", "") for d in documents]
-        ids = [self._doc_id(t) for t in texts]
+        ids = [self._doc_id(d) for d in documents]
         metas = [_flatten_meta(d.get("meta", {})) for d in documents]
+
+        # Deduplicate: keep last occurrence if same ID appears multiple times
+        seen = {}
+        for i, cid in enumerate(ids):
+            seen[cid] = i
+        keep = sorted(seen.values())
+        if len(keep) < len(ids):
+            logger.info(f"Chroma: dedup {len(ids)} → {len(keep)} docs (removed {len(ids) - len(keep)} duplicate IDs)")
+            ids = [ids[i] for i in keep]
+            texts = [texts[i] for i in keep]
+            metas = [metas[i] for i in keep]
+            if embeddings:
+                embeddings = [embeddings[i] for i in keep]
 
         kwargs = {"ids": ids, "documents": texts, "metadatas": metas}
         if embeddings:
@@ -163,9 +182,22 @@ class VectorEngine:
         if self._collection is None or not documents:
             return
 
-        ids = [self._doc_id(d.get("text", "")) for d in documents]
+        ids = [self._doc_id(d) for d in documents]
         texts = [d.get("text", "") for d in documents]
         metas = [_flatten_meta(d.get("meta", {})) for d in documents]
+
+        # Deduplicate within batch
+        seen = {}
+        for i, cid in enumerate(ids):
+            seen[cid] = i
+        keep = sorted(seen.values())
+        if len(keep) < len(ids):
+            logger.info(f"Chroma add: dedup {len(ids)} → {len(keep)} docs")
+            ids = [ids[i] for i in keep]
+            texts = [texts[i] for i in keep]
+            metas = [metas[i] for i in keep]
+            if embeddings:
+                embeddings = [embeddings[i] for i in keep]
 
         kwargs = {"ids": ids, "documents": texts, "metadatas": metas}
         if embeddings:
@@ -185,7 +217,7 @@ class VectorEngine:
         if self._collection is None or not documents:
             return
 
-        ids = [self._doc_id(d.get("text", "")) for d in documents]
+        ids = [self._doc_id(d) for d in documents]
         try:
             self._collection.delete(ids=ids)
             logger.info(f"Chroma: 删除 {len(ids)} 篇文档")

@@ -180,6 +180,90 @@ export async function ingestCustomDir() {
   } catch (e) { toast('导入失败: ' + e.message, 'error'); }
 }
 
+// ── File upload ──
+const _uploadFiles = [];
+
+export function initUploadZone() {
+  const zone = document.getElementById('uploadZone');
+  const input = document.getElementById('uploadInput');
+  if (!zone || !input) return;
+
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    _addUploadFiles(e.dataTransfer.files);
+  });
+  input.addEventListener('change', () => {
+    if (input.files.length) _addUploadFiles(input.files);
+    input.value = '';
+  });
+}
+
+function _addUploadFiles(fileList) {
+  const ALLOWED = ['.pdf', '.png', '.jpg', '.jpeg', '.webp'];
+  for (const f of fileList) {
+    const ext = '.' + f.name.split('.').pop().toLowerCase();
+    if (!ALLOWED.includes(ext)) { toast(`跳过 ${f.name}：不支持的类型`, 'warning'); continue; }
+    if (_uploadFiles.some(x => x.name === f.name)) continue;
+    _uploadFiles.push(f);
+  }
+  _renderUploadList();
+}
+
+function _renderUploadList() {
+  const el = document.getElementById('upload-file-list');
+  if (!el) return;
+  if (_uploadFiles.length === 0) { el.innerHTML = ''; return; }
+  let h = '';
+  _uploadFiles.forEach((f, i) => {
+    const sizeKB = (f.size / 1024).toFixed(1);
+    h += `<div class="upload-file">
+      <span class="uf-name">${escHtml(f.name)}</span>
+      <span class="uf-size">${sizeKB} KB</span>
+      <span class="uf-remove" onclick="window._removeUploadFile(${i})">✕</span>
+    </div>`;
+  });
+  h += `<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+    <button class="btn btn-primary btn-sm" onclick="window._doUpload()">📥 上传并导入</button>
+    <span style="font-size:11px;color:var(--text3)">${_uploadFiles.length} 个文件待上传</span>
+  </div>`;
+  el.innerHTML = h;
+}
+
+window._removeUploadFile = function (idx) {
+  _uploadFiles.splice(idx, 1);
+  _renderUploadList();
+};
+
+window._doUpload = async function () {
+  if (_uploadFiles.length === 0) { toast('请先选择文件', 'warning'); return; }
+  const resultEl = document.getElementById('upload-result');
+  if (resultEl) resultEl.innerHTML = '<div style="margin-top:8px;color:var(--text3)">解析中，请稍候...</div>';
+  const formData = new FormData();
+  _uploadFiles.forEach(f => formData.append('files', f));
+  try {
+    const resp = await fetch('/api/ingest/upload', { method: 'POST', body: formData });
+    if (!resp.ok) {
+      const e = await resp.json().catch(() => ({ detail: resp.statusText }));
+      throw new Error(e.detail || resp.statusText);
+    }
+    const d = await resp.json();
+    if (resultEl) resultEl.innerHTML = `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> ${escHtml(d.message)}</div>`;
+    updateKBStatus(d.total || 0);
+    refreshKBStatus();
+    refreshKBManager();
+    _uploadFiles.length = 0;
+    _renderUploadList();
+    toast(d.message, 'success');
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`;
+    toast('上传失败: ' + e.message, 'error');
+  }
+};
+
 // ── News fetch ──
 
 export async function ingestNews() {

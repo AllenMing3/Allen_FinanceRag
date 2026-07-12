@@ -27,6 +27,7 @@ from financial_rag.api.models import (
     ChatFollowupRequest, CreateSessionRequest,
 )
 from financial_rag.api.kb_router import _save_analysis_to_kb
+from financial_rag.guard.reflector import HallucinationGuard
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,46 @@ router = APIRouter()
 _config_cache: dict = {}
 _config_cache_time: float = 0.0
 _CONFIG_TTL = 60.0  # seconds
+
+
+# ===================== Internal helpers =====================
+
+
+def _run_hallucination_check(result: dict, llm=None, extra_sources: list = None):
+    """Run HallucinationGuard on analysis result and inject 'hallucination' key.
+
+    Uses kb_sources + extra_sources (news text / topic text) as grounding material.
+    Silently skips if no analysis text or guard fails.
+    """
+    analysis_text = result.get("analysis", "")
+    if not analysis_text:
+        return
+
+    guard_sources = []
+    if extra_sources:
+        guard_sources.extend(extra_sources)
+    for kb in result.get("kb_sources", []):
+        if kb.get("text"):
+            guard_sources.append({"text": kb["text"]})
+
+    if not guard_sources:
+        return
+
+    try:
+        guard = HallucinationGuard(llm=llm)
+        guard_result = guard.check(analysis_text, guard_sources)
+        result["hallucination"] = {
+            "overall_score": round(guard_result["overall_score"], 3),
+            "risk": guard_result["risk"],
+            "passed": guard_result["passed"],
+            "layers": {
+                k: {"score": round(v.get("score", 0), 3)}
+                for k, v in guard_result.get("checks", {}).items()
+                if k != "overall"
+            },
+        }
+    except Exception as e:
+        logger.warning(f"HallucinationGuard check failed: {e}")
 
 
 # ===================== Endpoints =====================
@@ -65,6 +106,11 @@ async def api_config():
         reason = kb_err["error"] if kb_err else "索引构建失败"
         kb_status = {"state": "failed", "reason": reason}
 
+    # Count tools and agents
+    registry = _state.get("registry")
+    tool_count = len(registry) if registry else 0
+    agent_count = 4  # Coordinator, Ingestion, Analysis, Scoring
+
     _config_cache = {
         "llm_model": cfg.llm.model,
         "embedding_model": cfg.llm.embedding_model,
@@ -74,6 +120,8 @@ async def api_config():
         "mock_mode": is_mock_enabled(),
         "kb_status": kb_status,
         "init_errors": init_errors,
+        "tool_count": tool_count,
+        "agent_count": agent_count,
     }
     _config_cache_time = now
     return _config_cache
@@ -101,6 +149,10 @@ async def api_analyze_news(req: AnalyzeNewsRequest):
                 f"analysis_type={type(result.get('analysis')).__name__}, "
                 f"entities_keys={list(result.get('entities', {}).keys())}, "
                 f"metrics_keys={list(result.get('metrics', {}).keys())}")
+
+    # Hallucination guard on the analysis output
+    _run_hallucination_check(result, llm=_state.get("llm") if _state.get("has_key") else None,
+                               extra_sources=[{"text": text}])
 
     # Auto-create conversation session
     cm = _state.get("conversation_manager")
@@ -168,6 +220,14 @@ async def api_analyze_topic(req: AnalyzeTopicRequest):
     )
     logger.info(f"[API] /analyze/topic: assessment={result.get('assessment')}, "
                 f"news_count={result.get('news_count')}, kb_sources={len(result.get('kb_sources', []))}")
+
+    # Hallucination guard on the topic research output
+    topic_news_text = "\n".join(
+        f"{n.get('title', '')} — {n.get('content', '')}"
+        for n in result.get("news", [])[:5]
+    )
+    _run_hallucination_check(result, llm=_state.get("llm") if _state.get("has_key") else None,
+                               extra_sources=[{"text": topic_news_text}] if topic_news_text else [])
 
     # Auto-create conversation session
     cm = _state.get("conversation_manager")

@@ -4,7 +4,7 @@ import { apiGet } from './modules/api.js';
 import { initCollapsibleCards } from './modules/ui.js';
 import { renderHealthBanners, loadOverviewStats, refreshKBStatus } from './modules/overview.js';
 import { refreshKBManager, buildKB, clearKB, searchKBKeyword, deleteKBKeyword, renderDocList } from './modules/kb.js';
-import { loadDirBrowser, browseCustomDir, ingestCustomDir, ingestNews } from './modules/ingest.js';
+import { loadDirBrowser, browseCustomDir, ingestCustomDir, ingestNews, initUploadZone } from './modules/ingest.js';
 import { runKBQuery, runKlineTool } from './modules/query.js';
 import { analyzeNews, analyzeTopic, refreshLearningHistory } from './modules/analyze.js';
 import { loadChatSessions, sendFollowup } from './modules/chat.js';
@@ -62,6 +62,7 @@ apiGet('/api/config').then(d => {
   refreshKBStatus();
   refreshKBManager();
   loadDirBrowser();
+  initUploadZone();
   renderDocList([]);
 }).catch(e => {
   console.error('[Init] Config load failed:', e);

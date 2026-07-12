@@ -3,6 +3,37 @@ import { api, apiGet, showLoading, hideLoading } from './api.js';
 import { toast, escHtml, scoreColor } from './ui.js';
 import { verdictBadge, confidenceBadge, directionArrow, severityBar, sentimentPill } from './render.js';
 
+// ── Shared: hallucination scorecard ──
+
+function renderHallucinationCard(hal) {
+  if (!hal) return '';
+  const pct = ((hal.overall_score || 0) * 100).toFixed(0);
+  const riskMap = { low: ['低风险', 'var(--ok)'], medium: ['中风险', '#f59e0b'], high: ['高风险', 'var(--danger)'] };
+  const [riskLabel, riskColor] = riskMap[hal.risk] || ['—', 'var(--text3)'];
+  const layerNames = {
+    L1_source_grounding: '来源锚定', L2_numerical_fidelity: '数值一致',
+    L3_citation_integrity: '引用完整', L4_structure_compliance: '结构规范',
+    L5_llm_critique: 'LLM质疑', L6_llm_assist: 'LLM协助',
+  };
+  let h = '<div class="quality-scorecard" style="margin-bottom:14px">';
+  h += `<div class="qs-top" style="grid-template-columns:1fr 1fr">
+    <div class="qs-cell"><div class="qs-label">可信度</div><div class="qs-value" style="color:${riskColor}">${riskLabel} <span style="font-size:13px;color:var(--text2)">${pct}%</span></div></div>
+    <div class="qs-cell"><div class="qs-label">幻觉风险</div><div class="qs-value" style="font-size:14px;color:${riskColor}">${hal.passed ? '✅ 通过' : '❌ 未通过'}</div></div>
+  </div>`;
+  if (hal.layers && Object.keys(hal.layers).length) {
+    h += '<div class="qs-layers">';
+    for (const [key, val] of Object.entries(hal.layers)) {
+      const label = layerNames[key] || key;
+      const lp = ((val.score || 0) * 100).toFixed(0);
+      const c = scoreColor(val.score || 0);
+      h += `<div class="qs-layer"><div class="qs-layer-name">${label}</div><div class="qs-layer-bar"><div class="qs-layer-bar-fill" style="width:${lp}%;background:${c}"></div></div><div class="qs-layer-score" style="color:${c}">${lp}%</div></div>`;
+    }
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
 // ── News analysis ──
 
 export async function analyzeNews() {
@@ -19,6 +50,7 @@ export async function analyzeNews() {
     // Verdict
     h += `<div class="verdict-center">${verdictBadge(d.assessment)}${confidenceBadge(d.confidence)}</div>`;
     if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:8px">💾 分析结论已存入知识库</div>`;
+    h += renderHallucinationCard(d.hallucination);
 
     // Multi-dim impact
     if (s.impact) {
@@ -119,6 +151,7 @@ export async function analyzeTopic() {
     let h = '<div style="margin-top:12px">';
     h += `<div class="verdict-center">${verdictBadge(d.assessment)}${confidenceBadge(d.confidence)}</div>`;
     if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:8px">💾 研判结论已存入知识库</div>`;
+    h += renderHallucinationCard(d.hallucination);
 
     // Stats
     const trendDir = s.sentiment_trend || 'mixed';

@@ -211,6 +211,17 @@
       </div>
 
       <div class="card" data-collapsible>
+        <h3><span class="card-icon">📤</span> 文件上传 <span class="tag tag-info" style="font-size:10px;margin-left:4px">PDF / 图片</span></h3>
+        <p class="card-desc">直接上传 PDF 或图片文件，系统自动解析内容并导入知识库</p>
+        <div class="upload-zone" id="uploadZone">
+          <div class="upload-hint">📎 拖拽文件到这里，或 <label class="upload-link">选择文件<input type="file" id="uploadInput" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" hidden></label></div>
+          <div class="upload-formats">支持: PDF, PNG, JPG, JPEG, WebP</div>
+        </div>
+        <div id="upload-file-list" style="margin-top:8px"></div>
+        <div id="upload-result"></div>
+      </div>
+
+      <div class="card" data-collapsible>
         <h3><span class="card-icon">📰</span> 新闻抓取 <span class="tag tag-warn" style="font-size:10px;margin-left:4px">→ 元数据</span></h3>
         <p class="card-desc">从同花顺 / 新浪 / 东方财富拉取实时新闻标题，存入元数据供查询时作为上下文补充</p>
         <div class="form-row">

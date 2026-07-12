@@ -5,16 +5,19 @@ Endpoints:
 - GET  /api/file/preview
 - GET  /api/directories
 - POST /api/ingest/files
+- POST /api/ingest/upload
 - GET  /api/ingest/progress
 - POST /api/ingest/news
 """
 import asyncio
 import os
+import shutil
+import tempfile
 import time
 import logging
 import threading
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from financial_rag.api.app_state import (
     _state, _state_lock, _ensure_init, _ingest_progress,
@@ -400,6 +403,97 @@ def _run_ingest_analysis(raw_docs):
 async def api_ingest_progress():
     """Poll background ingestion progress."""
     return dict(_ingest_progress)
+
+
+@router.post("/api/ingest/upload")
+async def api_ingest_upload(files: list[UploadFile] = File(...)):
+    """Upload PDF/image files directly for parsing and ingestion.
+
+    Accepted types: .pdf, .png, .jpg, .jpeg, .webp
+    """
+    await asyncio.to_thread(_ensure_init)
+
+    if _ingest_progress.get("running"):
+        raise HTTPException(409, f"导入正在进行中: {_ingest_progress['current']}/{_ingest_progress['total']}")
+
+    ALLOWED_EXTS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
+    upload_dir = tempfile.mkdtemp(prefix="finrag_upload_")
+    saved = []
+
+    try:
+        # Phase 1: Save uploaded files to temp dir
+        for f in files:
+            ext = os.path.splitext(f.filename or "")[1].lower()
+            if ext not in ALLOWED_EXTS:
+                raise HTTPException(400, f"不支持的文件类型: {f.filename}（支持 {', '.join(ALLOWED_EXTS)}）")
+            dest = os.path.join(upload_dir, f.filename)
+            with open(dest, "wb") as out:
+                shutil.copyfileobj(f.file, out)
+            saved.append((f.filename, dest, ext))
+
+        logger.info(f"[API] /ingest/upload: {len(saved)} files uploaded")
+
+        # Phase 2: Parse files
+        raw_docs = []
+        llm = _state.get("llm")
+        for fname, fpath, ext in saved:
+            try:
+                if ext == ".pdf":
+                    text = _parse_pdf_text(fpath)
+                    if text:
+                        raw_docs.append({"text": text, "meta": {
+                            "source": fname, "file": fpath, "parse_type": "pdf"
+                        }})
+                elif ext in (".png", ".jpg", ".jpeg", ".webp"):
+                    text = _describe_image(llm, fpath)
+                    if text:
+                        raw_docs.append({"text": text, "meta": {
+                            "source": fname, "file": fpath, "parse_type": "image"
+                        }})
+            except Exception as e:
+                logger.warning(f"[Upload] Skip {fname}: {e}")
+
+        if not raw_docs:
+            return {"loaded": 0, "message": "所有文件解析为空", "total": len(_state.get("kb_docs", []))}
+
+        # LightRAG graph insertion
+        lightrag = _state.get("lightrag")
+        if lightrag:
+            try:
+                texts = [d["text"] for d in raw_docs]
+                metas = [d.get("meta", {}) for d in raw_docs]
+                lightrag.insert_texts(texts, metas)
+                logger.info(f"[Upload] {len(raw_docs)} docs inserted into LightRAG")
+            except Exception as e:
+                logger.warning(f"[Upload] LightRAG insert failed: {e}")
+
+        # Phase 3: Store in KB
+        _assign_doc_ids(raw_docs)
+        with _state_lock:
+            existing = _state.get("kb_docs", [])
+            new_only = _dedup_docs(existing, raw_docs)
+            skipped = len(raw_docs) - len(new_only)
+            _state["kb_docs"] = existing + new_only
+            _save_kb(_state["kb_docs"])
+            if _state.get("kb_built") and new_only:
+                try:
+                    _state["retriever"].add(new_only, use_chunker=True)
+                except Exception as e:
+                    logger.warning(f"[Upload] Incremental index failed: {e}")
+
+        actual_loaded = len(new_only)
+        return {
+            "loaded": actual_loaded,
+            "skipped_duplicates": skipped,
+            "total": len(_state["kb_docs"]),
+            "message": f"已导入 {actual_loaded} 篇" + (f"，跳过 {skipped} 篇重复" if skipped else ""),
+        }
+    finally:
+        # Cleanup temp files
+        try:
+            shutil.rmtree(upload_dir, ignore_errors=True)
+        except Exception:
+            pass
 
 
 @router.post("/api/ingest/news")
