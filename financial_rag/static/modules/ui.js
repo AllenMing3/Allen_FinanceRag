@@ -114,3 +114,76 @@ export function progressBar(pct, cls = '') {
     <div class="progress-fill ${cls}" style="width:${Math.min(100, Math.max(0, pct))}%"></div>
   </div>`;
 }
+
+/**
+ * Initialize collapsible cards and sections
+ */
+export function initCollapsibleCards() {
+  const _ck = 'finrag-collapse';
+  const _saved = (() => { try { return JSON.parse(localStorage.getItem(_ck) || '{}'); } catch { return {}; } })();
+  const _save = (s) => { try { localStorage.setItem(_ck, JSON.stringify(s)); } catch {} };
+
+  // ── Section-level collapse (click section divider) ──
+  document.querySelectorAll('.section-divider[data-collapsible]').forEach(divider => {
+    const cards = [];
+    let el = divider.nextElementSibling;
+    while (el && !el.classList.contains('section-divider') && !el.classList.contains('panel-header')) {
+      if (el.classList.contains('card')) cards.push(el);
+      el = el.nextElementSibling;
+    }
+    if (!cards.length) return;
+
+    const id = 'sec-' + (divider.querySelector('.sd-title')?.textContent || '').trim();
+    const icon = document.createElement('span');
+    icon.className = 'collapse-icon';
+    icon.textContent = '▾';
+    divider.appendChild(icon);
+
+    const defaultCol = divider.dataset.defaultCollapsed === 'true';
+    let col = _saved[id] ?? defaultCol;
+    const apply = () => {
+      divider.classList.toggle('section-collapsed', col);
+      cards.forEach(c => c.style.display = col ? 'none' : '');
+      _saved[id] = col; _save(_saved);
+    };
+    if (col) apply();
+    divider.addEventListener('click', (e) => {
+      if (e.target.closest('button') || e.target.closest('.btn')) return;
+      col = !col; apply();
+    });
+  });
+
+  // ── Card-level collapse (click card h3 or card-header) ──
+  document.querySelectorAll('.card[data-collapsible]').forEach(card => {
+    const h3 = card.querySelector('h3');
+    if (!h3) return;
+    const cardHeader = h3.closest('.card-header');
+    const toggle = cardHeader || h3;
+
+    // Wrap everything except the toggle element in card-body
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    const ch = Array.from(card.children).filter(c => c !== toggle);
+    ch.forEach(c => body.appendChild(c));
+    card.appendChild(body);
+
+    // Add chevron
+    const icon = document.createElement('span');
+    icon.className = 'collapse-icon';
+    icon.textContent = '▾';
+    toggle.appendChild(icon);
+
+    const id = 'card-' + (h3.textContent || '').trim().substring(0, 30);
+    const defaultCol = card.dataset.defaultCollapsed === 'true';
+    let col = _saved[id] ?? defaultCol;
+    const apply = () => {
+      card.classList.toggle('card-collapsed', col);
+      _saved[id] = col; _save(_saved);
+    };
+    if (col) apply();
+    toggle.addEventListener('click', (e) => {
+      if (e.target.closest('button') || e.target.closest('.btn')) return;
+      col = !col; apply();
+    });
+  });
+}

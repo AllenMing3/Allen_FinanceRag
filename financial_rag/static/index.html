@@ -106,8 +106,11 @@
           <div class="agent-arrow">→</div>
           <div class="agent-card">
             <div class="agent-icon">📥</div><div class="agent-name">Ingestion</div>
-            <div class="agent-role">数据加载 + 预处理</div>
-            <div class="agent-tools"><span class="tool-tag">extract_document_metadata</span><span class="tool-tag">detect_document_type</span></div>
+            <div class="agent-role">数据加载 + 预处理 + 多格式解析</div>
+            <div class="agent-tools">
+              <span class="tool-tag">extract_document_metadata</span><span class="tool-tag">detect_document_type</span>
+              <span class="tool-tag">parse_pdf_file</span><span class="tool-tag">describe_image_file</span>
+            </div>
           </div>
           <div class="agent-arrow">→</div>
           <div class="agent-card" style="border-color:#7c3aed">
@@ -115,8 +118,10 @@
             <div class="agent-role">统一分析引擎 (按 intent 路由)</div>
             <div class="agent-tools">
               <div class="intent-chain"><span class="ic-label">kline:</span> fetch_kline_report → analyze_kline → generate_kline_analysis</div>
-              <div class="intent-chain"><span class="ic-label">event:</span> fetch_date_events → assess_event_impact</div>
-              <div class="intent-chain"><span class="ic-label">news:</span> analyze_news_deep (多维影响 + 关键信号)</div>
+              <div class="intent-chain"><span class="ic-label">event:</span> fetch_date_events → assess_event_impact → fetch_kline_context</div>
+              <div class="intent-chain"><span class="ic-label">news:</span> analyze_news_deep (多维影响 + 关键信号 + 风险)</div>
+              <div class="intent-chain"><span class="ic-label">topic:</span> analyze_topic_deep (子话题聚类 + 综合研判)</div>
+              <div class="intent-chain"><span class="ic-label">graph:</span> query_knowledge_graph → get_graph_stats (LightRAG)</div>
               <div class="intent-chain"><span class="ic-label">general:</span> extract_metrics → extract_entities → synthesize_report</div>
             </div>
           </div>
@@ -183,9 +188,9 @@
         <p>导入文件到知识库 · 抓取新闻元数据 · 构建检索索引</p>
       </div>
 
-      <div class="section-divider"><span class="sd-icon">📥</span><span class="sd-title">数据导入</span><span class="sd-desc">将文件或新闻加载到系统</span></div>
+      <div class="section-divider" data-collapsible><span class="sd-icon">📥</span><span class="sd-title">数据导入</span><span class="sd-desc">将文件或新闻加载到系统</span></div>
 
-      <div class="card">
+      <div class="card" data-collapsible>
         <h3><span class="card-icon">📁</span> 文件导入 <span class="tag tag-ok" style="font-size:10px;margin-left:4px">→ 知识库</span></h3>
         <p class="card-desc">导入的文件经分析后进入知识库，用于后续 RAG 检索</p>
         <div class="mode-toggle">
@@ -205,7 +210,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" data-collapsible>
         <h3><span class="card-icon">📰</span> 新闻抓取 <span class="tag tag-warn" style="font-size:10px;margin-left:4px">→ 元数据</span></h3>
         <p class="card-desc">从同花顺 / 新浪 / 东方财富拉取实时新闻标题，存入元数据供查询时作为上下文补充</p>
         <div class="form-row">
@@ -218,9 +223,9 @@
         <div id="ingest-news-result"></div>
       </div>
 
-      <div class="section-divider"><span class="sd-icon">📚</span><span class="sd-title">索引与管理</span><span class="sd-desc">构建检索索引 · 管理知识库内容</span></div>
+      <div class="section-divider" data-collapsible><span class="sd-icon">📚</span><span class="sd-title">索引与管理</span><span class="sd-desc">构建检索索引 · 管理知识库内容</span></div>
 
-      <div class="card" id="kbDashboard" style="border-color:rgba(78,205,196,.2)">
+      <div class="card" id="kbDashboard" data-collapsible style="border-color:rgba(78,205,196,.2)">
         <div class="card-header"><h3 style="margin:0"><span class="card-icon">📚</span> KB Status</h3><button class="btn btn-secondary btn-xs" onclick="window._refreshKBStatus()">刷新</button></div>
         <div class="stats" id="kbDashboardStats">
           <div class="stat">文档 <strong id="kbDashDocs">0</strong></div>
@@ -230,7 +235,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" data-collapsible>
         <h3><span class="card-icon">🏗️</span> 知识库构建 <span class="tag tag-info" style="font-size:10px">BM25 + Embedding + RRF</span></h3>
         <p class="card-desc">将已摄取的文档进行索引构建，支持混合检索</p>
         <div class="form-row">
@@ -241,7 +246,7 @@
         <div id="build-result"></div>
       </div>
 
-      <div class="card">
+      <div class="card" data-collapsible>
         <div class="card-header"><h3 style="margin:0"><span class="card-icon">🗂️</span> 知识库管理</h3><button class="btn btn-secondary btn-xs" onclick="window._refreshKBManager()">刷新</button></div>
         <p class="card-desc">按来源分组查看和删除知识库文档</p>
         <div class="form-row">
@@ -253,7 +258,7 @@
         <div id="kbSourceList"></div>
       </div>
 
-      <div class="card">
+      <div class="card" data-collapsible data-default-collapsed="true">
         <h3><span class="card-icon">📚</span> 知识库内容 <span class="tag tag-info" id="kbDocCount">0 篇文档</span></h3>
         <div class="doc-list" id="docList"></div>
       </div>
@@ -298,9 +303,9 @@
         <p>粘贴新闻全文或输入话题，获取结构化研判 · 追问对话 · 学习积累</p>
       </div>
 
-      <div class="section-divider"><span class="sd-icon">📥</span><span class="sd-title">输入分析</span><span class="sd-desc">粘贴新闻全文或输入话题</span></div>
+      <div class="section-divider" data-collapsible><span class="sd-icon">📥</span><span class="sd-title">输入分析</span><span class="sd-desc">粘贴新闻全文或输入话题</span></div>
 
-      <div class="card">
+      <div class="card" data-collapsible>
         <h3><span class="card-icon">📰</span> 新闻解读 <span class="tag tag-info" style="font-size:10px">全文 → 结构化解析 → 利好利空</span></h3>
         <p class="card-desc">粘贴新闻全文，系统自动抽取指标实体、结合知识库上下文，给出利好/利空/中性研判</p>
         <textarea class="input" id="analyze-news-text" rows="5" placeholder="粘贴新闻全文..." style="width:100%;min-height:100px"></textarea>
@@ -312,7 +317,7 @@
         <div id="analyze-news-result"></div>
       </div>
 
-      <div class="card">
+      <div class="card" data-collapsible>
         <h3><span class="card-icon">🔍</span> 话题调研 <span class="tag tag-info" style="font-size:10px">话题 → 抓新闻 → 综合研判</span></h3>
         <p class="card-desc">输入话题，系统自动抓取新闻、查询知识库、综合研判</p>
         <div class="form-row">
@@ -341,7 +346,7 @@
         </div>
       </div>
 
-      <div class="section-divider"><span class="sd-icon">📚</span><span class="sd-title">学习积累</span><span class="sd-desc">系统从分析中自动积累的知识</span></div>
+      <div class="section-divider" data-collapsible data-default-collapsed="true"><span class="sd-icon">📚</span><span class="sd-title">学习积累</span><span class="sd-desc">系统从分析中自动积累的知识</span></div>
       <div class="card">
         <div class="card-header"><h3 style="margin:0"><span class="card-icon">📖</span> 学习历史</h3><button class="btn btn-secondary btn-xs" onclick="window._refreshLearningHistory()">刷新</button></div>
         <div id="learningHistoryList"></div>

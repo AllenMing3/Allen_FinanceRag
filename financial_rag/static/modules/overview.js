@@ -100,17 +100,18 @@ export function renderHealthBanners(kbStatus, initErrors) {
  */
 export async function loadOverviewStats() {
   try {
+    const setTxt = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
     const [cfg, kb] = await Promise.all([
       apiGet('/api/config').catch(() => null),
       apiGet('/api/kb/status').catch(() => null),
     ]);
     if (cfg) {
-      const el = document.getElementById('statModel');
-      if (el) el.textContent = (cfg.llm_model || '-').replace('qwen-', 'QW-');
+      setTxt('statModel', (cfg.llm_model || '-').replace('qwen-', 'QW-'));
+      if (cfg.tool_count) setTxt('statTools', cfg.tool_count);
+      if (cfg.agent_count) setTxt('statAgents', cfg.agent_count);
     }
     if (kb) {
       const docCount = kb.doc_count ?? 0;
-      const setTxt = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
       setTxt('statDocs', docCount);
       setTxt('statIndex', kb.kb_built ? 'Built' : 'Not built');
       setTxt('kblDocs', docCount + ' 篇');

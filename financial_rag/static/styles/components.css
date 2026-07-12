@@ -10,6 +10,8 @@
   transition: border-color var(--transition);
 }
 .card:hover { border-color: var(--border-hover); }
+.card.card-collapsed { border-color: var(--border); }
+.card.card-collapsed:hover { border-color: var(--border-hover); }
 .card h3 {
   font-size: 14px;
   font-weight: 600;
@@ -291,6 +293,48 @@ th { color: var(--text2); font-weight: 500; font-size: 12px; }
 .news-item:last-child { border: none; }
 .news-item h4 { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
 .news-item .meta { font-size: 11px; color: var(--text3); }
+
+/* ── Collapsible section divider ── */
+.section-divider[data-collapsible] {
+  cursor: pointer;
+  user-select: none;
+  transition: opacity var(--transition);
+}
+.section-divider[data-collapsible]:hover { opacity: .8; }
+.section-divider[data-collapsible]:hover .sd-title { color: var(--accent); }
+.section-divider .collapse-icon {
+  font-size: 10px;
+  color: var(--text3);
+  transition: transform .25s ease;
+  margin-left: 4px;
+}
+.section-divider.section-collapsed .collapse-icon { transform: rotate(-90deg); }
+
+/* ── Collapsible card ── */
+.card[data-collapsible] h3 {
+  cursor: pointer;
+  user-select: none;
+}
+.card[data-collapsible] h3:hover { color: var(--accent); }
+.card[data-collapsible] .card-header {
+  cursor: pointer;
+  user-select: none;
+}
+.card[data-collapsible] .card-header:hover h3 { color: var(--accent); }
+.card .collapse-icon {
+  font-size: 10px;
+  margin-left: auto;
+  color: var(--text3);
+  transition: transform .25s ease;
+  flex-shrink: 0;
+}
+.card.card-collapsed .collapse-icon { transform: rotate(-90deg); }
+.card .card-body {
+  max-height: 5000px;
+  overflow: hidden;
+  transition: max-height .35s ease;
+}
+.card.card-collapsed .card-body { max-height: 0; }
 
 /* ── Dev notice ── */
 .dev-notice {
