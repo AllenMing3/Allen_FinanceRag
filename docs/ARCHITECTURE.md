@@ -87,6 +87,7 @@
 | `/api/file/preview` | GET | Preview first N lines of a file (`?path=xxx&file=yyy&lines=20`) |
 | `/api/directories` | GET | List available import directories |
 | `/api/ingest/files` | POST | Import selected files with analysis mode (`files: [...]`, `mode: "deep"|"quick"`) |
+| `/api/ingest/upload` | POST | Upload PDF/image files directly via `multipart/form-data` (drag-and-drop in UI). Parsed and ingested to KB + LightRAG |
 | `/api/ingest/news` | POST | Fetch and ingest news by keyword |
 | `/api/ingest/progress` | GET | Poll background ingestion progress |
 
@@ -435,7 +436,7 @@ Drop any `*.json` file here → auto-loaded at startup and merged into `Dictiona
 | `app_state.py` | Shared singleton state (`_state` dict), lazy `_ensure_init()` with double-check locking, `_persist_state()`. Initializes LightRAG adapter + injects graph_tools closure |
 | `models.py` | Pydantic request models (QueryRequest, NewsRequest, KlineRequest, etc.) |
 | `kb_router.py` | KB management: status, query, build, clear, delete by source/keyword, learning history/stats |
-| `ingest_router.py` | File preview, directory listing, file/news ingestion with background thread analysis. PDF/image files auto-routed to LightRAG for graph build after parsing |
+| `ingest_router.py` | File preview, directory listing, file/news ingestion with background thread analysis. PDF/image files auto-routed to LightRAG for graph build after parsing. File upload via `multipart/form-data` (PDF/PNG/JPG/WebP) |
 | `analysis_router.py` | Config (TTL cached), news/topic analysis, metadata clear/status, news, kline endpoints |
 | `query_router.py` | Pipeline, slot fill, scoring endpoints |
 
@@ -516,7 +517,7 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | File | Role |
 |------|------|
 | `reflector.py` | `HallucinationGuard`: orchestrates 6-layer check, embeds per-layer scores + reasons into final output |
-| `rule_layers.py` | L1-L4 rule layers: L1 source grounding (jieba token overlap), L2 numerical fidelity (number+unit pairs), L3 citation integrity ([N] references), L4 structure compliance (expected sections) |
+| `rule_layers.py` | L1-L4 rule layers: L1 source grounding (jieba token overlap), L2 numerical fidelity (number+unit pairs), L3 citation integrity ([N] references, **mode-aware**: relaxed for deep analysis), L4 structure compliance (expected sections, **mode-aware**: `【】` brackets for analysis vs `# Markdown` for RAG) |
 | `llm_critique.py` | L5 LLM Critique: LLM reviews answer + sources, outputs structured JSON findings (severity + confidence) |
 | `llm_assist.py` | L6 LLM Assist: LLM fixes identified issues (missing citations, ungrounded claims) when L1-L4 scores are low |
 
@@ -528,13 +529,27 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `conversation.py` | `ConversationManager`: multi-turn follow-up for news/topic analysis. Session CRUD, message history, context-injected LLM calls, JSON persistence | `ConversationManager`, `create_conversation_manager()` |
 | `persistence.py` | KB / Meta / Archive JSON read/write + index persistence | `load_kb()`, `save_kb()`, `save_index()`, `load_index()`, `append_news_archive()` |
 
-### `financial_rag/static/` — Frontend
+### `financial_rag/static/` — Frontend (Modular ES Modules)
 
 | File | Role |
 |------|------|
-| `index.html` | Web UI structure (273 lines) |
-| `styles.css` | Dark theme styling (209 lines) |
-| `app.js` | Frontend logic + API interaction (920 lines) |
+| `index.html` | Web UI skeleton — sidebar nav + 4 panels, all content dynamically rendered by JS modules |
+| `app.js` | Entry point — imports modules, registers global handlers, initializes on `/api/config` load |
+| `modules/api.js` | Fetch wrappers (`api()`, `apiGet()`, `apiDelete()`) + loading overlay |
+| `modules/ui.js` | Toast, confirm dialog, `escHtml()`, `scoreColor()`, `progressBar()`, collapsible card init (`data-collapsible`) |
+| `modules/overview.js` | System overview stats, health banners, KB/meta status badges |
+| `modules/ingest.js` | Directory browser, file selection, **file upload** (drag-and-drop zone + `FormData` → `/api/ingest/upload`), news fetch, progress polling |
+| `modules/kb.js` | KB management: doc list, build/clear, keyword search/delete |
+| `modules/query.js` | RAG query with scorecard + sources rendering, K-line analysis |
+| `modules/analyze.js` | News interpretation, topic research, hallucination scorecard rendering |
+| `modules/chat.js` | Conversation sessions: create, follow-up, delete |
+| `modules/render.js` | Shared rendering helpers |
+| `styles/base.css` | CSS variables, reset, typography, topbar, sidebar |
+| `styles/components.css` | Cards, buttons, tags, forms, modals, collapsible (`data-collapsible`), section dividers |
+| `styles/overview.css` | System overview panel styles |
+| `styles/ingest.css` | Directory browser, **upload zone** (drag-over highlight, file list), progress |
+| `styles/query.css` | Query results, scorecard, K-line display |
+| `styles/chat.css` | Chat sessions, message bubbles |
 
 ---
 

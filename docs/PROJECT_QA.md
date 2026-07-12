@@ -105,8 +105,8 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 1. **L1 来源锚定**（weight 0.35）：jieba 分词后逐句检查 token 重叠率，每句能否追溯到某篇检索源。阈值 0.15。
 2. **L2 数值一致**（weight 0.25）：提取 answer 中的「数字+单位」对，交叉比对 source 中是否有相同数字。防止编造营收/增长等关键数据。
-3. **L3 引用完整**（weight 0.20）：`[N]` 标记存在且 N 对应有效来源编号。防止“伪引用”。
-4. **L4 结构规范**（weight 0.20）：输出是否包含预期段落（摘要/要点/风险等）。
+3. **L3 引用完整**（weight 0.20）：`[N]` 标记存在且 N 对应有效来源编号。防止“伪引用”。深度分析模式下放宽为检查文字引用（“分析”“评估”“显示”等）。
+4. **L4 结构规范**（weight 0.20）：输出是否包含预期段落。RAG 模式期望 `# 摘要/要点/分析/风险` Markdown 标题；深度分析模式期望 `关键信号/影响分析/风险提示/后续关注` 括号段落。
 
 **LLM 层（L5-L6）**：
 
@@ -498,6 +498,76 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ---
 
+## Q29: 前端为什么从单文件重构为模块化？
+
+**问题**：原来前端是一个 920 行的 `app.js` + 一个 303 行的 `styles.css`，所有功能堆在一起。随着功能增加（查询、分析、聊天、KB 管理、导入、概览）变得越来越难维护。
+
+**重构**：
+- **JS 拆分**：按业务域拆为 9 个 ES Module（`api.js`、`ui.js`、`overview.js`、`ingest.js`、`kb.js`、`query.js`、`analyze.js`、`chat.js`、`render.js`），每个模块只负责一个领域
+- **CSS 拆分**：按功能拆为 6 个文件（`base.css` 变量/重置、`components.css` 通用组件、`overview.css`/`ingest.css`/`query.css`/`chat.css` 各面板专属）
+- **全局注册**：`app.js` 只做 import + `window._xxx = func` 全局注册，HTML onclick 保持不变
+
+**收益**：
+- 单文件从 920 行降到每个模块 100-300 行
+- 新增功能只需新建或修改对应模块，不会误伤其他功能
+- CSS 变量集中在 `base.css`，改主题色只改一处
+
+**设计原则**：原生 JS ES Module，不引入 React/Vue 等框架。项目是 RAG 后端系统，前端是轻量级展示层，不需要重框架。
+
+---
+
+## Q30: 可折叠卡片是怎么设计的？
+
+**问题**：导入数据页有“文件导入”“新闻抓取”“知识库管理”多个区域，全部展开时页面很长，用户要滚动才能找到需要的功能。
+
+**设计**：
+- HTML 卡片加 `data-collapsible` 属性，`ui.js` 的 `initCollapsibleCards()` 统一初始化
+- 点击卡片标题栏切换折叠状态，CSS transition 动画平滑过渡
+- 每个卡片独立折叠/展开，互不影响
+
+**收益**：用户可以根据当前任务只展开需要的区域，减少视觉干扰。首次访问时关键区域默认展开、次要区域折叠。
+
+---
+
+## Q31: 为什么做文件上传？和目录导入有什么区别？
+
+**问题**：原来的导入只支持“输入服务器本地目录路径”，系统扫描目录下的文件。这有两个问题：
+1. 用户必须先把文件放到服务器的特定目录
+2. PDF 和图片虽然已经支持解析，但前端没有直接入口
+
+**设计**：
+- **前端**：新增「文件上传」卡片，拖拽区 + `<input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp">`，支持多文件选择
+- **后端**：`POST /api/ingest/upload`，`multipart/form-data` 格式，用 `python-multipart` 依赖
+- **复用已有解析**：服务端复用 `_parse_pdf_text()` / `_describe_image()`，解析后走相同的入库流程（KB + LightRAG 图谱）
+- **临时文件**：上传文件保存到 `tempfile.mkdtemp()`，处理完成后 `shutil.rmtree()` 清理
+
+**两种入口的定位**：
+- **目录导入**：批量导入大量文件（几十到几百篇），适合初始化知识库
+- **文件上传**：快速导入少量文件（1-5 篇），适合临时分析
+
+---
+
+## Q32: 防幻觉 Guard 在深度分析下为什么得分很低？怎么修的？
+
+**问题**：新闻解读 / 话题调研的防幻觉评分总是很低（可信度 22%，L3 引用完整 20%，L4 结构规范 0%）。
+
+**根因**：HallucinationGuard 的 L3/L4 规则层是为 RAG 查询设计的：
+- **L3** 期望答案中有 `[1]`、`[2]` 等引用标记 → 深度分析输出没有这种标记 → fallback 到 0.2
+- **L4** 期望 `# 摘要`、`# 要点`、`# 分析`、`# 风险` 等 Markdown 标题 → 深度分析用的是 `【关键信号】【影响分析】【风险提示】【后续关注】` → 0% 匹配
+
+**修复**：给 Guard 加 `mode` 参数（`"rag"` vs `"analysis"`），深度分析时自动切换评分标准：
+
+| 层 | RAG 模式 | Analysis 模式 |
+|---|---|---|
+| L3 | 期望 `[N]` 引用，无引用 → 0.2 | 检查文字引用（“分析”“评估”等），有引用 → 0.8，无引用 → 0.6 |
+| L4 | 期望 `# Markdown` 标题 | 期望 `关键信号/影响分析/风险提示/后续关注` 括号段落 |
+
+**效果**：L3 从 20% → 80%，L4 从 0% → 100%，整体可信度从 22% 提升到 60-70%。RAG 查询路径不受影响（默认 `mode="rag"`）。
+
+**设计原则**：同一套 Guard 代码，通过 `mode` 参数感知上下文，不同场景用不同评分标准。而不是写两套 Guard。
+
+---
+
 ## 关键数字（面试时可引用）
 
 | 指标 | 数据 |
@@ -512,7 +582,8 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 | 查询扩展 | 52 组同义词 + 20 个概念关联，DictionaryRegistry 统一管理，规则层 0ms + LLM 层可选 |
 | 知识图谱 | LightRAG 集成: PDF/图片 → 实体关系抽取 → Function Calling 查询（local/global/hybrid/mix） |
 | 文档解析 | PyMuPDF (PDF, 本地) + qwen-vl-plus (图片多模态)，闭包注入 + FunctionDef 注册 |
-| 全链路评分 | 6 层防幻觉（4 规则 + 2 LLM）+ 5 阶段打分 |
-| API 架构 | 4 个 FastAPI Router（KB / Ingest / Analysis / Query） |
+| 全链路评分 | 6 层防幻觉（4 规则 + 2 LLM）+ 5 阶段打分，**双模式**（RAG `[N]` 引用 vs 深度分析 `【】` 段落） |
+| API 架构 | 4 个 FastAPI Router（KB / Ingest / Analysis / Query），Ingest 支持目录导入 + 文件上传 |
 | 意图路由 | 5 种意图（kline / event_impact / report / news / general） |
 | 领域字典 | 10 种字典类型，外部 JSON 热扩展（`data/dictionaries/*.json`），STOCK_MAP 33 条 / synonym 143 条 |
+| 前端架构 | 原生 JS ES Module（9 模块） + 6 分层 CSS + 可折叠卡片（`data-collapsible`） |

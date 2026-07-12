@@ -33,7 +33,11 @@
 
 **Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 32 registered tools across 11 modules. Agents stay thin and testable.
 
-**Every chain ends with a quality gate.** The Scoring agent runs a 6-layer hallucination guard (4 rule layers: source grounding, numerical fidelity, citation integrity, structure compliance + 2 LLM layers: LLM critique, LLM assist) and pipeline quality evaluation before any result reaches the user. No silent failures.
+**File upload from browser.** PDF and image files can be uploaded directly via drag-and-drop or file picker in the web UI. Uploaded files are parsed server-side (PyMuPDF for PDF, qwen-vl-plus for images) and routed to both the knowledge base and the LightRAG knowledge graph — no manual directory path needed.
+
+**Collapsible UI with modular frontend.** The web UI uses native ES Modules split into 9 domain-specific JS modules (`modules/`) and 6 layered CSS files (`styles/`). Cards support `data-collapsible` folding for progressive disclosure — users see a clean overview first, expand sections as needed.
+
+**Every chain ends with a quality gate.** The Scoring agent runs a 6-layer hallucination guard (4 rule layers: source grounding, numerical fidelity, citation integrity, structure compliance + 2 LLM layers: LLM critique, LLM assist) and pipeline quality evaluation before any result reaches the user. The guard is **context-aware**: RAG queries expect `[N]` citations and `# Markdown` headers, while deep analysis uses `【】` bracketed sections with relaxed citation requirements — same guard, different scoring criteria.
 
 **Query planning before retrieval.** `QueryPlanner` uses a single LLM call to decompose complex queries (comparisons, timelines, deep dives) into structured sub-queries — each with a source (kb/news/graph/all) and mode (local/global/hybrid/mix). Simple factual queries skip planning and go straight to retrieval.
 
@@ -109,7 +113,8 @@ The user types a natural language question. The system decides everything else.
 | LLM | DashScope Qwen (turbo / plus / max / 235b) |
 | Embedding | text-embedding-v3 (1024-dim) |
 | Rerank | qwen3-rerank (fallback to RRF score) |
-| Backend | FastAPI + 4 async routers |
+| Backend | FastAPI + 4 async routers + python-multipart (file upload) |
+| Frontend | Vanilla JS ES Modules (9 modules) + 6 layered CSS + collapsible cards |
 | Data APIs | Tushare, 10jqka, Sina, EastMoney |
 | Retrieval | BM25 + ChromaDB (ANN) + RRF + TextChunker + QueryParser (52 synonym groups + 20 concept maps) |
 | Query Planning | QueryPlanner (LLM decomposition, 5 intents, source/mode-aware sub-queries) |
@@ -146,7 +151,8 @@ cp .env.example .env
 https://github.com/ConardLi
 # 5. Launch web UI
 python -m financial_rag.main web
-# Opens at http://127.0.0.1:8000 — dark theme, all capabilities accessible from sidebar
+# Opens at http://127.0.0.1:8000 — dark theme, sidebar navigation
+# Upload PDF/images directly via drag-and-drop in the Data Import panel
 
 # 6. Or use CLI
 python -m financial_rag.main pipeline "What happened in AI this week?"

@@ -34,6 +34,7 @@ python -m financial_rag.main web
 | **系统概览** | 架构展示 | 查看 4 Agent 协作链 | Coordinator → Ingestion → Analysis → Scoring，意图路由示例 |
 | **数据管理** | 导入数据 | 搜索新闻（如 "AI人工智能"） | 收集元数据，辅助后续文件解析。新闻**不进知识库** |
 | **数据管理** | 导入数据 | 分析并导入文件 | Agent 链分析文件 → 抽取指标/实体 → 存入知识库（后台 LLM 分析 + 进度显示）。**PDF 文件**自动用 PyMuPDF 解析（本地，无需 API）；**图片文件**用 qwen-vl-plus 多模态模型解析。解析后的 PDF/图片内容自动送入知识图谱构建实体关系 |
+| **数据管理** | 导入数据 | 拖拽上传 PDF/图片 | 在「文件上传」卡片拖拽或选择 PDF/PNG/JPG/WebP 文件，服务端自动解析并导入知识库 + 知识图谱，无需手动放文件到目录 |
 | **数据管理** | 构建索引 | 点击「构建索引」 | BM25 + ChromaDB 向量双通道索引（jieba trigram 分词 + TextChunker 自动切分，Chroma 持久化到 `data/knowledge_base/chroma/`） |
 | **数据管理** | 管理知识库 | 按来源/关键词搜索删除 | 查看各来源文档数，一键删除匹配关键词的文档 |
 | **智能查询** | RAG 查询 | 输入问题 | QueryParser **查询扩展**（同义词 + 概念关联）→ QueryPlanner **LLM 拆解**（复杂查询分解为子查询）→ AgentRouter 自动路由 → 检索知识库 → LLM 回答（带引用和分数明细） |
@@ -47,6 +48,8 @@ python -m financial_rag.main web
 > **查询规划**：复杂查询（对比、时间线、深度分析）先经 `QueryPlanner` 拆解为多个子查询，每个子查询带有来源（kb/news/graph/all）和模式（local/global/hybrid/mix），简单查询直接检索。
 >
 > **知识图谱查询**：Agent 可通过 Function Calling 主动查询知识图谱（`query_knowledge_graph`），支持 local/global/hybrid/mix 四种模式。图谱查询由 QueryPlanner 按意图路由，不会强制每次查询都走图谱。
+>
+> **可折叠卡片**：UI 中的功能卡片支持点击标题折叠/展开，通过 `data-collapsible` 属性实现，首次访问时默认展开关键区域、折叠次要区域，减少信息过载。
 
 **数据来源：**
 - 文件放 `./data/financial` 目录
@@ -65,6 +68,7 @@ python -m financial_rag.main web
 | **文件勾选** | 每个文件带 checkbox，支持全选/取消 |
 | **内容预览** | 点击文件名预览前 20 行 |
 | **分析模式** | 🔍 深度分析 (LLM 抽取指标+实体) / ⚡ 快速导入 (跳过 LLM) |
+| **文件上传** | 拖拽或选择 PDF/PNG/JPG/WebP 文件，服务端解析后入库（知识库 + 知识图谱） |
 | **关键词过滤** | 只拉取匹配关键词的新闻 |
 | **自定义目录** | 直接输入路径导入非默认目录的文件 |
 
@@ -194,6 +198,7 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 - 每条链都以 ScoringAgent 结尾，确保输出质量
 - 所有 LLM 调用经过 LLMCaller 保护层（重试 + 平衡括号 JSON 解析 + 缓存 + 防幻觉约束）
 - 防幻觉校验为 6 层透明检查：L1 来源锚定（jieba 分词重叠）、L2 数值一致、L3 引用完整、L4 结构规范、L5 LLM 质疑（LLM 审查答案 + 来源，输出结构化发现）、L6 LLM 协助（低分时 LLM 修复问题）
+- **防幻觉双模式**：RAG 查询期望 `[N]` 引用 + `# Markdown` 标题结构；深度分析（新闻解读/话题调研）期望 `【关键信号】【影响分析】【风险提示】` 等括号段落，L3/L4 自动切换评分标准，避免误判
 - `QueryPlanner` 在 QueryParser 之后、检索之前：用一次 LLM call 将复杂查询拆解为子查询，简单查询跳过规划直接检索
 
 ---
