@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 
 from financial_rag.api.app_state import (
     _state, _state_lock, _ensure_init, _ingest_progress,
+    _ingest_progress_lock,
     _KB_PATH,
     _save_kb, _save_meta, _append_news_archive,
     _assign_doc_ids, _dedup_docs,
@@ -316,56 +317,77 @@ def _describe_image(llm, path: str) -> str:
 
 
 def _run_ingest_analysis(raw_docs):
-    """Background thread: run agent analysis on ingested documents."""
+    """Background thread: run agent analysis on ingested documents (concurrent)."""
     try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from financial_rag.core.base import AgentContext
         from financial_rag.agents.ingestion_agent import IngestionAgent
         from financial_rag.agents.analysis_agent import AnalysisAgent
 
-        ingest_agent = IngestionAgent()
-        extract_agent = AnalysisAgent()
+        def _analyze_single(doc, idx, total):
+            """Analyze one doc: ingest_agent + extract_agent. Returns (doc, success, elapsed_ms)."""
+            # Each thread creates its own agent instances to avoid shared-state issues
+            local_ingest = IngestionAgent()
+            local_extract = AnalysisAgent()
+            registry = _state.get("registry")
+            executor_tool = _state.get("executor")
+            if registry and executor_tool:
+                local_ingest.bind_tools(registry, executor_tool)
+                local_extract.bind_tools(registry, executor_tool)
 
-        # 工具已通过 bind_tools 注入（含 describe_image_file / parse_pdf_file）
-        registry = _state.get("registry")
-        executor = _state.get("executor")
-        if registry and executor:
-            ingest_agent.bind_tools(registry, executor)
-            extract_agent.bind_tools(registry, executor)
-
-        logger.info(f"[Ingest-BG] 开始后台分析 {len(raw_docs)} 篇文档...")
-        for i, doc in enumerate(raw_docs, 1):
-            _ingest_progress["current"] = i
             t_doc = time.time()
+            success = False
             try:
                 ctx = AgentContext(
                     raw_input=doc["text"][:500],
                     metadata={"news_context": _state.get("meta_store", []), "intent": "general"},
                 )
                 ctx.parsed_data = [doc]
-                ir = ingest_agent.run(ctx)
+                ir = local_ingest.run(ctx)
                 if ir.success and ir.context_updates:
                     for k, v in ir.context_updates.items():
                         setattr(ctx, k, v)
-                er = extract_agent.run(ctx)
+                er = local_extract.run(ctx)
                 if er.success and er.context_updates:
                     features = er.context_updates.get("extracted_features", {})
                     doc["meta"]["analyzed"] = True
                     doc["meta"]["metrics"] = features.get("metrics", {})
                     doc["meta"]["entities"] = features.get("entities", [])
-                    _ingest_progress["analyzed"] += 1
-                elapsed_doc = (time.time() - t_doc) * 1000
+                    success = True
+                elapsed_ms = (time.time() - t_doc) * 1000
                 src = doc["meta"].get("source", "?")
-                logger.info(f"[Ingest-BG] [{i}/{len(raw_docs)}] {src}: {elapsed_doc:.0f}ms")
+                logger.info(f"[Ingest-BG] [{idx}/{total}] {src}: {elapsed_ms:.0f}ms")
             except Exception as e:
-                elapsed_doc = (time.time() - t_doc) * 1000
-                _ingest_progress["errors"] += 1
-                logger.warning(f"[Ingest-BG] [{i}/{len(raw_docs)}] 分析失败 ({elapsed_doc:.0f}ms): {e}")
+                elapsed_ms = (time.time() - t_doc) * 1000
+                logger.warning(f"[Ingest-BG] [{idx}/{total}] 分析失败 ({elapsed_ms:.0f}ms): {e}")
                 doc["meta"]["analyzed"] = False
+            return doc, success, elapsed_ms
+
+        logger.info(f"[Ingest-BG] 开始后台分析 {len(raw_docs)} 篇文档 (并发模式)...")
+        total = len(raw_docs)
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {
+                pool.submit(_analyze_single, doc, i, total): doc
+                for i, doc in enumerate(raw_docs, 1)
+            }
+            for future in as_completed(futures):
+                try:
+                    doc, success, _ = future.result()
+                except Exception as e:
+                    logger.warning(f"[Ingest-BG] future 异常: {e}")
+                    success = False
+                with _ingest_progress_lock:
+                    _ingest_progress["current"] += 1
+                    if success:
+                        _ingest_progress["analyzed"] += 1
+                    else:
+                        _ingest_progress["errors"] += 1
 
         # Save updated KB with analysis results
         with _state_lock:
             _save_kb(_state["kb_docs"])
-        _ingest_progress["message"] = f"完成: {_ingest_progress['analyzed']}/{len(raw_docs)} 已分析"
+        _ingest_progress["message"] = f"完成: {_ingest_progress['analyzed']}/{total} 已分析"
         logger.info(f"[Ingest-BG] {_ingest_progress['message']}")
     except Exception as e:
         _ingest_progress["message"] = f"后台分析异常: {e}"

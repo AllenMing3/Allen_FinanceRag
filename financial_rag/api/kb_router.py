@@ -219,7 +219,7 @@ async def api_kb_query(req: QueryRequest):
 
 @router.post("/api/build")
 async def api_build_kb(req: BuildRequest):
-    """Build index from accumulated KB documents"""
+    """Build index from accumulated KB documents (incremental by default)"""
     await asyncio.to_thread(_ensure_init)
     documents = req.documents or _state.get("kb_docs", [])
     if not documents:
@@ -228,14 +228,17 @@ async def api_build_kb(req: BuildRequest):
     # Ensure all docs have doc_ids
     _assign_doc_ids(documents)
 
-    logger.info(f"[API] /build: {len(documents)} documents")
+    logger.info(f"[API] /build: {len(documents)} documents (incremental)")
     r = _state["retriever"]
-    r.clear()
 
     t0 = time.time()
-    r.index(documents, precompute_embeddings=True)
+    # 增量重建：只对变化部分调 API，embedding 走缓存
+    stats = r.rebuild_incremental(documents, use_chunker=False)
     elapsed = (time.time() - t0) * 1000
-    logger.info(f"[API] /build: indexed {len(documents)} docs in {elapsed:.0f}ms")
+    logger.info(
+        f"[API] /build: incremental done in {elapsed:.0f}ms "
+        f"(added={stats.get('added', 0)}, removed={stats.get('removed', 0)})"
+    )
 
     with _state_lock:
         _state["kb_built"] = True
@@ -243,29 +246,33 @@ async def api_build_kb(req: BuildRequest):
     # Save index to disk for fast next startup
     r.save_index(_INDEX_PATH)
 
-    # Run test queries to verify
-    test_queries = []
-    for q in ["商汤科技 营收增长", "英伟达 GPU 算力"]:
-        results, _ = r.search_with_scores(q, top_k=3)
-        test_queries.append({
-            "query": q,
-            "results": [
-                {"score": round(it.get("score", 0), 4), "text": it.get("text", "")[:60]}
-                for it in results[:3]
-            ],
-        })
-
     bm25_terms = len(r._bm25._corpus_tokens) if r._bm25 and r._bm25._corpus_tokens else 0
     embedding_dim = len(r.doc_embeddings[0]) if r.doc_embeddings else 0
 
-    return {
+    result = {
         "doc_count": len(documents),
         "bm25_terms": bm25_terms,
         "embedding_dim": embedding_dim,
         "elapsed_ms": round(elapsed),
-        "test_queries": test_queries,
+        "incremental": stats,
         "kb_path": _KB_PATH,
     }
+
+    # 测试查询：可选跳过（节省 token）
+    if not req.skip_test_queries:
+        test_queries = []
+        for q in ["商汤科技 营收增长", "英伟达 GPU 算力"]:
+            results, _ = r.search_with_scores(q, top_k=3)
+            test_queries.append({
+                "query": q,
+                "results": [
+                    {"score": round(it.get("score", 0), 4), "text": it.get("text", "")[:60]}
+                    for it in results[:3]
+                ],
+            })
+        result["test_queries"] = test_queries
+
+    return result
 
 
 @router.post("/api/kb/clear")

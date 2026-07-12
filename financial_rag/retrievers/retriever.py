@@ -12,6 +12,7 @@ Hybrid 混合检索器 — 调度层
 from typing import Dict, Any, List, Optional, Tuple
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from financial_rag.retrievers.bm25_engine import BM25Engine
 from financial_rag.retrievers.vector_engine import VectorEngine
@@ -66,6 +67,7 @@ class HybridRetriever:
         self._vector = VectorEngine(
             embedder=embedder, tokenizer=tokenizer,
             chroma_persist_dir=chroma_persist_dir,
+            embedding_cache=self._emb_cache,
         )
 
         # 内部状态
@@ -148,6 +150,77 @@ class HybridRetriever:
 
     # ===================== 检索 =====================
 
+    def rebuild_incremental(self, documents: List[Dict], use_chunker: bool = True):
+        """
+        增量重建索引：对比新旧文档，只对变化部分调 API。
+
+        与 clear() + index() 不同，本方法：
+        1. 通过 doc_id 对比新旧文档集合
+        2. 只对新增文档计算 embedding（走缓存，命中则 0 API 调用）
+        3. Chroma 增量 add，不全量重建
+        4. BM25 全量重建（纯本地，毫秒级）
+        """
+        if use_chunker and self._chunker:
+            documents = self._chunker.split_documents(documents)
+
+        # 通过 doc_id 对比新旧文档
+        old_id_set = {
+            d.get("meta", {}).get("doc_id")
+            for d in self.documents if d.get("meta", {}).get("doc_id")
+        }
+        new_id_set = {
+            d.get("meta", {}).get("doc_id")
+            for d in documents if d.get("meta", {}).get("doc_id")
+        }
+
+        added_ids = new_id_set - old_id_set
+        removed_ids = old_id_set - new_id_set
+
+        # 无变化则跳过
+        if not added_ids and not removed_ids:
+            logger.info("rebuild_incremental: 无变化，跳过")
+            return {"added": 0, "removed": 0, "unchanged": len(documents)}
+
+        added_docs = [d for d in documents
+                      if d.get("meta", {}).get("doc_id") in added_ids]
+        removed_docs = [d for d in self.documents
+                        if d.get("meta", {}).get("doc_id") in removed_ids]
+
+        logger.info(
+            f"rebuild_incremental: +{len(added_docs)} new, "
+            f"-{len(removed_docs)} removed, "
+            f"{len(documents) - len(added_docs)} unchanged"
+        )
+
+        # 1. 删除已移除的文档 (Chroma + 内存)
+        if removed_docs and self._vector._collection is not None:
+            self._vector.remove(removed_docs)
+
+        # 2. 替换文档列表，重建 BM25
+        self.documents = documents
+        self._bm25.build(self.documents)
+
+        # 3. 为新增文档计算 embedding（走缓存）+ 增量入 Chroma
+        if added_docs and self.embedder and self._vector.has_embedding:
+            texts = [d.get("text", "") for d in added_docs]
+            new_embeddings = self._emb_cache.embed_texts(texts, self.embedder)
+            self._vector.add(added_docs, new_embeddings)
+            # 同步 doc_embeddings 列表（全量重建，因为顺序可能变了）
+            if self.doc_embeddings is not None:
+                all_texts = [d.get("text", "") for d in self.documents]
+                self.doc_embeddings = self._emb_cache.embed_texts(all_texts, self.embedder)
+            logger.info(
+                f"rebuild_incremental: +{len(added_docs)} embedding (cache), "
+                f"Chroma incremental add done"
+            )
+
+        return {
+            "added": len(added_docs),
+            "removed": len(removed_docs),
+            "unchanged": len(documents) - len(added_docs),
+        }
+
+
     def search(self, query: str, top_k: int = 10,
                use_rerank: bool = True, scorecard=None,
                filters: Optional[Dict] = None) -> List[Dict]:
@@ -188,9 +261,33 @@ class HybridRetriever:
                 elapsed_ms=(time.time() - t0) * 1000,
             )
 
-        # 2. BM25 检索
-        bm25_results = self._bm25.search(self.documents, query, top_k * 2,
-                                          query_tokens=query_tokens)
+        # 2+3. BM25 + Vector 并发检索
+        vec_query = (parsed.expanded_query
+                     if parsed and parsed.expanded_query else query)
+
+        def _run_bm25():
+            return self._bm25.search(self.documents, query, top_k * 2,
+                                     query_tokens=query_tokens)
+
+        def _run_vector():
+            if self._vector.has_embedding:
+                return self._vector.search_embedding(
+                    self.documents, vec_query, top_k * 2,
+                    doc_embeddings=self.doc_embeddings,
+                    cache_callback=lambda embs: setattr(self, 'doc_embeddings', embs),
+                )
+            else:
+                return self._vector.search_jaccard(
+                    self.documents, vec_query, top_k * 2,
+                    tokenize_fn=self._bm25.tokenize,
+                )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            bm25_future = pool.submit(_run_bm25)
+            vec_future = pool.submit(_run_vector)
+            bm25_results = bm25_future.result()
+            vector_results = vec_future.result()
+
         if scorecard and bm25_results:
             bm25_scores = [r["score"] for r in bm25_results]
             scorecard.record_bm25(
@@ -206,24 +303,8 @@ class HybridRetriever:
             scorecard.record_bm25(0, 0.0, 0.0, len(query_tokens), 0,
                                   elapsed_ms=(time.time() - t0) * 1000)
 
-        # 3. Vector 检索 (使用 expanded_query 提升语义召回)
-        t_vec = time.time()
-        vec_query = (parsed.expanded_query
-                     if parsed and parsed.expanded_query else query)
-        if self._vector.has_embedding:
-            vector_results = self._vector.search_embedding(
-                self.documents, vec_query, top_k * 2,
-                doc_embeddings=self.doc_embeddings,
-                cache_callback=lambda embs: setattr(self, 'doc_embeddings', embs),
-            )
-        else:
-            vector_results = self._vector.search_jaccard(
-                self.documents, vec_query, top_k * 2,
-                tokenize_fn=self._bm25.tokenize,
-            )
-        vec_elapsed = (time.time() - t_vec) * 1000
-
         if scorecard:
+            total_elapsed = (time.time() - t0) * 1000
             if vector_results:
                 vec_scores = [r["score"] for r in vector_results]
                 scorecard.record_vector(
@@ -232,10 +313,10 @@ class HybridRetriever:
                     avg_similarity=sum(vec_scores) / len(vec_scores),
                     embedding_dim=getattr(self.embedder, 'dimensions', 0)
                     if self.embedder else 0,
-                    elapsed_ms=vec_elapsed,
+                    elapsed_ms=total_elapsed,
                 )
             else:
-                scorecard.record_vector(0, 0.0, 0.0, elapsed_ms=vec_elapsed)
+                scorecard.record_vector(0, 0.0, 0.0, elapsed_ms=total_elapsed)
 
         # 4. RRF 融合
         candidates, fusion_stats = rrf_fusion(

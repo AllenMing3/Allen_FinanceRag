@@ -52,6 +52,7 @@ class IngestNewsRequest(BaseModel):
 
 class BuildRequest(BaseModel):
     documents: list = []
+    skip_test_queries: bool = False  # 跳过 build 后的测试查询（节省 token）
 
 
 class AnalyzeNewsRequest(BaseModel):

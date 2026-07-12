@@ -41,17 +41,20 @@ class VectorEngine:
     COLLECTION_NAME = "financial_rag_docs"
 
     def __init__(self, embedder: Any = None, tokenizer=None,
-                 chroma_persist_dir: Optional[str] = None):
+                 chroma_persist_dir: Optional[str] = None,
+                 embedding_cache: Any = None):
         """
         Args:
             embedder: DashScopeEmbedding 实例
             tokenizer: 分词函数（Jaccard 回退用）
             chroma_persist_dir: Chroma 持久化目录，None 则用内存模式
+            embedding_cache: EmbeddingCache 实例（用于缓存 query embedding）
         """
         self.embedder = embedder
         self._tokenizer = tokenizer
         self._has_embedding = embedder is not None
         self._chroma_persist_dir = chroma_persist_dir
+        self._emb_cache = embedding_cache  # may be None
 
         # Chroma 惰性初始化
         self._chroma_client = None
@@ -220,8 +223,11 @@ class VectorEngine:
         if not documents:
             return []
 
-        # 计算 query embedding
-        query_vec = self.embedder.embed_query(query)
+        # 计算 query embedding (走缓存，避免重复调 API)
+        if self._emb_cache is not None:
+            query_vec = self._emb_cache.embed_query(query, self.embedder)
+        else:
+            query_vec = self.embedder.embed_query(query)
 
         # 优先: Chroma ANN 检索
         self._ensure_chroma()

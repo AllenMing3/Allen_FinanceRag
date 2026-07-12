@@ -45,6 +45,7 @@ _ingest_progress: dict = {
     "errors": 0,
     "message": "",
 }
+_ingest_progress_lock = threading.Lock()  # atomic updates for progress counters
 
 
 def _record_init_error(component: str, error: Exception, severity: str = "warning"):
