@@ -116,7 +116,7 @@ def fetch_news_report(
         "items": [
             {
                 "title": item.get("title", ""),
-                "content": item.get("content", "")[:500],
+                "content": item.get("content", ""),
                 "source": item.get("source", ""),
                 "publish_time": item.get("publish_time", ""),
                 "url": item.get("url", ""),

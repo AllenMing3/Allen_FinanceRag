@@ -42,15 +42,82 @@ _CONFIG_TTL = 60.0  # seconds
 # ===================== Internal helpers =====================
 
 
+def _build_full_analysis_text(result: dict) -> str:
+    """Reconstruct a comprehensive analysis text from structured output.
+
+    The Guard checks a single text string, but the LLM outputs structured JSON
+    with separate fields (key_signals, impact, risks, watch_next, etc.).
+    We rebuild a text that mirrors what the user actually sees on screen,
+    so L4 structure matching and L5/L6 semantic auditing work correctly.
+    """
+    parts = []
+    structured = result.get("structured", {})
+    analysis_text = result.get("analysis", "")
+
+    # Key signals
+    signals = structured.get("key_signals", [])
+    if signals:
+        parts.append("关键信号：")
+        for sig in signals:
+            if isinstance(sig, dict):
+                parts.append(f"  - {sig.get('signal', '')}")
+            else:
+                parts.append(f"  - {sig}")
+
+    # Impact dimensions
+    impact = structured.get("impact", {})
+    if impact:
+        summaries = [v.get("summary", "") for v in impact.values() if isinstance(v, dict) and v.get("summary")]
+        if summaries:
+            parts.append(f"影响分析：{'；'.join(summaries)}")
+
+    # Main analysis text
+    if analysis_text:
+        parts.append(f"综合分析：{analysis_text}")
+
+    # Sub-topics (topic research)
+    sub_topics = structured.get("sub_topics", [])
+    if sub_topics:
+        parts.append("子话题：")
+        for st in sub_topics:
+            if isinstance(st, dict):
+                parts.append(f"  - {st.get('name', '')}: {st.get('summary', '')}")
+
+    # Investment implication (topic research)
+    impl = structured.get("investment_implication", "")
+    if impl:
+        parts.append(f"投资启示：{impl}")
+
+    # Risks
+    risks = structured.get("risks", [])
+    if risks:
+        parts.append("风险提示：")
+        for r in risks:
+            parts.append(f"  - {r}")
+
+    # Watch next
+    watch = structured.get("watch_next", [])
+    if watch:
+        parts.append("后续关注：")
+        for w in watch:
+            parts.append(f"  - {w}")
+
+    return "\n".join(parts) if parts else analysis_text
+
+
 def _run_hallucination_check(result: dict, llm=None, extra_sources: list = None):
     """Run HallucinationGuard on analysis result and inject 'hallucination' key.
 
     Uses kb_sources + extra_sources (news text / topic text) as grounding material.
+    Builds comprehensive text from structured output so Guard checks match what user sees.
     Silently skips if no analysis text or guard fails.
     """
     analysis_text = result.get("analysis", "")
     if not analysis_text:
         return
+
+    # Build full text from structured output (mirrors what user sees on screen)
+    full_text = _build_full_analysis_text(result)
 
     guard_sources = []
     if extra_sources:
@@ -64,7 +131,7 @@ def _run_hallucination_check(result: dict, llm=None, extra_sources: list = None)
 
     try:
         guard = HallucinationGuard(llm=llm)
-        guard_result = guard.check(analysis_text, guard_sources, mode="analysis")
+        guard_result = guard.check(full_text, guard_sources, mode="analysis")
         result["hallucination"] = {
             "overall_score": round(guard_result["overall_score"], 3),
             "risk": guard_result["risk"],

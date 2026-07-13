@@ -84,7 +84,7 @@ def fetch_ths_news(max_news: int = 30) -> List[Dict]:
 
             items.append({
                 "title": title,
-                "content": content[:500],
+                "content": content,
                 "source": "同花顺",
                 "publish_time": pub_time,
                 "url": f"https://news.10jqka.com.cn/{item.get('id', '')}.shtml",
@@ -149,7 +149,7 @@ def fetch_sina_finance(max_news: int = 30) -> List[Dict]:
 
             items.append({
                 "title": title,
-                "content": content[:500],
+                "content": content,
                 "source": "新浪财经",
                 "publish_time": pub_time,
                 "url": item.get("url", ""),
@@ -235,7 +235,7 @@ def fetch_eastmoney_search(keyword: str, max_news: int = 30) -> List[Dict]:
 
             items.append({
                 "title": title,
-                "content": content[:500],
+                "content": content,
                 "source": "东方财富",
                 "publish_time": pub_time,
                 "url": item.get("url", ""),
@@ -300,7 +300,7 @@ def fetch_rss_news(
 
             items.append({
                 "title": title,
-                "content": content[:500],
+                "content": content,
                 "source": source,
                 "publish_time": pub_time,
                 "url": link,

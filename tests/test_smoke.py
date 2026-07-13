@@ -242,11 +242,11 @@ class TestWebAPISmoke:
         # Clear KB first to ensure clean state
         self.client.post("/api/kb/clear")
 
-        # Create a test file
+        # Create a test file with texts long enough to pass preprocessing (>=80 chars)
         test_file = tmp_path / "test_dedup.jsonl"
         test_file.write_text(
-            json.dumps({"text": "商汤科技营收50亿", "metadata": {"source": "test_dedup"}}) + "\n" +
-            json.dumps({"text": "英伟达GPU发布", "metadata": {"source": "test_dedup"}}) + "\n",
+            json.dumps({"text": "商汤科技2024年财报显示全年营收达到50亿元人民币，同比增长36%，其中AI大模型业务贡献了超过60%的营收增长，公司研发投入持续加大，技术创新取得多项突破性成果，市场前景广阔", "metadata": {"source": "test_dedup"}}) + "\n" +
+            json.dumps({"text": "英伟达正式发布新一代Blackwell架构GPU产品，性能较上一代提升4倍以上，AI训练和推理能力大幅增强，全球各大云厂商包括微软谷歌亚马逊纷纷宣布采购和大规模部署计划", "metadata": {"source": "test_dedup"}}) + "\n",
             encoding="utf-8"
         )
 
@@ -271,9 +271,9 @@ class TestWebAPISmoke:
         # Create test data
         test_file = tmp_path / "kb_build.jsonl"
         test_file.write_text(
-            json.dumps({"text": "商汤科技2024年营收增长36%达到50亿元", "metadata": {"source": "annual_report"}}) + "\n" +
-            json.dumps({"text": "英伟达Blackwell架构GPU性能提升4倍", "metadata": {"source": "tech_news"}}) + "\n" +
-            json.dumps({"text": "科大讯飞星火大模型V4.0发布", "metadata": {"source": "product_news"}}) + "\n",
+            json.dumps({"text": "商汤科技2024年财报显示全年营收增长显著达到50亿元人民币，AI大模型业务成为核心增长引擎贡献超过六成收入，公司持续加大研发投入力度推动技术创新和产业升级发展", "metadata": {"source": "annual_report"}}) + "\n" +
+            json.dumps({"text": "英伟达Blackwell架构GPU正式发布，性能较上一代提升4倍，全球各大云厂商包括微软Azure和亚马逊AWS纷纷宣布大规模部署计划，AI算力市场需求持续高涨", "metadata": {"source": "tech_news"}}) + "\n" +
+            json.dumps({"text": "科大讯飞星火大模型V4.0正式发布会，在中文自然语言理解和多模态能力方面取得重大突破，已广泛应用于教育医疗政务等多个行业领域，市场份额持续扩大领先优势明显行业地位稳固", "metadata": {"source": "product_news"}}) + "\n",
             encoding="utf-8"
         )
 
@@ -295,10 +295,10 @@ class TestWebAPISmoke:
 
     def test_api_kb_clear(self, tmp_path):
         """Clear KB removes all docs"""
-        # Ingest something first
+        # Ingest something first (needs to pass preprocessing gate)
         test_file = tmp_path / "data.jsonl"
         test_file.write_text(
-            json.dumps({"text": "test doc", "metadata": {"source": "test"}}) + "\n",
+            json.dumps({"text": "商汤科技2024年财报显示全年营收达到50亿元人民币，AI大模型业务成为核心增长引擎，研发投入持续加大推动技术创新突破成果显著", "metadata": {"source": "test"}}) + "\n",
             encoding="utf-8"
         )
         self.client.post("/api/ingest/files", json={"dir": str(tmp_path), "analyze": False})
@@ -319,8 +319,8 @@ class TestWebAPISmoke:
 
         test_file = tmp_path / "search.jsonl"
         test_file.write_text(
-            json.dumps({"text": "商汤科技财报分析", "metadata": {"source": "search_s1"}}) + "\n" +
-            json.dumps({"text": "英伟达GPU新闻", "metadata": {"source": "search_s2"}}) + "\n",
+            json.dumps({"text": "商汤科技2024年财报分析显示全年营收增长显著达到50亿元人民币，AI大模型业务贡献超过六成收入，公司持续加大研发投入力度推动技术创新和产业升级发展", "metadata": {"source": "search_s1"}}) + "\n" +
+            json.dumps({"text": "英伟达新一代Blackwell架构GPU芯片发布新闻，性能大幅提升四倍以上，全球云厂商争相采购部署AI算力基础设施，市场需求强劲增长", "metadata": {"source": "search_s2"}}) + "\n",
             encoding="utf-8"
         )
         self.client.post("/api/ingest/files", json={"dir": str(tmp_path), "analyze": False})
@@ -362,11 +362,11 @@ class TestWebAPISmoke:
     def test_api_ingest_file_selection(self, tmp_path):
         """Ingest with file selection only imports selected files"""
         (tmp_path / "a.jsonl").write_text(
-            json.dumps({"text": "doc from file A", "metadata": {"source": "sel_a"}}) + "\n",
+            json.dumps({"text": "商汤科技发布2024年度财务报告显示，全年营收突破50亿元人民币大关，AI大模型业务成为核心增长引擎，研发投入持续加大推动多项技术创新突破，业绩表现亮眼市场前景广阔", "metadata": {"source": "sel_a"}}) + "\n",
             encoding="utf-8"
         )
         (tmp_path / "b.jsonl").write_text(
-            json.dumps({"text": "doc from file B", "metadata": {"source": "sel_b"}}) + "\n",
+            json.dumps({"text": "英伟达Blackwell架构GPU正式发布，性能提升四倍以上，全球各大云厂商争相采购部署AI算力基础设施，市场需求持续增长强劲带动产业链上下游企业共同发展", "metadata": {"source": "sel_b"}}) + "\n",
             encoding="utf-8"
         )
         # Clear KB first

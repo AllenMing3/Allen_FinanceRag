@@ -147,19 +147,24 @@ def append_news_archive(items: list, keyword: str, path: str = NEWS_ARCHIVE_PATH
     count = 0
     with open(path, "a", encoding="utf-8") as f:
         for item in items:
-            text = f"{item.get('title', '')} {item.get('content', '')}"
-            if not text.strip():
+            title = item.get("title", "").strip()
+            content = item.get("content", "").strip()
+            if not title and not content:
                 continue
+            # Store structured fields + composite text for backward compat
             record = {
-                "text": text.strip(),
+                "title": title,
+                "content": content,
+                "text": f"{title}\n\n{content}" if content else title,
                 "metadata": {
-                    "source": "news",
+                    "source": item.get("source", "news"),
                     "keyword": keyword,
-                    "title": item.get("title", ""),
+                    "title": title,
                     "publish_time": item.get("publish_time", ""),
-                    "content_url": item.get("content_url", ""),
+                    "url": item.get("url", ""),
+                    "sentiment": item.get("sentiment", ""),
                     "fetched_at": fetched_at,
-                    "doc_type": "新闻报道",
+                    "doc_type": "news",
                 },
             }
             f.write(json.dumps(record, ensure_ascii=False) + "\n")

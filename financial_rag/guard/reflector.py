@@ -83,8 +83,10 @@ class HallucinationGuard:
         # L5+L6: LLM 层 — 条件触发
         rule_score = self._compute_rule_score(checks)
         if self._llm is not None and rule_score < self.LLM_TRIGGER_THRESHOLD:
+            logger.info(f"[Guard] L5/L6 触发 (rule_score={rule_score:.2f} < {self.LLM_TRIGGER_THRESHOLD})")
             checks["L5_llm_critique"] = llm_critique(answer, sources, checks, self._llm)
             checks["L6_llm_assist"] = llm_assist(answer, sources, self._llm)
+            logger.info(f"[Guard] L5={checks['L5_llm_critique'].get('score', 0):.2f}, L6={checks['L6_llm_assist'].get('score', 0):.2f}")
         else:
             if self._llm is None:
                 logger.debug("L5/L6 skipped: no LLM injected")
@@ -129,10 +131,14 @@ class HallucinationGuard:
     # ================== 综合 + 格式化 ==================
 
     def _compute_overall(self, checks: Dict) -> Dict:
+        # 归一化权重：只对实际执行的层求加权平均，避免跳过的层拖低总分
+        active_weights = {k: w for k, w in self.LAYER_WEIGHTS.items() if k in checks}
+        total_weight = sum(active_weights.values())
+        if total_weight == 0:
+            return {"score": 0.0, "passed": False}
         total = 0.0
-        for layer, w in self.LAYER_WEIGHTS.items():
-            if layer in checks:
-                total += checks[layer].get("score", 0) * w
+        for layer, w in active_weights.items():
+            total += checks[layer].get("score", 0) * (w / total_weight)
         return {"score": total, "passed": total >= self.threshold}
 
     def _risk_level(self, score: float, checks: Dict) -> str:

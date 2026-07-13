@@ -32,6 +32,66 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Minimum text length after cleaning to be considered KB-worthy
+_MIN_KB_TEXT_LEN = 80
+
+
+def _preprocess_docs(raw_docs: list) -> tuple[list, dict]:
+    """Apply preprocessing pipeline to raw docs before KB storage.
+
+    Steps:
+    1. Text cleaning (HTML/URL/boilerplate removal)
+    2. Relevance gate (domain keyword check)
+    3. Minimum length filter
+    4. Doc type classification
+
+    Returns:
+        (cleaned_docs, stats) where stats = {total, cleaned, rejected_short, rejected_irrelevant, rejected_empty}
+    """
+    from financial_rag.retrievers.preprocessor import TextPreprocessor, RelevanceGate, DocTypeClassifier
+
+    preprocessor = TextPreprocessor()
+    gate = RelevanceGate()
+    classifier = DocTypeClassifier()
+
+    stats = {"total": len(raw_docs), "cleaned": 0, "rejected_short": 0,
+             "rejected_irrelevant": 0, "rejected_empty": 0}
+    cleaned_docs = []
+
+    for doc in raw_docs:
+        text = doc.get("text", "")
+        if not text or not text.strip():
+            stats["rejected_empty"] += 1
+            continue
+
+        # 1. Clean text
+        text = preprocessor.process(text)
+        if not text or len(text.strip()) < _MIN_KB_TEXT_LEN:
+            stats["rejected_short"] += 1
+            continue
+
+        # 2. Relevance gate
+        passed, reason, kw_count = gate.check(text)
+        if not passed:
+            stats["rejected_irrelevant"] += 1
+            logger.debug(f"[Ingest] Doc rejected: {reason} (source={doc.get('meta', {}).get('source', '?')[:30]})")
+            continue
+
+        # 3. Classify
+        classify_result = classifier.classify(text)
+
+        # Update doc with cleaned text and enriched metadata
+        doc["text"] = text
+        meta = doc.setdefault("meta", {})
+        meta.setdefault("doc_type", classify_result["doc_type"])
+        meta["text_length"] = len(text)
+        meta["_relevance_keywords"] = kw_count
+
+        cleaned_docs.append(doc)
+        stats["cleaned"] += 1
+
+    return cleaned_docs, stats
+
 # Known data directories to scan
 _KNOWN_DIRS = [
     ("./data/financial", "财务数据"),
@@ -178,7 +238,13 @@ async def api_ingest_files(req: IngestFilesRequest):
                         if not line:
                             continue
                         obj = json.loads(line)
-                        text = obj.get("content", obj.get("text", obj.get("title", "")))
+                        # Compose full text: prefer title+content (new format), fall back to text (old format)
+                        title = obj.get("title", "")
+                        content = obj.get("content", "")
+                        if title or content:
+                            text = f"{title}\n\n{content}" if content else title
+                        else:
+                            text = obj.get("text", "")
                         if text:
                             orig_meta = obj.get("metadata", obj.get("meta", {}))
                             meta = {**orig_meta, "source": orig_meta.get("source", fname), "file": fpath}
@@ -220,6 +286,22 @@ async def api_ingest_files(req: IngestFilesRequest):
         logger.info(f"[Ingest] 读取文件: {fname} ({fsize/1024:.1f} KB) → {doc_count} 篇文档")
 
     logger.info(f"[Ingest] 文件读取完成: {len(file_stats)} 个文件, {len(raw_docs)} 篇文档")
+
+    # Phase 1.5: Preprocessing pipeline (clean + relevance gate + classify)
+    raw_docs, pp_stats = _preprocess_docs(raw_docs)
+    if pp_stats["total"] > 0:
+        logger.info(
+            f"[Ingest] 预处理: {pp_stats['cleaned']}/{pp_stats['total']} 通过, "
+            f"拒绝: 短文本={pp_stats['rejected_short']}, 无关={pp_stats['rejected_irrelevant']}, 空={pp_stats['rejected_empty']}"
+        )
+    if not raw_docs:
+        return {
+            "loaded": 0, "skipped_duplicates": 0, "analyzed": 0,
+            "total": len(_state.get("kb_docs", [])),
+            "status": "all_rejected",
+            "message": f"所有 {pp_stats['total']} 篇文档未通过质量检查（短文本/无关/空内容）",
+            "preprocessing": pp_stats,
+        }
 
     # LightRAG 图谱构建: PDF/图片解析内容送入知识图谱
     lightrag = _state.get("lightrag")
@@ -456,6 +538,15 @@ async def api_ingest_upload(files: list[UploadFile] = File(...)):
         if not raw_docs:
             return {"loaded": 0, "message": "所有文件解析为空", "total": len(_state.get("kb_docs", []))}
 
+        # Preprocessing pipeline
+        raw_docs, pp_stats = _preprocess_docs(raw_docs)
+        if pp_stats["total"] > 0:
+            logger.info(
+                f"[Upload] 预处理: {pp_stats['cleaned']}/{pp_stats['total']} 通过"
+            )
+        if not raw_docs:
+            return {"loaded": 0, "message": "所有文件未通过质量检查", "total": len(_state.get("kb_docs", [])), "preprocessing": pp_stats}
+
         # LightRAG graph insertion
         lightrag = _state.get("lightrag")
         if lightrag:
@@ -498,7 +589,11 @@ async def api_ingest_upload(files: list[UploadFile] = File(...)):
 
 @router.post("/api/ingest/news")
 async def api_ingest_news(req: IngestNewsRequest):
-    """Fetch news and store as metadata only (NOT added to KB)"""
+    """Fetch news, store metadata, AND auto-import quality articles to KB.
+
+    Quality gate: articles with content >= 100 chars after cleaning pass
+    through preprocessing and get added to KB for retrieval.
+    """
     await asyncio.to_thread(_ensure_init)
     from financial_rag.tools.news_tools import run_news_pipeline
 
@@ -509,15 +604,17 @@ async def api_ingest_news(req: IngestNewsRequest):
         summarize=True,
         max_news=req.max_news,
     )
-    logger.info(f"[API] /ingest/news: {len(data.get('items', []))} items fetched")
+    fetched_items = data.get("items", [])
+    logger.info(f"[API] /ingest/news: {len(fetched_items)} items fetched")
 
-    # Store as metadata only — news has no nutritional value for KB
+    # ── 1. Store metadata (existing behavior) ──
     from datetime import datetime
     fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    keyword = data.get("main_keyword", "")
     meta_items = []
-    for item in data.get("items", []):
+    for item in fetched_items:
         meta_items.append({
-            "keyword": data.get("main_keyword", ""),
+            "keyword": keyword,
             "title": item.get("title", ""),
             "source": item.get("source", ""),
             "publish_time": item.get("publish_time", ""),
@@ -528,14 +625,69 @@ async def api_ingest_news(req: IngestNewsRequest):
         _state["meta_store"] = _state.get("meta_store", []) + meta_items
         _save_meta(_state["meta_store"])
 
-    # Also append to archive JSONL
-    _append_news_archive(data.get("items", []), data.get("main_keyword", ""))
+    # Append to archive JSONL (full content preserved)
+    _append_news_archive(fetched_items, keyword)
+
+    # ── 2. Auto-import quality articles to KB ──
+    # Build KB docs from articles with substantial content
+    kb_candidates = []
+    for item in fetched_items:
+        title = item.get("title", "")
+        content = item.get("content", "")
+        # Compose full text: title + content (content is now un-truncated)
+        full_text = f"{title}\n\n{content}" if content else title
+        if len(full_text.strip()) < _MIN_KB_TEXT_LEN:
+            continue
+        kb_candidates.append({
+            "text": full_text,
+            "meta": {
+                "source": f"news:{title[:40]}",
+                "doc_type": "news",
+                "keyword": keyword,
+                "title": title,
+                "publish_time": item.get("publish_time", ""),
+                "news_source": item.get("source", ""),
+                "url": item.get("url", ""),
+                "fetched_at": fetched_at,
+            },
+        })
+
+    kb_added = 0
+    kb_skipped = 0
+    if kb_candidates:
+        # Apply preprocessing pipeline
+        cleaned_docs, pp_stats = _preprocess_docs(kb_candidates)
+        logger.info(
+            f"[Ingest] 新闻入KB: {len(cleaned_docs)}/{len(kb_candidates)} 通过预处理 "
+            f"(短文本={pp_stats['rejected_short']}, 无关={pp_stats['rejected_irrelevant']})"
+        )
+
+        if cleaned_docs:
+            _assign_doc_ids(cleaned_docs)
+            with _state_lock:
+                existing = _state.get("kb_docs", [])
+                new_only = _dedup_docs(existing, cleaned_docs)
+                kb_skipped = len(cleaned_docs) - len(new_only)
+                if new_only:
+                    _state["kb_docs"] = existing + new_only
+                    _save_kb(_state["kb_docs"])
+                    # Incremental index
+                    if _state.get("kb_built"):
+                        try:
+                            _state["retriever"].add(new_only, use_chunker=True)
+                        except Exception as e:
+                            logger.warning(f"[Ingest] News KB index failed: {e}")
+                kb_added = len(new_only)
+            logger.info(f"[Ingest] 新闻入KB: +{kb_added} 篇, 跳过重复={kb_skipped}, KB总量={len(_state.get('kb_docs', []))}")
 
     return {
         "fetched": len(meta_items),
-        "keyword": data.get("main_keyword", ""),
+        "keyword": keyword,
         "has_summary": data.get("has_summary", False),
         "summary": data.get("summary", ""),
         "headlines": data.get("headlines", [])[:10],
         "meta_total": len(_state["meta_store"]),
+        "kb_added": kb_added,
+        "kb_skipped_duplicates": kb_skipped,
+        "kb_total": len(_state.get("kb_docs", [])),
     }

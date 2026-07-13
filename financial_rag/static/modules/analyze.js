@@ -42,6 +42,11 @@ export async function analyzeNews() {
   const query = document.getElementById('analyze-news-q')?.value.trim() || '';
   showLoading('analyze-news-loading');
   document.getElementById('analyze-news-result').innerHTML = '';
+  const steps = ['① 抽取实体与指标...', '② 查询知识库...', '③ LLM 综合研判...', '④ 防幻觉校验...'];
+  let stepIdx = 0;
+  const loadingEl = document.querySelector('#analyze-news-loading p');
+  if (loadingEl) loadingEl.textContent = steps[0];
+  const progressTimer = setInterval(() => { stepIdx = Math.min(stepIdx + 1, steps.length - 1); if (loadingEl) loadingEl.textContent = steps[stepIdx]; }, 4000);
   try {
     const d = await api('/api/analyze/news', { text, query });
     const s = d.structured || {};
@@ -130,6 +135,7 @@ export async function analyzeNews() {
     document.getElementById('analyze-news-result').innerHTML = `<div style="margin-top:8px"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`;
     toast('分析失败: ' + e.message, 'error');
   }
+  clearInterval(progressTimer);
   hideLoading('analyze-news-loading');
 }
 
