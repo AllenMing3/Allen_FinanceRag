@@ -568,6 +568,68 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ---
 
+## Q33: 知识库数据质量为什么差？怎么修的？
+
+**问题**：知识库平均文档长度只有 133 字，22% 的文档不足 100 字，19 组近似重复（每组 3-5 条），还有 pytest fixture 残留数据（"doc from file A"）。检索质量极差，防幻觉评分也很低。
+
+**发现方式**：先清洗数据（137 → 81 篇），然后加载真实新闻后测试，发现检索和可信度仍然不理想。
+
+**根因分析**：
+- **新闻只存元数据**：`/api/ingest/news` 把新闻存到 `news_metadata.json`（只有标题/来源/时间），内容从未进入 KB
+- **内容被截断**：`rss_fetcher.py` 三个 API 都对 content 做 `[:500]` 截断
+- **文件导入裸奔**：文件直接存入 KB，没有经过预处理流水线
+
+**修复**：
+- **移除截断**：`rss_fetcher.py` 和 `news_tools.py` 中所有 `content[:500]` 全部移除，保留完整内容
+- **新闻自动入 KB**：`/api/ingest/news` 新增自动入 KB 逻辑，经过 `_preprocess_docs()` 流水线（清洗 + 相关性门控 + 最小长度过滤 + 分类）+ 去重
+- **文件导入加质量门控**：文件导入和上传都走同一预处理流水线，不达标的文档被拒绝
+- **Archive 格式升级**：从纯文本拼接改为结构化存储（title/content/text/metadata 分字段）
+
+**教训**：数据质量是系统效果的基础。算法再好，如果 KB 里全是垃圾，检索和防幻觉都不可能好。“先治数据，再治算法”。
+
+---
+
+## Q34: 防幻觉可信度为什么总是很低（37%、46%）？
+
+**问题**：新闻解读的可信度一直很低（37%-46%），L4 结构规范 0%，L5/L6 也是 0%。
+
+**发现方式**：用户反复测试新闻解读，每次都看到高风险警告。
+
+**三个根因**：
+1. **`_compute_overall` 权重未归一化**：L5+L6 权重占 40%，被跳过时（LLM 未触发）满分只有 60%，怎么算都是高风险
+2. **L4 正则太严格**：分析模式下找 `关键信号`/`影响分析` 等精确词，但 LLM 输出是 `核心信号`/`主要信号`/`利好`/`利空` 等变体
+3. **Guard 检查的文本和前端显示的内容脱节**：Guard 检查 LLM JSON 输出的 `analysis` 字段（一段短文本），但 L4 要找的 `关键信号`/`影响分析`/`风险提示`/`后续关注` 在 structured 的独立字段里
+
+**修复**：
+- **权重归一化**：`_compute_overall()` 只对实际执行的层求加权平均，跳过的层不参与计算
+- **L4 放宽匹配**：`_EXPECTED_SECTIONS_ANALYSIS` 扩展为包含多种变体（核心/主要/重要信号、冲击/波及/利好/利空、潜在风险/下行风险等）
+- **`_build_full_analysis_text()`**：在 `analysis_router.py` 新增函数，从 structured 输出重建完整文本（关键信号 + 影响分析 + 综合分析 + 风险提示 + 后续关注），和用户在屏幕上看到的内容一致
+
+**教训**：
+- 评分规则必须和实际输出格式对齐。检查的文本和用户看到的不同，评分就没有意义
+- 权重归一化是基础设计问题，不是调参问题
+- 调试评分问题时，先看“尺子”有没有问题，再看“被量的布”
+
+---
+
+## Q35: 启动日志为什么太哆？怎么清理的？
+
+**问题**：启动时输出 30+ 行 INFO 日志，包括 Chroma dedup、KV load、Role LLM、Embedding cache、DictionaryRegistry、Coordinate 注册等内部细节，调试时噪音太大。
+
+**根因**：所有日志都是 INFO 级别，没有区分“用户关心的启动状态”和“实现细节”。
+
+**修复**：
+- **分级**：Chroma/dedup/KV load/Embedding cache/DictionaryRegistry/校验和/LightRAG init/会话加载/Stats 等全部降为 DEBUG
+- **抑制第三方库**：`lightrag`、`nano-vectordb`、`chromadb`、`httpx`、`openai` 的 logger 设为 WARNING
+- **精简 KB 日志**：来源分布字典不再全部打印，改为显示来源数量
+- **合并启动日志**：只保留 KB 摘要（篇数/索引状态/元数据数）+ 启动完成
+
+**效果**：从 30+ 行 → 仅 2 行 INFO（KB 状态 + 启动完成）。
+
+**原则**：启动日志应该回答“系统准备好了吗？”，而不是“系统在做什么？”。
+
+---
+
 ## 关键数字（面试时可引用）
 
 | 指标 | 数据 |
@@ -582,7 +644,8 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 | 查询扩展 | 52 组同义词 + 20 个概念关联，DictionaryRegistry 统一管理，规则层 0ms + LLM 层可选 |
 | 知识图谱 | LightRAG 集成: PDF/图片 → 实体关系抽取 → Function Calling 查询（local/global/hybrid/mix） |
 | 文档解析 | PyMuPDF (PDF, 本地) + qwen-vl-plus (图片多模态)，闭包注入 + FunctionDef 注册 |
-| 全链路评分 | 6 层防幻觉（4 规则 + 2 LLM）+ 5 阶段打分，**双模式**（RAG `[N]` 引用 vs 深度分析 `【】` 段落） |
+| 知识库导入 | 预处理门控（清洗 + 相关性 + 长度 + 分类 + 去重），新闻自动入 KB |
+| 全链路评分 | 6 层防幻觉（4 规则 + 2 LLM）+ 5 阶段打分，**双模式** + **权重归一化**（RAG `[N]` 引用 vs 深度分析 `【】` 段落） |
 | API 架构 | 4 个 FastAPI Router（KB / Ingest / Analysis / Query），Ingest 支持目录导入 + 文件上传 |
 | 意图路由 | 5 种意图（kline / event_impact / report / news / general） |
 | 领域字典 | 10 种字典类型，外部 JSON 热扩展（`data/dictionaries/*.json`），STOCK_MAP 33 条 / synonym 143 条 |

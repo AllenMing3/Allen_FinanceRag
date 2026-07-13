@@ -26,9 +26,15 @@
            │                  │                  │
      ┌─────▼─────┐    ┌──────▼──────┐    ┌──────▼──────┐
      │  News     │    │  File Import│    │  KLine      │
-     │  metadata │    │  Agent Chain│    │  On-demand  │
-     │  archive  │    │  IA → EA    │    │  report     │
+     │  Fetch    │    │  Agent Chain│    │  On-demand  │
+     │  Pipeline │    │  IA → EA    │    │  report     │
      └─────┬─────┘    └──────┬──────┘    └─────────────┘
+           │                 │
+  ┌────────▼────────┐  ┌─────▼──────────┐
+  │ Preprocessing   │  │ Preprocessing  │
+  │ (clean+gate+    │  │ (clean+gate+   │
+  │  classify+dedup)│  │  classify)     │
+  └────────┬────────┘  └─────┬──────────┘
            │                 │
   ┌────────▼────────┐  ┌─────▼──────┐
   │ news_metadata   │  │  kb_docs   │
@@ -59,9 +65,9 @@
 
 | File | Purpose |
 |------|--------|
-| `data/knowledge_base/kb_docs.json` | Analyzed KB documents — loaded on server start, saved after file import with agent analysis |
+| `data/knowledge_base/kb_docs.json` | Analyzed KB documents — loaded on server start, saved after file/news import with preprocessing + dedup |
 | `data/knowledge_base/news_metadata.json` | News context labels — used as **parsing prior** and **query-time context** |
-| `data/knowledge_base/news_archive.jsonl` | Cumulative raw news archive — each search appends with full metadata |
+| `data/knowledge_base/news_archive.jsonl` | Cumulative raw news archive — structured format (title/content/text/metadata), each fetch appends with full content (no truncation) |
 | `output/*.md` | Markdown reports (news summaries, K-line analysis reports) |
 
 ### API Endpoints
@@ -88,7 +94,7 @@
 | `/api/directories` | GET | List available import directories |
 | `/api/ingest/files` | POST | Import selected files with analysis mode (`files: [...]`, `mode: "deep"|"quick"`) |
 | `/api/ingest/upload` | POST | Upload PDF/image files directly via `multipart/form-data` (drag-and-drop in UI). Parsed and ingested to KB + LightRAG |
-| `/api/ingest/news` | POST | Fetch and ingest news by keyword |
+| `/api/ingest/news` | POST | Fetch and ingest news by keyword. Quality articles auto-imported to KB (preprocessing + dedup) |
 | `/api/ingest/progress` | GET | Poll background ingestion progress |
 
 #### Analysis & Chat (`api/analysis_router.py`)
@@ -367,6 +373,7 @@ reg.save_external()          # 持久化到 JSON
 | **ChromaDB lazy init** | `PersistentClient` only created when first vector indexed; in-memory fallback when no persist dir | `retrievers/vector_engine.py` |
 | **Config TTL cache** | `/api/config` caches result for 60s, avoiding repeated config reads | `api/analysis_router.py` |
 | **Query expansion** | 52 组同义词 + 20 个概念关联，DictionaryRegistry 统一管理，规则层零延迟 + LLM 短查询增强。BM25 用加权扩展词，ChromaDB 用 expanded_query | `retrievers/query_parser.py`, `retrievers/dictionary_registry.py` |
+| **Startup log cleanup** | Internal implementation details (Chroma dedup, KV load, embedding cache, LightRAG init) moved to DEBUG level. Third-party library noise (lightrag, nano-vectordb, chromadb) suppressed to WARNING. Only KB summary + startup completion remain at INFO | `web.py`, `retrievers/*.py`, `services/*.py` |
 | **HTML cache** | `index.html` read once at startup, served from memory | `web.py` |
 | **Orchestrator retry** | `max_retries=1`, retry delay `0.1s` (was 2 retries, 1s delay) | `core/factory.py`, `core/orchestrator.py` |
 | **Fetch normalization** | Pipeline `_phase_fetch` normalizes all tool results to standard doc format (`title`, `content`, `source`, `publish_time`, `url`) — handles alternate keys (`items` / `results`) | `core/pipeline.py` |
@@ -436,8 +443,8 @@ Drop any `*.json` file here → auto-loaded at startup and merged into `Dictiona
 | `app_state.py` | Shared singleton state (`_state` dict), lazy `_ensure_init()` with double-check locking, `_persist_state()`. Initializes LightRAG adapter + injects graph_tools closure |
 | `models.py` | Pydantic request models (QueryRequest, NewsRequest, KlineRequest, etc.) |
 | `kb_router.py` | KB management: status, query, build, clear, delete by source/keyword, learning history/stats |
-| `ingest_router.py` | File preview, directory listing, file/news ingestion with background thread analysis. PDF/image files auto-routed to LightRAG for graph build after parsing. File upload via `multipart/form-data` (PDF/PNG/JPG/WebP) |
-| `analysis_router.py` | Config (TTL cached), news/topic analysis, metadata clear/status, news, kline endpoints |
+| `ingest_router.py` | File preview, directory listing, file/news ingestion with preprocessing pipeline (clean → relevance gate → classify → min length filter). News auto-imports to KB with dedup. PDF/image files auto-routed to LightRAG. File upload via `multipart/form-data` |
+| `analysis_router.py` | Config (TTL cached), news/topic analysis, metadata clear/status, news, kline endpoints. `_build_full_analysis_text()` reconstructs comprehensive analysis text from structured output for Guard checking |
 | `query_router.py` | Pipeline, slot fill, scoring endpoints |
 
 All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()` for non-blocking event loop.
@@ -516,8 +523,8 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 
 | File | Role |
 |------|------|
-| `reflector.py` | `HallucinationGuard`: orchestrates 6-layer check, embeds per-layer scores + reasons into final output |
-| `rule_layers.py` | L1-L4 rule layers: L1 source grounding (jieba token overlap), L2 numerical fidelity (number+unit pairs), L3 citation integrity ([N] references, **mode-aware**: relaxed for deep analysis), L4 structure compliance (expected sections, **mode-aware**: `【】` brackets for analysis vs `# Markdown` for RAG) |
+| `reflector.py` | `HallucinationGuard`: orchestrates 6-layer check, embeds per-layer scores + reasons into final output. **Weight normalization**: only active layers contribute to overall score, skipped layers don't drag it down |
+| `rule_layers.py` | L1-L4 rule layers: L1 source grounding (jieba token overlap), L2 numerical fidelity (number+unit pairs), L3 citation integrity ([N] references, **mode-aware**: relaxed for deep analysis), L4 structure compliance (expected sections, **mode-aware**: relaxed keyword matching for analysis mode — accepts 核心信号/主要信号/利好/利空/受益 etc.) |
 | `llm_critique.py` | L5 LLM Critique: LLM reviews answer + sources, outputs structured JSON findings (severity + confidence) |
 | `llm_assist.py` | L6 LLM Assist: LLM fixes identified issues (missing citations, ungrounded claims) when L1-L4 scores are low |
 
