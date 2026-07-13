@@ -90,12 +90,12 @@ class HybridRetriever:
         # 预计算 embedding + 索引到 Chroma（走缓存，仅新增文档调 API）
         if precompute_embeddings and self._vector.has_embedding:
             texts = [d.get("text", "") for d in documents]
-            logger.info(f"预计算 {len(texts)} 个文档的 embedding...")
+            logger.debug(f"预计算 {len(texts)} 个文档的 embedding...")
             all_embeddings = self._emb_cache.embed_texts(texts, self.embedder)
             self.doc_embeddings = all_embeddings
             # 索引到 Chroma (ANN 索引)
             self._vector.index(documents, all_embeddings)
-            logger.info(f"Embedding 预计算完成，维度: {len(all_embeddings[0]) if all_embeddings else 0}")
+            logger.debug(f"Embedding 预计算完成，维度: {len(all_embeddings[0]) if all_embeddings else 0}")
         else:
             self.doc_embeddings = None
 
@@ -121,7 +121,12 @@ class HybridRetriever:
                 empty_docs=empty,
             )
             card.compute()
-            card.log_summary()
+            # Log only overall summary at INFO; details at DEBUG
+            overall = card.overall_score()
+            grade = card._overall_grade
+            logger.info(f"索引评分: {overall:.1%} [{grade.value}] {grade.cn}")
+            for line in card._build_lines():
+                logger.debug(line)
             self._last_ingestion_score = card
         except Exception as e:
             logger.warning(f"IngestionScoreCard failed: {e}")
@@ -461,7 +466,7 @@ class HybridRetriever:
         self.doc_embeddings = None
         self._bm25.clear()
         self._vector.clear()
-        logger.info("HybridRetriever: 索引已清空")
+        logger.debug("HybridRetriever: 索引已清空")
 
     def save_index(self, path: str):
         """持久化索引 (Chroma 自动持久化向量，此处只保存文档 + 配置)"""
@@ -486,11 +491,11 @@ class HybridRetriever:
         if self._vector.has_embedding and not self._vector._chroma_indexed:
             texts = [d.get("text", "") for d in self.documents]
             if texts:
-                logger.info(f"加载后重建 Chroma 索引: {len(texts)} 篇文档...")
+                logger.debug(f"加载后重建 Chroma 索引: {len(texts)} 篇文档...")
                 all_embeddings = self._emb_cache.embed_texts(texts, self.embedder)
                 self.doc_embeddings = all_embeddings
                 self._vector.index(self.documents, all_embeddings)
-                logger.info(f"Chroma 索引重建完成，维度: {len(all_embeddings[0]) if all_embeddings else 0}")
+                logger.debug(f"Chroma 索引重建完成，维度: {len(all_embeddings[0]) if all_embeddings else 0}")
         else:
             # Chroma 自动加载了向量，不需要 doc_embeddings
             self.doc_embeddings = data.get("doc_embeddings")

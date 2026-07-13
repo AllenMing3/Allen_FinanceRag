@@ -92,12 +92,12 @@ class VectorEngine:
             # 检查是否有已持久化的数据
             if self._collection.count() > 0:
                 self._chroma_indexed = True
-                logger.info(
+                logger.debug(
                     f"Chroma: 加载已有集合 '{self.COLLECTION_NAME}' "
                     f"({self._collection.count()} 篇文档)"
                 )
             else:
-                logger.info(f"Chroma: 创建新集合 '{self.COLLECTION_NAME}'")
+                logger.debug(f"Chroma: 创建新集合 '{self.COLLECTION_NAME}'")
 
         except ImportError:
             logger.warning("chromadb 未安装，向量检索降级为 Jaccard")
@@ -153,7 +153,7 @@ class VectorEngine:
             seen[cid] = i
         keep = sorted(seen.values())
         if len(keep) < len(ids):
-            logger.info(f"Chroma: dedup {len(ids)} → {len(keep)} docs (removed {len(ids) - len(keep)} duplicate IDs)")
+            logger.debug(f"Chroma: dedup {len(ids)} → {len(keep)} docs (removed {len(ids) - len(keep)} duplicate IDs)")
             ids = [ids[i] for i in keep]
             texts = [texts[i] for i in keep]
             metas = [metas[i] for i in keep]
@@ -172,7 +172,7 @@ class VectorEngine:
             self._collection.add(**batch_kwargs)
 
         self._chroma_indexed = True
-        logger.info(f"Chroma: 索引 {len(documents)} 篇文档到集合 '{self.COLLECTION_NAME}'")
+        logger.debug(f"Chroma: 索引 {len(documents)} 篇文档到集合 '{self.COLLECTION_NAME}'")
 
     def add(self, documents: List[Dict],
             embeddings: Optional[List[List[float]]] = None,
@@ -192,7 +192,7 @@ class VectorEngine:
             seen[cid] = i
         keep = sorted(seen.values())
         if len(keep) < len(ids):
-            logger.info(f"Chroma add: dedup {len(ids)} → {len(keep)} docs")
+            logger.debug(f"Chroma add: dedup {len(ids)} → {len(keep)} docs")
             ids = [ids[i] for i in keep]
             texts = [texts[i] for i in keep]
             metas = [metas[i] for i in keep]
@@ -209,7 +209,7 @@ class VectorEngine:
             batch_kwargs = {k: v[i:end] for k, v in kwargs.items()}
             self._collection.add(**batch_kwargs)
 
-        logger.info(f"Chroma: 增量添加 {len(documents)} 篇文档")
+        logger.debug(f"Chroma: 增量添加 {len(documents)} 篇文档")
 
     def remove(self, documents: List[Dict]):
         """从 Chroma 中删除指定文档"""
@@ -220,7 +220,7 @@ class VectorEngine:
         ids = [self._doc_id(d) for d in documents]
         try:
             self._collection.delete(ids=ids)
-            logger.info(f"Chroma: 删除 {len(ids)} 篇文档")
+            logger.debug(f"Chroma: 删除 {len(ids)} 篇文档")
         except Exception as e:
             logger.warning(f"Chroma delete failed (non-fatal): {e}")
 
@@ -235,7 +235,7 @@ class VectorEngine:
             if all_ids:
                 self._collection.delete(ids=all_ids)
         self._chroma_indexed = False
-        logger.info("Chroma: 集合已清空")
+        logger.debug("Chroma: 集合已清空")
 
     # ===================== 检索 =====================
 

@@ -97,7 +97,7 @@ def load_kb(path: str = KB_PATH) -> list:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 docs = json.load(f)
-            logger.info(f"KB loaded: {len(docs)} docs from {path}")
+            logger.debug(f"KB loaded: {len(docs)} docs from {path}")
             return docs
         except Exception as e:
             logger.warning(f"Failed to load KB: {e}")
@@ -108,7 +108,7 @@ def save_kb(docs: list, path: str = KB_PATH):
     """Persist KB documents to disk (atomic write + version bump)"""
     _atomic_write_json(path, docs)
     version = _bump_version()
-    logger.info(f"KB saved: {len(docs)} docs → {path} (v{version})")
+    logger.debug(f"KB saved: {len(docs)} docs → {path} (v{version})")
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ def load_meta(path: str = META_PATH) -> list:
 def save_meta(meta: list, path: str = META_PATH):
     """Persist news metadata to disk (atomic write)"""
     _atomic_write_json(path, meta)
-    logger.info(f"Metadata saved: {len(meta)} items → {path}")
+    logger.debug(f"Metadata saved: {len(meta)} items → {path}")
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +314,7 @@ def update_stats(kb_docs: list = None, analysis_record: dict = None,
 
     stats["version"] = get_version()
     _atomic_write_json(path, stats)
-    logger.info(f"Stats updated: {stats['kb_doc_count']} docs, {stats['total_analyses']} analyses, v{stats['version']}")
+    logger.debug(f"Stats updated: {stats['kb_doc_count']} docs, {stats['total_analyses']} analyses, v{stats['version']}")
     return stats
 
 

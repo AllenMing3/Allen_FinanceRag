@@ -21,6 +21,10 @@ from fastapi.staticfiles import StaticFiles
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+# 抑制第三方库噪音日志（仅显示 WARNING 及以上）
+for _noisy in ("lightrag", "nano-vectordb", "chromadb", "httpx", "openai"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
 # ---------------------------------------------------------------------------
 # Background startup: run _ensure_init() in a thread so server accepts
 # requests immediately; endpoints still call _ensure_init() (idempotent)

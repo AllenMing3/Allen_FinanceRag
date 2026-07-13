@@ -12,21 +12,231 @@
 }
 .query-box .input { flex: 1; }
 
-/* ── Pipeline stages (score strip) ── */
-.pipeline-stages {
-  display: flex;
-  gap: 2px;
+/* ── Score panels (interactive) ── */
+.score-panels {
   margin-bottom: 18px;
-  padding: 14px;
-  background: var(--surface);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
 }
-.stage-item { flex: 1; text-align: center; padding: 8px 4px; }
-.stage-item .stage-name { font-size: 10px; color: var(--text3); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .3px; }
-.stage-item .stage-score { font-size: 14px; font-weight: 700; color: var(--accent); }
-.stage-item .stage-bar { height: 3px; background: var(--surface2); border-radius: 2px; margin-top: 6px; overflow: hidden; }
-.stage-item .stage-bar-fill { height: 100%; border-radius: 2px; transition: width .4s; }
+.score-overview-strip {
+  display: flex;
+  gap: 20px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+.sos-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.sos-label {
+  color: var(--text3);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.sos-val {
+  font-weight: 700;
+}
+
+/* ── Score panel (collapsible) ── */
+.score-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.score-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s;
+}
+.score-panel-header:hover {
+  background: var(--surface2);
+}
+.score-panel-arrow {
+  font-size: 12px;
+  color: var(--text3);
+  transition: transform .2s;
+  width: 12px;
+}
+.score-panel.open .score-panel-arrow {
+  transform: rotate(90deg);
+}
+.score-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+.score-panel-badge {
+  font-size: 14px;
+  font-weight: 700;
+}
+.score-panel-hint {
+  font-size: 10px;
+  color: var(--text3);
+  padding: 2px 8px;
+  background: var(--surface2);
+  border-radius: 10px;
+}
+.score-panel-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .3s ease;
+}
+.score-panel.open .score-panel-body {
+  max-height: 2000px;
+}
+
+/* ── Stage row inside panel ── */
+.sp-stage {
+  padding: 8px 14px;
+  cursor: pointer;
+  border-top: 1px solid var(--border);
+  transition: background .1s;
+}
+.sp-stage:hover {
+  background: rgba(255,255,255,.02);
+}
+.sp-stage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sp-stage-name {
+  font-size: 12px;
+  color: var(--text);
+  flex: 1;
+}
+.sp-stage-grade {
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 16px;
+}
+.sp-stage-pct {
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 36px;
+  text-align: right;
+}
+.sp-stage-bar {
+  height: 3px;
+  background: var(--surface2);
+  border-radius: 2px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.sp-stage-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width .4s;
+}
+.sp-stage-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .25s ease;
+  padding: 0;
+}
+.sp-stage-detail.open {
+  max-height: 500px;
+  padding: 8px 0 4px;
+}
+.sp-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0 14px;
+}
+
+/* ── Stage detail sub-items ── */
+.spd-diag {
+  font-size: 11px;
+  color: #f59e0b;
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+.spd-warn {
+  font-size: 11px;
+  color: var(--danger);
+  margin-bottom: 4px;
+}
+.spd-sug {
+  font-size: 11px;
+  color: var(--accent);
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+.spd-meta {
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 4px;
+}
+.spd-kv {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+}
+.spd-kv-item {
+  font-size: 10px;
+}
+.spd-kv-key {
+  color: var(--text3);
+}
+.spd-kv-val {
+  color: var(--text2);
+  font-weight: 600;
+}
+
+/* ── Source card expandable ── */
+.source-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .25s ease;
+}
+.source-detail.open {
+  max-height: 200px;
+  margin-top: 8px;
+}
+.sd-scores {
+  display: flex;
+  gap: 16px;
+  padding: 8px 10px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+}
+.sd-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.sd-item.dim {
+  color: var(--text3);
+}
+.sd-label {
+  font-weight: 600;
+  color: var(--text2);
+}
+.sd-rank {
+  color: var(--text3);
+  font-size: 11px;
+}
+.sd-score {
+  font-weight: 700;
+}
+.source-expand-hint {
+  font-size: 10px;
+  color: var(--text3);
+  margin-left: auto;
+}
 
 /* ── Result sections ── */
 .result-section {

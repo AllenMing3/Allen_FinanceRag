@@ -220,7 +220,17 @@ async def api_kb_query(req: QueryRequest):
     sc = {
         "overall_score": card.overall_score(),
         "grade": ScoreGrade.from_score(card.overall_score()).value,
-        "stages": [{"name": s.display_name, "score": s.score} for s in card.stages],
+        "stages": [{
+            "name": s.display_name,
+            "score": s.score,
+            "stage": s.stage,
+            "grade": s.grade.value,
+            "diagnosis": s.diagnosis,
+            "warnings": s.warnings,
+            "suggestions": s.suggestions,
+            "details": s.details,
+            "elapsed_ms": round(s.elapsed_ms, 1),
+        } for s in card.stages],
     }
 
     # Inject relevant news metadata as context

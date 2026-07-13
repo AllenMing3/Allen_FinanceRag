@@ -113,13 +113,13 @@ def _ensure_init():
                         # Validate: index doc count must match KB doc count
                         if len(r.documents) == len(_state["kb_docs"]):
                             _state["kb_built"] = True
-                            logger.info(f"KB index loaded from disk ({len(r.documents)} docs, no re-embed needed)")
+                            logger.debug(f"KB index loaded from disk ({len(r.documents)} docs)")
                         else:
                             # Stale index — rebuild
                             r.clear()
                             raise ValueError("doc count mismatch, rebuilding")
                     except Exception as e:
-                        logger.info(f"Saved index not usable ({e}), rebuilding...")
+                        logger.debug(f"Saved index not usable ({e}), rebuilding...")
                         r.clear()
 
                 if not _state["kb_built"]:
@@ -127,11 +127,11 @@ def _ensure_init():
                     _state["kb_built"] = True
                     # Persist index for next startup
                     r.save_index(_INDEX_PATH)
-                    logger.info(f"KB built & index saved ({len(_state['kb_docs'])} docs)")
+                    logger.debug(f"KB built & index saved ({len(_state['kb_docs'])} docs)")
             except Exception as e:
                 _record_init_error("kb_build", e, "error")
         elif not _state["kb_docs"]:
-            logger.info("[Init] KB empty — no docs to index")
+            logger.debug("[Init] KB empty — no docs to index")
         _state["kb_path"] = _KB_PATH
         _state["meta_store"] = _load_meta()
 
@@ -165,14 +165,12 @@ def _ensure_init():
 
         # KB 状态摘要日志
         kb_docs = _state["kb_docs"]
-        source_counts = {}
-        for d in kb_docs:
-            src = d.get("meta", {}).get("source", "unknown")
-            source_counts[src] = source_counts.get(src, 0) + 1
         kb_file_size = os.path.getsize(_KB_PATH) / 1024 if os.path.exists(_KB_PATH) else 0
-        logger.info(f"[KB] 启动状态: {len(kb_docs)} 篇文档 ({kb_file_size:.1f} KB), "
-                    f"{len(_state['meta_store'])} 条新闻元数据, "
-                    f"来源分布: {source_counts}")
+        source_count = len(set(d.get("meta", {}).get("source", "unknown") for d in kb_docs))
+        idx_status = "已加载" if _state.get("kb_built") else "未索引"
+        logger.info(f"[KB] {len(kb_docs)} 篇文档 ({kb_file_size:.1f} KB), "
+                    f"索引 {idx_status}, "
+                    f"{len(_state['meta_store'])} 条元数据")
 
         # Refresh stats on startup to reflect current KB state
         _update_stats(kb_docs=_state["kb_docs"])
@@ -201,6 +199,6 @@ def _persist_state():
                     lightrag.finalize()
                 except Exception as e:
                     logger.warning(f"[Shutdown] LightRAG finalize failed: {e}")
-        logger.info("[Shutdown] State saved.")
+        logger.debug("[Shutdown] State saved.")
     except Exception as e:
         logger.warning(f"[Shutdown] Save failed: {e}")

@@ -165,6 +165,11 @@ class LightRAGAdapter:
         from lightrag import LightRAG
         from lightrag.utils import EmbeddingFunc
 
+        # 抑制 lightrag 库内部噪音日志（KV load、Role LLM 等）
+        import logging as _logging
+        _logging.getLogger("lightrag").setLevel(_logging.WARNING)
+        _logging.getLogger("nano-vectordb").setLevel(_logging.WARNING)
+
         self._rag = LightRAG(
             working_dir=self.working_dir,
             llm_model_func=_make_llm_func(self.api_key, self.llm_model),
@@ -184,7 +189,7 @@ class LightRAGAdapter:
         # 初始化存储（加载已有图谱数据）
         self._run_async(self._rag.initialize_storages())
         self._initialized = True
-        logger.info(f"[LightRAG] 初始化完成: working_dir={self.working_dir}")
+        logger.debug(f"[LightRAG] 初始化完成")
 
     def finalize(self):
         """关闭并持久化存储"""

@@ -110,7 +110,7 @@ def save_index(
             f.write(json_bytes.decode("utf-8"))
 
     size_mb = os.path.getsize(path) / (1024 * 1024)
-    logger.info(
+    logger.debug(
         f"索引已保存到 {path} ({size_mb:.2f} MB, "
         f"{len(documents)} docs, checksum={checksum})"
     )
@@ -156,9 +156,9 @@ def load_index(path: str) -> Dict:
             raise ValueError(
                 f"索引校验和不匹配: stored={stored_checksum}, computed={computed}"
             )
-        logger.info(f"校验和验证通过: {stored_checksum}")
+        logger.debug(f"校验和验证通过: {stored_checksum}")
 
-    logger.info(
+    logger.debug(
         f"已加载索引 {path}"
         f" ({len(data.get('documents', []))} 篇文档"
         f"{', 含 embeddings' if data.get('doc_embeddings') else ''})"

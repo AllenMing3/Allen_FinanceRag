@@ -175,7 +175,7 @@ class EmbeddingCache:
             # 初始化 access_order（所有条目设为同一时间）
             now = time.time()
             self._access_order = {k: now for k in self._cache}
-            logger.info(
+            logger.debug(
                 f"Embedding cache loaded: {len(self._cache)} entries "
                 f"from {self._cache_path}"
             )

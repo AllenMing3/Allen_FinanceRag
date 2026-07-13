@@ -490,4 +490,4 @@ class ConversationManager:
             except Exception as e:
                 logger.warning(f"[Conversation] 加载会话失败: {filename} — {e}")
         if self._sessions:
-            logger.info(f"[Conversation] 加载了 {len(self._sessions)} 个会话")
+            logger.debug(f"[Conversation] 加载了 {len(self._sessions)} 个会话")

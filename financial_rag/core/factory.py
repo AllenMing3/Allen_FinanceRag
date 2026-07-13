@@ -53,7 +53,6 @@ def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
     orch = AgentOrchestrator(
         CoordinatorConfig(
             execution_mode=ExecutionMode.SEQUENTIAL,
-            verbose=True,
             max_retries=1,
         )
     )
@@ -106,9 +105,7 @@ def setup_environment() -> bool:
 
     has_key = bool(_cfg.llm.api_key)
     if not has_key:
-        print("[WARN] 未设置 DASHSCOPE_API_KEY，使用纯本地模式")
-        print("       设置: export DASHSCOPE_API_KEY=sk-xxx")
-        print("       获取: https://bailian.console.aliyun.com/\n")
+        logger.warning("未设置 DASHSCOPE_API_KEY，使用纯本地模式")
     else:
-        print(f"[INFO] DashScope API 已配置，模型: {_cfg.llm.model}")
+        logger.debug(f"DashScope API 已配置，模型: {_cfg.llm.model}")
     return has_key

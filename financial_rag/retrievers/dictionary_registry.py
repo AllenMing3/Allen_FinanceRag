@@ -208,7 +208,7 @@ class DictionaryRegistry:
             jieba_module.setLogLevel(20)
             for w in words:
                 jieba_module.add_word(w)
-            logger.info(f"DictionaryRegistry: 注入 {len(words)} 词到 jieba")
+            logger.debug(f"DictionaryRegistry: 注入 {len(words)} 词到 jieba")
 
     def inject_jieba_word(self, word: str):
         """运行时向 jieba 追加单个词"""

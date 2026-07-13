@@ -2,6 +2,175 @@
 import { api, showLoading, hideLoading } from './api.js';
 import { toast, escHtml, scoreColor, rankClass } from './ui.js';
 
+const GRADE_COLORS = { A: 'var(--ok)', B: '#2563eb', C: '#f59e0b', D: '#f97316', F: 'var(--danger)' };
+const RISK_MAP = { low: ['低风险', 'var(--ok)'], medium: ['中风险', '#f59e0b'], high: ['高风险', 'var(--danger)'] };
+const LAYER_NAMES = {
+  L1_source_grounding: '来源锚定', L2_numerical_fidelity: '数值一致',
+  L3_citation_integrity: '引用完整', L4_structure_compliance: '结构规范',
+  L5_llm_critique: 'LLM质疑', L6_llm_assist: 'LLM协助',
+};
+const RETRIEVAL_STAGES = ['bm25_retrieval', 'vector_retrieval', 'rrf_fusion', 'rerank'];
+
+// ── Toggle helper ──
+function togglePanel(id) {
+  const el = document.getElementById(id);
+  if (el) { el.classList.toggle('open'); }
+}
+
+// ── Render: Retrieval scoring panel ──
+function renderRetrievalPanel(stages) {
+  const retStages = stages.filter(s => RETRIEVAL_STAGES.includes(s.stage));
+  if (!retStages.length) return '';
+  const avg = retStages.reduce((a, s) => a + s.score, 0) / retStages.length;
+  const avgPct = (avg * 100).toFixed(0);
+  const grade = avg >= 0.9 ? 'A' : avg >= 0.75 ? 'B' : avg >= 0.6 ? 'C' : avg >= 0.4 ? 'D' : 'F';
+  const gc = GRADE_COLORS[grade] || 'var(--text2)';
+
+  let h = `<div class="score-panel" id="ret-panel">
+    <div class="score-panel-header" onclick="window.__togglePanel('ret-body')">
+      <span class="score-panel-arrow">▸</span>
+      <span class="score-panel-title">检索评分</span>
+      <span class="score-panel-badge" style="color:${gc}">${grade} ${avgPct}%</span>
+      <span class="score-panel-hint">${retStages.length}个阶段</span>
+    </div>
+    <div class="score-panel-body" id="ret-body">`;
+
+  retStages.forEach((s, idx) => {
+    const pct = (s.score * 100).toFixed(0);
+    const color = scoreColor(s.score);
+    const detailId = `ret-detail-${idx}`;
+    h += `<div class="sp-stage" onclick="window.__togglePanel('${detailId}')">
+      <div class="sp-stage-row">
+        <span class="sp-stage-name">${s.name}</span>
+        <span class="sp-stage-grade" style="color:${color}">${s.grade}</span>
+        <span class="sp-stage-pct" style="color:${color}">${pct}%</span>
+      </div>
+      <div class="sp-stage-bar"><div class="sp-stage-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="sp-stage-detail" id="${detailId}">
+        ${s.diagnosis ? `<div class="spd-diag">⚠ ${escHtml(s.diagnosis)}</div>` : ''}
+        ${s.warnings?.length ? `<div class="spd-warn">${s.warnings.map(w => escHtml(w)).join('；')}</div>` : ''}
+        ${s.suggestions?.length ? `<div class="spd-sug">💡 ${s.suggestions.map(x => escHtml(x)).join('；')}</div>` : ''}
+        ${renderDetailKv(s.details)}
+        <div class="spd-meta">耗时 ${s.elapsed_ms}ms</div>
+      </div>
+    </div>`;
+  });
+
+  // Non-retrieval stages (LLM, hallucination_check, etc.)
+  const otherStages = stages.filter(s => !RETRIEVAL_STAGES.includes(s.stage));
+  if (otherStages.length) {
+    h += `<div class="sp-divider"></div>`;
+    otherStages.forEach((s, idx) => {
+      const pct = (s.score * 100).toFixed(0);
+      const color = scoreColor(s.score);
+      const detailId = `ret-other-${idx}`;
+      h += `<div class="sp-stage" onclick="window.__togglePanel('${detailId}')">
+        <div class="sp-stage-row">
+          <span class="sp-stage-name">${s.name}</span>
+          <span class="sp-stage-grade" style="color:${color}">${s.grade}</span>
+          <span class="sp-stage-pct" style="color:${color}">${pct}%</span>
+        </div>
+        <div class="sp-stage-bar"><div class="sp-stage-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <div class="sp-stage-detail" id="${detailId}">
+          ${s.diagnosis ? `<div class="spd-diag">⚠ ${escHtml(s.diagnosis)}</div>` : ''}
+          ${s.warnings?.length ? `<div class="spd-warn">${s.warnings.map(w => escHtml(w)).join('；')}</div>` : ''}
+          ${s.suggestions?.length ? `<div class="spd-sug">💡 ${s.suggestions.map(x => escHtml(x)).join('；')}</div>` : ''}
+          ${renderDetailKv(s.details)}
+          <div class="spd-meta">耗时 ${s.elapsed_ms}ms</div>
+        </div>
+      </div>`;
+    });
+  }
+
+  h += '</div></div>';
+  return h;
+}
+
+// ── Render: Hallucination guard panel ──
+function renderHallucinationPanel(hal) {
+  if (!hal) return '';
+  const [riskLabel, riskColor] = RISK_MAP[hal.risk] || ['—', 'var(--text3)'];
+  const halPct = ((hal.overall_score || 0) * 100).toFixed(0);
+  const layers = hal.layers || {};
+  const layerKeys = Object.keys(layers);
+  if (!layerKeys.length) return '';
+
+  let h = `<div class="score-panel" id="hal-panel">
+    <div class="score-panel-header" onclick="window.__togglePanel('hal-body')">
+      <span class="score-panel-arrow">▸</span>
+      <span class="score-panel-title">防幻觉校验</span>
+      <span class="score-panel-badge" style="color:${riskColor}">${riskLabel} ${halPct}%</span>
+      <span class="score-panel-hint">${layerKeys.length}层</span>
+    </div>
+    <div class="score-panel-body" id="hal-body">`;
+
+  layerKeys.forEach((key, idx) => {
+    const val = layers[key];
+    const label = LAYER_NAMES[key] || key;
+    const pct = ((val.score || 0) * 100).toFixed(0);
+    const color = scoreColor(val.score || 0);
+    const detailId = `hal-detail-${idx}`;
+    const diag = val.diagnosis || '';
+    h += `<div class="sp-stage" onclick="window.__togglePanel('${detailId}')">
+      <div class="sp-stage-row">
+        <span class="sp-stage-name">${label}</span>
+        <span class="sp-stage-pct" style="color:${color}">${pct}%</span>
+      </div>
+      <div class="sp-stage-bar"><div class="sp-stage-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="sp-stage-detail" id="${detailId}">
+        ${diag ? `<div class="spd-diag">⚠ ${escHtml(diag)}</div>` : ''}
+        ${val.details ? renderDetailKv(val.details) : ''}
+      </div>
+    </div>`;
+  });
+
+  h += '</div></div>';
+  return h;
+}
+
+// ── Render: detail key-value pairs ──
+function renderDetailKv(details) {
+  if (!details || typeof details !== 'object') return '';
+  const entries = Object.entries(details).filter(([k, v]) => v != null && v !== '' && v !== 0);
+  if (!entries.length) return '';
+  let h = '<div class="spd-kv">';
+  entries.forEach(([k, v]) => {
+    const display = typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(3)) : typeof v === 'object' ? JSON.stringify(v) : v;
+    h += `<span class="spd-kv-item"><span class="spd-kv-key">${escHtml(k)}</span> <span class="spd-kv-val">${escHtml(String(display))}</span></span>`;
+  });
+  h += '</div>';
+  return h;
+}
+
+// ── Render: Retrieval sources (expandable) ──
+function renderSources(retrieval) {
+  if (!retrieval?.length) return '';
+  let h = `<div class="result-section">
+    <div class="result-section-header"><span class="section-icon">📄</span> 知识库来源 <span class="section-count">${retrieval.length}</span></div>`;
+  retrieval.forEach((r, i) => {
+    const detailId = `src-detail-${i}`;
+    h += `<div class="source-result" onclick="window.__togglePanel('${detailId}')">
+      <div class="source-rank ${rankClass(r.score)}">${i + 1}</div>
+      <div class="source-body">
+        <div class="text">${escHtml(r.text)}</div>
+        <div class="meta">
+          <span>RRF: <strong style="color:${scoreColor(r.score)}">${r.score.toFixed(4)}</strong></span>
+          ${r.source ? `<span>来源: ${escHtml(r.source)}</span>` : ''}
+          <span class="source-expand-hint">点击展开 ▾</span>
+        </div>
+        <div class="source-detail" id="${detailId}">
+          <div class="sd-scores">
+            ${r.bm25_rank ? `<div class="sd-item"><span class="sd-label">BM25</span><span class="sd-rank">#${r.bm25_rank}</span><span class="sd-score" style="color:${scoreColor(r.bm25_score)}">${r.bm25_score.toFixed(4)}</span></div>` : '<div class="sd-item dim"><span class="sd-label">BM25</span><span>未命中</span></div>'}
+            ${r.vector_rank ? `<div class="sd-item"><span class="sd-label">向量</span><span class="sd-rank">#${r.vector_rank}</span><span class="sd-score" style="color:${scoreColor(r.vector_score)}">${r.vector_score.toFixed(4)}</span></div>` : '<div class="sd-item dim"><span class="sd-label">向量</span><span>未命中</span></div>'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  });
+  h += '</div>';
+  return h;
+}
+
 // ── KB Query ──
 
 export async function runKBQuery() {
@@ -18,101 +187,49 @@ export async function runKBQuery() {
     const d = await api('/api/kb-query', { query: q, top_k: topK });
     let h = '';
 
-    // Pipeline stages
-    if (d.scorecard && d.scorecard.stages) {
-      h += '<div class="pipeline-stages">';
-      d.scorecard.stages.forEach(s => {
-        const pct = (s.score * 100).toFixed(0);
-        h += `<div class="stage-item">
-          <div class="stage-name">${s.name}</div>
-          <div class="stage-score" style="color:${scoreColor(s.score)}">${pct}%</div>
-          <div class="stage-bar"><div class="stage-bar-fill" style="width:${pct}%;background:${scoreColor(s.score)}"></div></div>
-        </div>`;
-      });
-      h += '</div>';
-    }
-
-    // Retrieval sources
-    if (d.retrieval && d.retrieval.length) {
-      h += `<div class="result-section">
-        <div class="result-section-header"><span class="section-icon">📄</span> 知识库来源 <span class="section-count">${d.retrieval.length}</span></div>`;
-      d.retrieval.forEach((r, i) => {
-        h += `<div class="source-result">
-          <div class="source-rank ${rankClass(r.score)}">${i + 1}</div>
-          <div class="source-body">
-            <div class="text">${escHtml(r.text)}</div>
-            <div class="meta">
-              <span>RRF: <strong style="color:${scoreColor(r.score)}">${r.score.toFixed(4)}</strong></span>
-              ${r.bm25_rank ? `<span>BM25: #${r.bm25_rank} (${r.bm25_score.toFixed(4)})</span>` : '<span style="color:var(--text3)">BM25: -</span>'}
-              ${r.vector_rank ? `<span>Vec: #${r.vector_rank} (${r.vector_score.toFixed(4)})</span>` : '<span style="color:var(--text3)">Vec: -</span>'}
-              ${r.source ? `<span>来源: ${escHtml(r.source)}</span>` : ''}
-            </div>
-          </div>
-        </div>`;
-      });
-      h += '</div>';
-    }
-
-    // Answer
+    // ── 1. Answer (most important) ──
     if (d.answer) {
       h += `<div class="answer-section"><h3>💡 回答</h3><div class="answer-text">${escHtml(d.answer)}</div></div>`;
     }
 
-    // Quality scorecard: overall + hallucination + fill stats
-    if (d.scorecard || d.hallucination || d.fill_stats) {
-      const sc = d.scorecard || {};
-      const hal = d.hallucination || {};
-      const fs = d.fill_stats || {};
-      const ovPct = ((sc.overall_score || 0) * 100).toFixed(0);
-      const grade = sc.grade || '-';
-      const gradeColors = { A: 'var(--ok)', B: '#2563eb', C: '#f59e0b', D: '#f97316', F: 'var(--danger)' };
-      const gradeColor = gradeColors[grade] || 'var(--text2)';
+    // ── 2. Retrieval sources ──
+    h += renderSources(d.retrieval);
 
-      const riskMap = { low: ['低风险', 'var(--ok)'], medium: ['中风险', '#f59e0b'], high: ['高风险', 'var(--danger)'] };
-      const [riskLabel, riskColor] = riskMap[hal.risk] || ['—', 'var(--text3)'];
-      const halPct = ((hal.overall_score || 0) * 100).toFixed(0);
-
-      h += '<div class="quality-scorecard">';
-      // Top row: overall + hallucination + fill
-      h += '<div class="qs-top">';
-      h += `<div class="qs-cell"><div class="qs-label">综合评分</div><div class="qs-value" style="color:${gradeColor}">${grade} <span style="font-size:13px;color:var(--text2)">${ovPct}%</span></div></div>`;
-      h += `<div class="qs-cell"><div class="qs-label">可信度</div><div class="qs-value" style="color:${riskColor}">${riskLabel} <span style="font-size:13px;color:var(--text2)">${halPct}%</span></div></div>`;
-      if (fs.filled_slots != null) {
-        const slotPct = (fs.filled_slots / Math.max(fs.total_slots || 1, 1) * 100).toFixed(0);
-        h += `<div class="qs-cell"><div class="qs-label">槽位填充</div><div class="qs-value">${fs.filled_slots}/${fs.total_slots} <span style="font-size:13px;color:var(--text2)">${slotPct}%</span></div></div>`;
-      }
-      h += '</div>';
-
-      // Layer scores (hallucination check detail)
-      if (hal.layers && Object.keys(hal.layers).length) {
-        const layerNames = {
-          L1_source_grounding: '来源锚定', L2_numerical_fidelity: '数值一致',
-          L3_citation_integrity: '引用完整', L4_structure_compliance: '结构规范',
-          L5_llm_critique: 'LLM质疑', L6_llm_assist: 'LLM协助',
-        };
-        h += '<div class="qs-layers">';
-        for (const [key, val] of Object.entries(hal.layers)) {
-          const label = layerNames[key] || key;
-          const pct = ((val.score || 0) * 100).toFixed(0);
-          const color = scoreColor(val.score || 0);
-          h += `<div class="qs-layer">
-            <div class="qs-layer-name">${label}</div>
-            <div class="qs-layer-bar"><div class="qs-layer-bar-fill" style="width:${pct}%;background:${color}"></div></div>
-            <div class="qs-layer-score" style="color:${color}">${pct}%</div>
-          </div>`;
-        }
-        h += '</div>';
-      }
-      h += '</div>';
-    }
-
-    // News context
+    // ── 3. News context ──
     if (d.news_context && d.news_context.length) {
       h += `<div class="result-section">
         <div class="result-section-header"><span class="section-icon">📰</span> 相关新闻 <span class="section-count">${d.news_context.length}</span></div>`;
       d.news_context.forEach(n => {
         h += `<div class="news-item"><h4>${escHtml(n.title)}</h4><div class="meta">${escHtml(n.source)} · ${escHtml(n.publish_time)}</div></div>`;
       });
+      h += '</div>';
+    }
+
+    // ── 4. Scoring panels (auxiliary diagnostic, collapsed by default) ──
+    const sc = d.scorecard || {};
+    const stages = sc.stages || [];
+    if (stages.length || d.hallucination) {
+      h += '<div class="score-panels">';
+      if (sc.overall_score != null) {
+        const ovPct = ((sc.overall_score || 0) * 100).toFixed(0);
+        const grade = sc.grade || '-';
+        const gc = GRADE_COLORS[grade] || 'var(--text2)';
+        const fs = d.fill_stats || {};
+        h += `<div class="score-overview-strip">
+          <span class="sos-item"><span class="sos-label">综合</span><span class="sos-val" style="color:${gc}">${grade} ${ovPct}%</span></span>`;
+        if (d.hallucination) {
+          const [rl, rc] = RISK_MAP[d.hallucination.risk] || ['—', 'var(--text3)'];
+          const hp = ((d.hallucination.overall_score || 0) * 100).toFixed(0);
+          h += `<span class="sos-item"><span class="sos-label">可信度</span><span class="sos-val" style="color:${rc}">${rl} ${hp}%</span></span>`;
+        }
+        if (fs.filled_slots != null) {
+          const sp = (fs.filled_slots / Math.max(fs.total_slots || 1, 1) * 100).toFixed(0);
+          h += `<span class="sos-item"><span class="sos-label">槽位</span><span class="sos-val">${fs.filled_slots}/${fs.total_slots} ${sp}%</span></span>`;
+        }
+        h += '</div>';
+      }
+      h += renderRetrievalPanel(stages);
+      h += renderHallucinationPanel(d.hallucination);
       h += '</div>';
     }
 
@@ -125,6 +242,9 @@ export async function runKBQuery() {
   }
   hideLoading('query-loading');
 }
+
+// Expose toggle globally for onclick
+window.__togglePanel = togglePanel;
 
 // ── K-line analysis ──
 

@@ -36,7 +36,7 @@ class CoordinatorConfig:
     enable_retry: bool = True
     max_retries: int = 2
     timeout_seconds: float = 300.0
-    verbose: bool = True
+    verbose: bool = False
 
 
 @dataclass
