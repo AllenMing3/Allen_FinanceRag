@@ -198,7 +198,7 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ## Q13: 项目的测试策略是什么？
 
-**四层测试**（521 tests passing）：
+**四层测试**（609 tests passing）：
 1. **单元测试**：每个模块独立测试（test_agents.py, test_analysis.py, test_query_parser.py）
 2. **集成测试**：Agent 链端到端（test_new_agents.py, test_orchestrator_merge.py）
 3. **Smoke 测试**：Web API 全链路（test_smoke.py），验证每个 endpoint 不 crash
@@ -637,7 +637,7 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 | 总 commit 数 | ~65 |
 | Agent 数量 | 4（从 7 精简） |
 | 注册工具 | 32 个，跨 11 个模块 |
-| 测试覆盖 | 521 tests（21 个测试文件） |
+| 测试覆盖 | 609 tests（27 个测试文件） |
 | 知识库文档 | ~500+ 篇（去重后） |
 | 检索延迟 | BM25 < 50ms，ChromaDB ANN < 200ms |
 | 查询规划 | QueryPlanner: 5 种意图 + 来源/模式感知子查询，LLM 失败自动降级 |

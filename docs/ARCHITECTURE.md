@@ -9,7 +9,7 @@
 | **Route** | `core/agent_router.py` | Intent classification (5 domains), agent chain selection, metadata extraction (date/stock) |
 | **Coordinate** | `core/orchestrator.py` | Register agents, decide execution order, pass context. Metadata merge (not replace), list extend |
 | **Data Orchestrate** | `core/data_orchestrator.py` | Multi-pool text management: TextPreprocessor → DocTypeClassifier → KnowledgePool routing, cross-pool search |
-| **Schedule** | `core/pipeline.py` | 5-phase pipeline: Fetch → Index → Process (AgentRouter) → Output (SlotFiller, skippable) → Evolve (Scoring + HallucinationGuard) |
+| **Schedule** | `core/pipeline.py` | 5-phase pipeline: Fetch → Index → Process (Multi-Agent via AgentRouter) → Output (SlotFiller, skippable) → Evolve (Scoring + HallucinationGuard) |
 | **Indexer** | `core/indexer.py` | 4-stage retrieval: Clean → Extract → Retrieve → Verify. BM25 + ChromaDB + RRF fusion |
 | **Guard** | `guard/` | 6-layer anti-hallucination: L1-L4 rule layers (`rule_layers.py`) + L5 LLM Critique (`llm_critique.py`) + L6 LLM Assist (`llm_assist.py`), orchestrated by `HallucinationGuard` (`reflector.py`) |
 | **Score** | `core/scorer.py` | Full-pipeline scorecard: phase coverage, hallucination, citation density, answer relevance |
@@ -27,7 +27,7 @@
      ┌─────▼─────┐    ┌──────▼──────┐    ┌──────▼──────┐
      │  News     │    │  File Import│    │  KLine      │
      │  Fetch    │    │  Agent Chain│    │  On-demand  │
-     │  Pipeline │    │  IA → EA    │    │  report     │
+     │  Pipeline │    │  IA → AA    │    │  report     │
      └─────┬─────┘    └──────┬──────┘    └─────────────┘
            │                 │
   ┌────────▼────────┐  ┌─────▼──────────┐
@@ -156,7 +156,7 @@ Every chain ends with `ScoringAgent` for quality assurance. `CoordinatorAgent` i
 |--------|-------|
 | `kline` | AnalysisAgent (intent=kline) → ScoringAgent |
 | `event_impact` | AnalysisAgent (intent=event_impact) → ScoringAgent |
-| `report` | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
+| `report` | IngestionAgent → AnalysisAgent (intent=report) → ScoringAgent |
 | `news` | IngestionAgent → AnalysisAgent (intent=news, deep analysis) → ScoringAgent |
 | `general` | IngestionAgent → AnalysisAgent (intent=general) → ScoringAgent |
 
@@ -216,8 +216,7 @@ ScoringAgent
 
 ```
 AnalysisAgent (intent=kline)
-  → call_tool(fetch_kline_report)     # STOCK_MAP resolve + Tushare fetch
-  → call_tool(analyze_kline)          # MACD / RSI / Bollinger / KDJ
+  → call_tool(analyze_kline)          # STOCK_MAP resolve + Tushare fetch + MACD/RSI/Bollinger/KDJ
   → call_tool(generate_kline_analysis) # LLM interpretation
   → context →
 
@@ -229,6 +228,7 @@ ScoringAgent
 ```
 AnalysisAgent (intent=event_impact)
   → call_tool(fetch_date_events)       # Date-based event retrieval
+  → call_tool(fetch_kline_context)     # Parallel: K-line context around event date
   → call_tool(assess_event_impact)     # Bullish / bearish + impact factor
   → context →
 
@@ -457,7 +457,7 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `agent_router.py` | Query-time routing: intent classification, chain selection, metadata extraction | `AgentRouter`, `RoutingDecision` |
 | `orchestrator.py` | Multi-agent scheduling engine — dict merge, list extend, scalar replace | `AgentOrchestrator` |
 | `data_orchestrator.py` | Multi-pool text management: TextPreprocessor + DocTypeClassifier + KnowledgePool routing | `DataOrchestrator`, `KnowledgePool` |
-| `pipeline.py` | 5-phase PipelineScheduler (Fetch → Index → Process (AgentRouter) → Output (SlotFiller, skippable) → Evolve (Scoring + HallucinationGuard)) | `PipelineScheduler`, `PipelineResult` |
+| `pipeline.py` | 5-phase PipelineScheduler (Fetch → Index → Process (Multi-Agent via AgentRouter) → Output (SlotFiller, skippable) → Evolve (Scoring + HallucinationGuard)) | `PipelineScheduler`, `PipelineResult` |
 | `router.py` | CLI command dispatch + handlers | `CommandRouter` |
 | `factory.py` | Factory: creates and wires 4 agents + AgentRouter | `create_orchestrator`, `setup_environment` |
 | `indexer.py` | Hybrid retrieval pipeline orchestration | `PipelineOrchestrator` |
@@ -471,7 +471,7 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 |------|------|
 | `coordinator_agent.py` | Intent classification + chain selection via `call_tool(classify_query_intent, select_agent_chain)` |
 | `ingestion_agent.py` | Data ingestion → `call_tool(extract_document_metadata, detect_document_type)`. PDF/image files via `call_tool(parse_pdf_file, describe_image_file)` then standard text flow |
-| `analysis_agent.py` | Unified analysis: routes by `context.metadata["intent"]` — extraction, K-line, event impact, deep news analysis |
+| `analysis_agent.py` | Unified analysis: routes by `context.metadata["intent"]` — extraction, K-line, event impact, deep news, deep topic |
 | `scoring_agent.py` | Quality scoring → `call_tool(evaluate_pipeline_quality, check_hallucination, generate_score_report)` |
 | `utils.py` | Shared: `build_news_context()` |
 
@@ -674,7 +674,7 @@ python -m financial_rag.main pipeline "茅台走势" -v              # → kline
 python -m financial_rag.main pipeline "2024-06-01 发生了什么"    # → event_impact chain
 
 # Function Calling
-python -m financial_rag.main toolcall -l                  # list all 28 tools
+python -m financial_rag.main toolcall -l                  # list all 32 tools
 python -m financial_rag.main toolcall "商汤科技营收增长" -v
 
 # News / KLine / Slot / Score

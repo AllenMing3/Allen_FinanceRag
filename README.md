@@ -2,7 +2,7 @@
 
 **Not all queries are equal.** A stock price question needs K-line data. A breaking-news question needs event impact scoring. An earnings question needs report synthesis. FinRAG routes each query to the right agent chain automatically — no manual pipeline selection.
 
-![Tests](https://img.shields.io/badge/tests-521%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-609%20passing-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
@@ -53,7 +53,7 @@
 
 **LLM calls never fail silently.** `LLMCaller` wraps every LLM invocation with retry, balanced-bracket JSON parsing, response caching, and anti-hallucination constraints — one unified layer for the entire system.
 
-**521 tests, zero API keys.** All tests pass in under 6 seconds using mocked data sources. LLM and embedding stay real in tests — only external APIs are mocked.
+**609 tests, zero API keys.** All tests pass in under 6 seconds using mocked data sources. LLM and embedding stay real in tests — only external APIs are mocked.
 
 ---
 
@@ -124,7 +124,7 @@ The user types a natural language question. The system decides everything else.
 | Graph RAG | LightRAG (integrated: PDF/image → entity-relation extraction → graph query via Function Calling) |
 | Domain Dicts | DictionaryRegistry (10 types, JSON-extensible: `data/dictionaries/*.json`) |
 | Vector DB | ChromaDB (HNSW ANN, cosine distance, persistent storage) |
-| Testing | pytest — 521 tests across 21 files |
+| Testing | pytest — 609 tests across 27 files |
 
 ---
 
@@ -167,7 +167,7 @@ python -m financial_rag.main toolcall -l   # list all registered tools
 ## Testing
 
 ```bash
-python -m pytest tests/ -v    # 521 tests, < 6s, no API key needed
+python -m pytest tests/ -v    # 609 tests, < 6s, no API key needed
 ```
 
 Tests mock only **data sources** (Tushare, news APIs). LLM, embedding, and rerank stay real. Extraction tools have regex fallback for fully offline operation.

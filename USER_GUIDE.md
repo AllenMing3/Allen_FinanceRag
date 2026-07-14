@@ -119,7 +119,7 @@ Web UI 开启 Mock 模式时会显示橙色提示条。
 ## 4. 测试
 
 ```cmd
-:: 全量（521 tests，无需 API Key）
+:: 全量（609 tests，无需 API Key）
 python -m pytest tests/ -v
 ```
 
@@ -187,10 +187,11 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 
 | intent | 工具链 |
 |--------|-------|
-| `kline` | fetch_kline_report → analyze_kline → generate_kline_analysis |
-| `event_impact` | fetch_date_events → assess_event_impact |
+| `kline` | analyze_kline → generate_kline_analysis |
+| `event_impact` | fetch_date_events + fetch_kline_context (并行) → assess_event_impact |
 | `news` | analyze_news_deep (多维影响 + 关键信号 + 风险 + 后续关注) |
-| `general` | extract_financial_metrics → extract_entities → synthesize_report |
+| `deep_topic` | analyze_topic_deep (子话题 + 关键玩家 + 情绪趋势) |
+| `general` | extract_financial_metrics + extract_entities (并行) → generate_search_queries → synthesize_report |
 
 **核心设计原则：**
 - Agent 只做编排决策（`call_tool()`），不包含任何业务逻辑
