@@ -39,6 +39,10 @@
 
 **Collapsible UI with modular frontend.** The web UI uses native ES Modules split into 9 domain-specific JS modules (`modules/`) and 6 layered CSS files (`styles/`). Cards support `data-collapsible` folding for progressive disclosure — users see a clean overview first, expand sections as needed. Score panels are positioned as diagnostic tools below results (collapsed by default), keeping the answer front and center.
 
+**Deep analysis walks the full Agent chain.** News interpretation and topic research go through `orchestrator([AnalysisAgent, ScoringAgent])` — AnalysisAgent does extraction + KB retrieval + LLM analysis, then ScoringAgent evaluates quality and runs hallucination guard. If the agent chain fails, the system falls back to a direct service call. The ScoringAgent is a **universal capability**: any feature can opt in by setting 3 metadata fields (`scoring_source_items`, `scoring_mode`, `scoring_text`).
+
+**Dual-mode smart query.** The query panel offers two modes: "Knowledge Base Q&A" (hybrid BM25+vector retrieval with LLM answer) and "Deep Research" (full 5-phase Pipeline: fetch news → index → AI analysis → structured report → hallucination guard). User-facing labels are translated from technical terms — no "Pipeline", "RAG", or "Agent" jargon visible to users.
+
 **Every chain ends with a quality gate.** The Scoring agent runs a 6-layer hallucination guard (4 rule layers: source grounding, numerical fidelity, citation integrity, structure compliance + 2 LLM layers: LLM critique, LLM assist) and pipeline quality evaluation before any result reaches the user. The guard is **context-aware**: RAG queries expect `[N]` citations and `# Markdown` headers, while deep analysis uses `【】` bracketed sections with relaxed citation requirements — same guard, different scoring criteria. Weight normalization ensures skipped layers don't drag down the overall score.
 
 **Query planning before retrieval.** `QueryPlanner` uses a single LLM call to decompose complex queries (comparisons, timelines, deep dives) into structured sub-queries — each with a source (kb/news/graph/all) and mode (local/global/hybrid/mix). Simple factual queries skip planning and go straight to retrieval.
@@ -101,7 +105,8 @@ The Coordinator agent classifies each query into one of five intents, then the s
 | K-line analysis | "Show me the MACD for 600519" | Analysis → Scoring |
 | Event impact | "Is this acquisition good or bad?" | Analysis → Scoring |
 | Report synthesis | "Summarize Q4 earnings" | Ingestion → Analysis → Scoring |
-| News deep-dive | "What happened in AI this week?" | Ingestion → Analysis (deep) → Scoring |
+| News deep-dive | "What happened in AI this week?" | Analysis (deep) → Scoring |
+| Topic research | "Research the AI chip sector" | Analysis (deep_topic) → Scoring |
 | General | anything else | Ingestion → Analysis → Scoring |
 
 The user types a natural language question. The system decides everything else.

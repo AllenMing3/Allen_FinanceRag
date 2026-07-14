@@ -6,7 +6,7 @@
 
 | Engine | File | Responsibility |
 |--------|------|----------------|
-| **Route** | `core/agent_router.py` | Intent classification (5 domains), agent chain selection, metadata extraction (date/stock) |
+| **Route** | `core/agent_router.py` | Intent classification (4 intents + general fallback), agent chain selection, metadata extraction (date/stock) |
 | **Coordinate** | `core/orchestrator.py` | Register agents, decide execution order, pass context. Metadata merge (not replace), list extend |
 | **Data Orchestrate** | `core/data_orchestrator.py` | Multi-pool text management: TextPreprocessor → DocTypeClassifier → KnowledgePool routing, cross-pool search |
 | **Schedule** | `core/pipeline.py` | 5-phase pipeline: Fetch → Index → Process (Multi-Agent via AgentRouter) → Output (SlotFiller, skippable) → Evolve (Scoring + HallucinationGuard) |
@@ -174,7 +174,7 @@ Alongside intent classification, `AgentRouter` extracts structured metadata:
 
 ## Agent Chain (Phase 3 Detail)
 
-Agents are **lightweight orchestrators** — all business logic delegated to registered tools via Function Calling. `AnalysisAgent` consolidates 5 former agents (Extraction, KLine, EventImpact, Report) and selects its tool chain based on `context.metadata["intent"]`.
+Agents are **lightweight orchestrators** — all business logic delegated to registered tools via Function Calling. `AnalysisAgent` consolidates 5 former agents (Extraction, KLine, EventImpact, Report, TopicResearch) and selects its tool chain based on `context.metadata["intent"]`. The `deep_topic` intent is set directly by `analysis_router` (not via AgentRouter).
 
 ### Report / General Chain
 
@@ -197,7 +197,7 @@ ScoringAgent
   → call_tool(generate_score_report)
 ```
 
-### News Deep Analysis Chain
+### News Deep Analysis Chain (via Pipeline)
 
 ```
 IngestionAgent
@@ -211,6 +211,34 @@ AnalysisAgent (intent=news, has parsed_data)
 
 ScoringAgent
 ```
+
+### Deep Analysis Path (Analysis Panel, not via Pipeline)
+
+News interpretation and topic research from the analysis panel bypass the Pipeline and go directly through the orchestrator:
+
+```
+analysis_router._run_analysis_via_agent_chain(intent, raw_input, metadata)
+  → orchestrator.set_pipeline(["AnalysisAgent", "ScoringAgent"])
+  → orchestrator.execute(raw_input, context)
+    → AnalysisAgent._run_deep_news_chain()   # intent=news
+        → call_tool(analyze_news_deep)
+        → _build_scoring_text()              # rebuild full text for Guard
+        → metadata: scoring_source_items, scoring_mode="analysis", scoring_text
+    → ScoringAgent                           # reads metadata, runs 3 tools
+        → call_tool(evaluate_pipeline_quality)
+        → call_tool(check_hallucination, mode="analysis")
+        → call_tool(generate_score_report)
+  → extract results → return
+
+  (intent=deep_topic follows the same pattern with analyze_topic_deep)
+```
+
+**ScoringAgent universal interface:** Any feature can opt into scoring by setting 3 metadata fields:
+- `scoring_source_items` — list of source dicts for grounding check
+- `scoring_mode` — `"rag"` (expects `[N]` citations) or `"analysis"` (expects `【】` bracketed sections)
+- `scoring_text` — the text to check (if not `context.final_answer`)
+
+**Fallback:** If the agent chain fails, `analysis_router` falls back to a direct `services/analysis.py` call.
 
 ### K-Line Chain
 
@@ -471,8 +499,8 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 |------|------|
 | `coordinator_agent.py` | Intent classification + chain selection via `call_tool(classify_query_intent, select_agent_chain)` |
 | `ingestion_agent.py` | Data ingestion → `call_tool(extract_document_metadata, detect_document_type)`. PDF/image files via `call_tool(parse_pdf_file, describe_image_file)` then standard text flow |
-| `analysis_agent.py` | Unified analysis: routes by `context.metadata["intent"]` — extraction, K-line, event impact, deep news, deep topic |
-| `scoring_agent.py` | Quality scoring → `call_tool(evaluate_pipeline_quality, check_hallucination, generate_score_report)` |
+| `analysis_agent.py` | Unified analysis: routes by `context.metadata["intent"]` — extraction, K-line, event impact, deep news, deep topic. Pre-builds scoring context (`_build_scoring_text`) for downstream ScoringAgent |
+| `scoring_agent.py` | Universal quality scoring → reads `scoring_source_items`/`scoring_mode`/`scoring_text` from metadata → `call_tool(evaluate_pipeline_quality, check_hallucination, generate_score_report)` |
 | `utils.py` | Shared: `build_news_context()` |
 
 ### `financial_rag/tools/` — 32 Registered Tools across 11 Modules

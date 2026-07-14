@@ -630,6 +630,61 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 
 ---
 
+## Q36: 深度分析为什么要从“直接调 service”改为走 Agent 链？
+
+**问题**：Q8 修复了深度断裂后，新闻解读和话题调研已经能输出结构化分析了，但走的是 `analysis_router` 直接调 `services/analysis.py`——防幻觉评分和全链路打分完全没接入。用户看到的分析结果没有任何质量评估。
+
+**发现方式**：对比同一个功能的两条路径：Pipeline 走 Agent 链有完整的 ScoreCard + Guard，而深度分析页签直接调 service 什么评分都没有——**同一个功能，两条路径质量差异巨大**。
+
+**修复**：
+- `analysis_router` 新增 `_run_analysis_via_agent_chain()`：设置 `orchestrator.set_pipeline(["AnalysisAgent", "ScoringAgent"])` 走完整 Agent 链
+- `AnalysisAgent` 新增 `_build_scoring_text()` 方法：重建完整分析文本（关键信号 + 影响分析 + 综合分析 + 风险提示），供 Guard 检查
+- `AnalysisAgent` 在 metadata 中塞入三个字段：`scoring_source_items`、`scoring_mode="analysis"`、`scoring_text`
+- `ScoringAgent` 读取 metadata 三个通用字段，不需要知道上游是什么功能
+- **Fallback**：Agent 链失败时自动降级回直接 service 调用，保证功能可用性
+
+**收益**：深度分析现在也有防幻觉评分 + 可信度报告，和 Pipeline 路径质量对齐。
+
+---
+
+## Q37: ScoringAgent 为什么要做成“通用公共能力”？
+
+**问题**：ScoringAgent 原本是为 Pipeline 设计的，检查的文本是 `context.final_answer`，source 是 `context.intermediate_findings`。深度分析走 Agent 链后，这两个字段的数据结构和 Pipeline 场景完全不同。
+
+**决策**：不是写两套 ScoringAgent，而是设计一个**通用接口契约**：
+
+```python
+# 任何 feature 往 metadata 塞这 3 个字段即可接入评分：
+metadata["scoring_source_items"] = [...]   # 检索源，供 L1 来源锚定
+metadata["scoring_mode"] = "analysis"       # "rag" 或 "analysis"，控制 L3/L4 标准
+metadata["scoring_text"] = "..."           # 待检查文本（如果不用 final_answer）
+```
+
+ScoringAgent 内部逻辑：先读通用字段（优先），再 fallback 到 RAG 场景字段。这样新增任何 feature（如 Pipeline、深度分析、未来的事件分析）都只需设置 3 个 metadata 字段，不需要改 ScoringAgent 代码。
+
+**设计原则**：Agent 间通过 metadata 字段约定通信，而非硬编码依赖。新增上游功能 + 3 个字段 = 接入评分，ScoringAgent 零修改。
+
+---
+
+## Q38: 智能查询为什么加双模式？
+
+**问题**：后端有 5 阶段 Pipeline（Fetch → Index → Process → Output → Evolve），是系统最强的查询能力，但前端只暴露了一个简单的 KB 搜索框。用户完全不知道后面有这些能力，反馈“做这么厚实，我都不知道怎么用”。
+
+**决策**：不新增标签页，在现有搜索框加模式切换：
+- **知识库问答**：混合检索 + LLM 回答（简单快速）
+- **深度调研**：完整 5 阶段 Pipeline（抓新闻 + 入 KB + AI 分析 + 报告 + 核查）
+
+**用户友好化**：所有技术术语翻译为用户语言：
+- “KB 搜索” → “知识库问答”
+- “Pipeline” → “深度调研”
+- “Fetch/Index/Process/Output/Evolve” → “抓新闻/入知识库/AI分析/生成报告/事实核查”
+- “槽位” → “完成度”
+- 每个模式加步骤提示（①②③），用户一看就知道先干嘛后干嘛
+
+**教训**：能力做得再好，如果用户看不到、看不懂，等于没做。前端文案和后端架构同样重要。
+
+---
+
 ## 关键数字（面试时可引用）
 
 | 指标 | 数据 |
@@ -647,6 +702,8 @@ RRF_score(doc) = Σ 1 / (k + rank_i)   # k=60，rank_i 是该 doc 在第 i 个�
 | 知识库导入 | 预处理门控（清洗 + 相关性 + 长度 + 分类 + 去重），新闻自动入 KB |
 | 全链路评分 | 6 层防幻觉（4 规则 + 2 LLM）+ 5 阶段打分，**双模式** + **权重归一化**（RAG `[N]` 引用 vs 深度分析 `【】` 段落） |
 | API 架构 | 4 个 FastAPI Router（KB / Ingest / Analysis / Query），Ingest 支持目录导入 + 文件上传 |
-| 意图路由 | 5 种意图（kline / event_impact / report / news / general） |
+| 意图路由 | 4 种意图 + general 兜底（kline / event_impact / report / news / general），深度分析页签额外有 `deep_topic` |
 | 领域字典 | 10 种字典类型，外部 JSON 热扩展（`data/dictionaries/*.json`），STOCK_MAP 33 条 / synonym 143 条 |
 | 前端架构 | 原生 JS ES Module（9 模块） + 6 分层 CSS + 可折叠卡片（`data-collapsible`） |
+| 智能查询 | 双模式（知识库问答 / 深度调研），用户友好文案，步骤提示指引 |
+| 深度分析 | Agent 链 (AnalysisAgent → ScoringAgent)，ScoringAgent 通用接口契约（3 个 metadata 字段） |
