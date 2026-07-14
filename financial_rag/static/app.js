@@ -5,7 +5,7 @@ import { initCollapsibleCards } from './modules/ui.js';
 import { renderHealthBanners, loadOverviewStats, refreshKBStatus } from './modules/overview.js';
 import { refreshKBManager, buildKB, clearKB, searchKBKeyword, deleteKBKeyword, renderDocList } from './modules/kb.js';
 import { loadDirBrowser, browseCustomDir, ingestCustomDir, ingestNews, initUploadZone } from './modules/ingest.js';
-import { runKBQuery, runKlineTool } from './modules/query.js';
+import { runKBQuery, runKlineTool, switchQueryMode, dispatchQuery, runPipelineQuery } from './modules/query.js';
 import { analyzeNews, analyzeTopic, refreshLearningHistory } from './modules/analyze.js';
 import { loadChatSessions, sendFollowup } from './modules/chat.js';
 
@@ -22,6 +22,9 @@ window._ingestCustomDir = ingestCustomDir;
 window._ingestNews = ingestNews;
 window._runKBQuery = runKBQuery;
 window._runKlineTool = runKlineTool;
+window._switchQueryMode = switchQueryMode;
+window._dispatchQuery = dispatchQuery;
+window._runPipelineQuery = runPipelineQuery;
 window._analyzeNews = analyzeNews;
 window._analyzeTopic = analyzeTopic;
 window._refreshLearningHistory = refreshLearningHistory;

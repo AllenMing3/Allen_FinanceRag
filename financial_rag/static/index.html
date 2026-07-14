@@ -45,7 +45,7 @@
     </div>
     <div class="nav-item" data-panel="query">
       <span class="nav-icon">🔍</span>
-      <span class="nav-label">智能查询<span class="nav-sub">RAG 检索 · K线分析</span></span>
+      <span class="nav-label">智能查询<span class="nav-sub">知识库问答 · 深度调研 · K线</span></span>
       <span class="nav-count" id="queryCount">0</span>
     </div>
     <div class="nav-item" data-panel="analyze">
@@ -73,8 +73,8 @@
 
       <div class="overview-stats" id="overviewStats">
         <div class="stat-chip"><span class="stat-num" id="statAgents">4</span><span class="stat-label">Agents</span></div>
-        <div class="stat-chip"><span class="stat-num" id="statTools">28</span><span class="stat-label">Tools</span></div>
-        <div class="stat-chip"><span class="stat-num" id="statTests">521</span><span class="stat-label">Tests</span></div>
+        <div class="stat-chip"><span class="stat-num" id="statTools">32</span><span class="stat-label">Tools</span></div>
+        <div class="stat-chip"><span class="stat-num" id="statTests">609</span><span class="stat-label">Tests</span></div>
         <div class="stat-chip"><span class="stat-num" id="statDocs">-</span><span class="stat-label">KB Docs</span></div>
         <div class="stat-chip"><span class="stat-num" id="statIndex">-</span><span class="stat-label">Index</span></div>
         <div class="stat-chip"><span class="stat-num" id="statModel">-</span><span class="stat-label">LLM</span></div>
@@ -120,8 +120,8 @@
               <div class="intent-chain"><span class="ic-label">kline:</span> fetch_kline_report → analyze_kline → generate_kline_analysis</div>
               <div class="intent-chain"><span class="ic-label">event:</span> fetch_date_events → assess_event_impact → fetch_kline_context</div>
               <div class="intent-chain"><span class="ic-label">news:</span> analyze_news_deep (多维影响 + 关键信号 + 风险)</div>
-              <div class="intent-chain"><span class="ic-label">topic:</span> analyze_topic_deep (子话题聚类 + 综合研判)</div>
-              <div class="intent-chain"><span class="ic-label">graph:</span> query_knowledge_graph → get_graph_stats (LightRAG)</div>
+              <div class="intent-chain"><span class="ic-label">deep_topic:</span> analyze_topic_deep (子话题聚类 + 综合研判)</div>
+              <div class="intent-chain" style="opacity:0.6"><span class="ic-label">graph:</span> query_knowledge_graph → get_graph_stats (API-only, 非 Agent 链)</div>
               <div class="intent-chain"><span class="ic-label">general:</span> extract_metrics → extract_entities → synthesize_report</div>
             </div>
           </div>
@@ -279,20 +279,66 @@
     <div class="panel" id="panel-query">
       <div class="panel-header">
         <h2>智能查询</h2>
-        <p>基于知识库的 RAG 检索 · K线技术指标分析</p>
+        <p>提问即可，系统自动从知识库和实时新闻中找答案、做分析</p>
+      </div>
+
+      <!-- Mode toggle -->
+      <div class="mode-toggle" id="query-mode-toggle">
+        <label class="active" data-mode="kb" onclick="window._switchQueryMode('kb')">
+          <input type="radio" name="query-mode" value="kb" checked /> 知识库问答
+        </label>
+        <label data-mode="pipeline" onclick="window._switchQueryMode('pipeline')">
+          <input type="radio" name="query-mode" value="pipeline" /> 深度调研
+        </label>
+      </div>
+
+      <!-- Flow hint: tells user what to do step by step -->
+      <div class="flow-hint" id="query-flow-hint">
+        <span class="fh-step">❶ 输入问题</span>
+        <span class="fh-arrow">→</span>
+        <span class="fh-step">❷ 系统从知识库匹配答案</span>
+        <span class="fh-arrow">→</span>
+        <span class="fh-step">❸ 点击查看来源原文</span>
+      </div>
+
+      <!-- Pipeline capability intro -->
+      <div class="pipeline-info" id="pipeline-info" style="display:none">
+        <div class="pi-header">
+          <span class="pi-title">深度调研模式</span>
+          <span class="pi-badge">需要 DASHSCOPE_API_KEY</span>
+        </div>
+        <p class="pi-desc">不只是搜索 — 系统会自动抓取最新新闻、结合已有知识库、用 AI 做深度分析，最终生成一份经过事实核查的结构化报告。</p>
+        <div class="pi-stages">
+          <div class="pi-stage"><span class="pi-num">1</span><strong>抓新闻</strong><span>实时抓取相关资讯</span></div>
+          <div class="pi-arrow">→</div>
+          <div class="pi-stage"><span class="pi-num">2</span><strong>入知识库</strong><span>新知识自动归档</span></div>
+          <div class="pi-arrow">→</div>
+          <div class="pi-stage"><span class="pi-num">3</span><strong>AI 分析</strong><span>多维度深度研判</span></div>
+          <div class="pi-arrow">→</div>
+          <div class="pi-stage"><span class="pi-num">4</span><strong>生成报告</strong><span>结构化专业报告</span></div>
+          <div class="pi-arrow">→</div>
+          <div class="pi-stage"><span class="pi-num">5</span><strong>事实核查</strong><span>防幻觉质量评分</span></div>
+        </div>
       </div>
 
       <div class="query-box">
-        <input class="input" id="query-input" placeholder="基于知识库查询，如：商汤科技2024年营收多少？" onkeydown="if(event.key==='Enter'){event.preventDefault();window._runKBQuery()}" />
-        <select class="input" id="query-topk" style="flex:none;width:80px">
+        <input class="input" id="query-input" placeholder="输入你的问题，如：商汤科技2024年营收多少？" onkeydown="if(event.key==='Enter'){event.preventDefault();window._dispatchQuery()}" />
+        <!-- KB options -->
+        <select class="input kb-option" id="query-topk" style="flex:none;width:80px">
           <option value="3">Top 3</option><option value="5" selected>Top 5</option><option value="10">Top 10</option>
         </select>
-        <button class="btn btn-primary" onclick="window._runKBQuery()">查询</button>
+        <!-- Pipeline options (hidden by default) -->
+        <select class="input pipeline-option" id="pipeline-template" style="flex:none;width:110px;display:none">
+          <option value="quick">快速问答</option><option value="deep">深度分析</option>
+          <option value="fin">财报模板</option><option value="news">新闻简报</option>
+        </select>
+        <input class="input pipeline-option" id="pipeline-max-fetch" type="number" min="1" max="30" value="10" style="flex:none;width:70px;display:none" title="最大抓取新闻数" />
+        <button class="btn btn-primary" onclick="window._dispatchQuery()">查询</button>
       </div>
-      <div class="loading" id="query-loading"><div class="spinner"></div><p>RAG 检索中...</p></div>
+      <div class="loading" id="query-loading"><div class="spinner"></div><p>正在查询，请稍候...</p></div>
       <div id="query-result"></div>
 
-      <div class="section-divider" style="margin-top:32px"><span class="sd-icon">📈</span><span class="sd-title">K线分析</span><span class="sd-desc">技术指标分析</span></div>
+      <div class="section-divider" style="margin-top:32px"><span class="sd-icon">📈</span><span class="sd-title">K线分析</span><span class="sd-desc">查看个股技术走势</span></div>
       <div class="card" style="opacity:.9">
         <h3><span class="card-icon">📈</span> K线技术分析</h3>
         <p class="card-desc">输入股票名称或代码，查看 MACD / RSI / KDJ / 布林带等技术指标</p>

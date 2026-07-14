@@ -28,19 +28,23 @@ K线分析  ──→ Tushare实时数据 ──→ 技术指标计算 ──→
 文件上传 ──→ PDF解析(PyMuPDF)/图片解析(qwen-vl-plus) ──→ 预处理 ──→ kb_docs + LightRAG图谱
 ```
 
-### 2.2 查询路径
+### 2.2 查询路径（5 阶段 Pipeline）
 
 ```
-用户问题
-  → QueryParser（查询扩展：同义词+概念关联）
-  → QueryPlanner（LLM拆解复杂查询为子查询，简单查询跳过）
-  → Phase 1: Fetch（新闻/K线实时数据）
-  → Phase 2: Index（增量索引新数据，不覆盖已有KB）
-  → Phase 3: Process（AgentRouter选链路 → Agent链执行）
-  → Phase 4: Output（SlotFiller + 组装最终回答）
-  → Phase 5: Evolve（ScoreCard评分 + HallucinationGuard防幻觉）
-  → 返回给用户
+POST /api/pipeline → PipelineScheduler.run(query)
+
+Phase 1 Fetch  — Function Calling 自动选数据源（news_tools / kline_tools）
+                  → 标准化文档列表 fetched_data
+Phase 2 Index  — TextPreprocessor 清洗 → Retriever.add() 增量索引
+                  → Retriever.search()（内部: QueryParser扩展 → BM25+Vector → RRF → Rerank → Filter）
+                  → retrieved_items
+Phase 3 Process — AgentRouter.route()（4 种意图: kline/event_impact/report/news + general fallback）
+                   → 动态选 Agent 链 → orchestrator.execute()
+Phase 4 Output — SlotFiller 槽位填充（Agent 已有输出时跳过）
+Phase 5 Evolve — PipelineScoreCard 全链路打分 + HallucinationGuard(mode="rag") 防幻觉
 ```
+
+> QueryParser 在 Retriever.search() 内部调用，不需要显式编排；QueryPlanner（LLM 拆解子查询）为可选组件，当前 Pipeline 未默认接入。
 
 ### 2.3 深度分析路径（不走Pipeline，走 Agent 链）
 
@@ -147,7 +151,7 @@ K线分析  ──→ Tushare实时数据 ──→ 技术指标计算 ──→
 |------|------|------|
 | `pipeline.py` | PipelineScheduler 5阶段调度 | 数据单向流动，不回溯 |
 | `orchestrator.py` | Agent 编排执行 | 最大重试 1 次，延迟 0.1s |
-| `agent_router.py` | 意图路由（5 种意图 → Agent 链） | 规则匹配，不需要 LLM |
+| `agent_router.py` | 意图路由（4 种意图 + general fallback → Agent 链） | 规则匹配，不需要 LLM |
 | `data_orchestrator.py` | 多池文本管理 | TextPreprocessor → DocTypeClassifier → KnowledgePool |
 | `scorer.py` | PipelineScoreCard | 每阶段独立评分 |
 | `factory.py` | 工厂函数 | 创建 registry + executor + agents |
@@ -192,11 +196,59 @@ K线分析  ──→ Tushare实时数据 ──→ 技术指标计算 ──→
 
 ---
 
-## 4. 扩展模式指南
+## 4. 前端能力映射
+
+> 前端 4 个面板，每个面板背后接了什么后端能力，一目了然。
+
+### 4.1 系统概览 (`panel-overview`)
+
+| 前端区块 | 展示内容 | 背后能力 |
+|----------|----------|----------|
+| 统计卡片 | Agents/Tools/Tests/KB Docs/Index/Model 数量 | `GET /api/health` + `GET /api/kb/status` |
+| 5-Phase Pipeline 可视化 | Fetch→Index→Process→Output→Evolve | `core/pipeline.py` 5 阶段调度 |
+| Agent-Tool 协作映射 | 4 个 Agent 卡片 + 各自 Tool 列表 | `agents/` + `tools/` 注册表 |
+| Hybrid Retrieval Pipeline | BM25+ChromaDB→RRF→Rerank→Filter | `retrievers/` 混合检索链 |
+| 6-Layer Hallucination Guard | L1-L6 每层权重+说明 | `guard/` 规则层+LLM层 |
+| KB 实时状态 | 文档数/索引状态/ChromaDB/元数据 | `GET /api/kb/status` |
+| 意图路由示例 | 用户问题→自动路由 | `core/agent_router.py` 规则匹配 |
+
+### 4.2 数据管理 (`panel-data`)
+
+| 前端区块 | 用户操作 | 背后能力 | API |
+|----------|----------|----------|-----|
+| 文件导入 | 浏览目录→选择文件→深度/快速导入 | Agent链(IA→EA→Scoring) + 预处理 + 入KB | `POST /api/ingest/files` |
+| 文件上传 | 拖拽 PDF/图片上传 | PDF解析(PyMuPDF) / 图片解析(qwen-vl) + 入KB | `POST /api/ingest/upload` |
+| 新闻抓取 | 输入主题→抓取 N 条 | 3 源新闻(同花顺/新浪/东财) + 预处理 + 去重 | `POST /api/ingest/news` |
+| KB Status | 查看文档/索引/大小/元数据 | 实时 KB 统计 | `GET /api/kb/status` |
+| 知识库构建 | 一键构建索引 | BM25 + Embedding 预计算 + ChromaDB | `POST /api/build` |
+| KB 管理 | 按来源分组查看/搜索/删除 | KB 文档 CRUD | `GET /api/kb/search` · `DELETE /api/kb/source/{name}` · `DELETE /api/kb/keyword/{kw}` |
+| KB 内容 | 查看每篇文档详情 | 文档内容展示 | `GET /api/kb/documents/{id}` |
+
+### 4.3 智能查询 (`panel-query`)
+
+| 前端区块 | 用户操作 | 背后能力 | API |
+|----------|----------|----------|-----|
+| KB 搜索 | 输入问题→Top K 检索 | 混合检索(BM25+Vector+RRF+Rerank) | `POST /api/kb-query` |
+| Pipeline 深度查询 | 输入问题→5 阶段全链路 | Fetch→Index→Process→Output→Evolve | `POST /api/pipeline` |
+| K线技术分析 | 输入股票→查看技术指标 | Tushare API + MACD/RSI/KDJ/Bollinger 计算 | `POST /api/kline` |
+
+### 4.4 深度分析 (`panel-analyze`)
+
+| 前端区块 | 用户操作 | 背后能力 | API |
+|----------|----------|----------|-----|
+| 新闻解读 | 粘贴全文→结构化解析 | Agent链(Analysis→Scoring) + 指标/实体抽取 + KB检索 + LLM研判 + 防幻觉 | `POST /api/analyze/news` |
+| 话题调研 | 输入话题→抓新闻→综合研判 | Agent链 + 新闻抓取 + KB检索 + LLM研判 | `POST /api/analyze/topic` |
+| KB 检索诊断 | 自动展示(可折叠) | 检索词/原始数/Top5分数/阈值/诊断建议 | 含在 analyze 响应 `kb_search_info` |
+| 追问对话 | 基于分析结果继续对话 | 会话管理 + 上下文累积 | `POST /api/chat/followup` |
+| 学习历史 | 查看系统积累的知识 | 分析过程自动提取知识点 | `GET /api/kb/history` |
+
+---
+
+## 5. 扩展模式指南
 
 > 新增功能时参考本章。每类扩展都有标准流程、代码示例和文件清单。
 
-### 4.1 新增 Tool
+### 5.1 新增 Tool
 
 ```
 1. 在 tools/<module>_tools.py 创建工具函数
@@ -207,7 +259,7 @@ K线分析  ──→ Tushare实时数据 ──→ 技术指标计算 ──→
 6. Agent 通过 self.call_tool("tool_name", ...) 调用
 ```
 
-### 4.2 新增 Agent
+### 5.2 新增 Agent
 
 ```
 1. 在 agents/ 创建 Agent 类，继承 BaseAgent
@@ -217,7 +269,7 @@ K线分析  ──→ Tushare实时数据 ──→ 技术指标计算 ──→
 5. 在 core/agent_router.py 添加路由规则（如果需要）
 ```
 
-### 4.3 新增数据源
+### 5.3 新增数据源
 
 ```
 1. 创建数据适配器（如 rss_fetcher.py 或 tushare_client.py）
@@ -226,15 +278,15 @@ K线分析  ──→ Tushare实时数据 ──→ 技术指标计算 ──→
 4. 存入 KB（retriever.add()，不覆盖已有）
 ```
 
-### 4.4 新增意图
+### 5.4 新增意图
 
 ```
 1. 在 core/agent_router.py 的 route() 方法添加匹配规则
 2. 定义对应的 Agent 链
-3. 如果需要新 Agent，按 4.2 创建
+3. 如果需要新 Agent，按 5.2 创建
 ```
 
-### 4.5 新增字典类型
+### 5.5 新增字典类型
 
 ```
 1. 在 retrievers/dictionary_registry.py 注册新字典类型
@@ -244,7 +296,7 @@ K线分析  ──→ Tushare实时数据 ──→ 技术指标计算 ──→
 
 ---
 
-## 5. 目录树注释
+## 6. 目录树注释
 
 ```
 financial_rag/
@@ -280,7 +332,7 @@ experiments/          # 实验代码（LightRAG PoC 等）
 
 ---
 
-## 6. 关键概念速查表
+## 7. 关键概念速查表
 
 | 概念 | 说明 |
 |------|------|
@@ -292,5 +344,5 @@ experiments/          # 实验代码（LightRAG PoC 等）
 | 防幻觉双模式 | RAG 模式 `[N]` 引用 / 分析模式 `【】` 段落，权重归一化 |
 | 预处理流水线 | 清洗 → 相关性门控 → 最小长度 → 文档分类 → 去重 |
 | LightRAG | 知识图谱，只接受 PDF/图片解析结果，JSON + GraphML 文件存储 |
-| QueryPlanner | LLM 拆解复杂查询为子查询，简单查询跳过，LLM 失败自动降级 |
+| QueryPlanner | LLM 拆解复杂查询为子查询，独立组件，当前 Pipeline 未默认接入 |
 | 数据角色 | 文件=知识(入KB)，新闻=元数据+入KB(预处理后)，K线=实时(不入KB) |

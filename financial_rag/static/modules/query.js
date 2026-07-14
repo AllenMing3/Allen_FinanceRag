@@ -1,6 +1,8 @@
-// FinRAG — query.js | RAG query + K-line analysis
+// FinRAG — query.js | RAG query + Pipeline + K-line analysis
 import { api, showLoading, hideLoading } from './api.js';
 import { toast, escHtml, scoreColor, rankClass } from './ui.js';
+
+let _queryMode = 'kb';  // 'kb' | 'pipeline'
 
 const GRADE_COLORS = { A: 'var(--ok)', B: '#2563eb', C: '#f59e0b', D: '#f97316', F: 'var(--danger)' };
 const RISK_MAP = { low: ['低风险', 'var(--ok)'], medium: ['中风险', '#f59e0b'], high: ['高风险', 'var(--danger)'] };
@@ -224,7 +226,7 @@ export async function runKBQuery() {
         }
         if (fs.filled_slots != null) {
           const sp = (fs.filled_slots / Math.max(fs.total_slots || 1, 1) * 100).toFixed(0);
-          h += `<span class="sos-item"><span class="sos-label">槽位</span><span class="sos-val">${fs.filled_slots}/${fs.total_slots} ${sp}%</span></span>`;
+          h += `<span class="sos-item"><span class="sos-label">完成度</span><span class="sos-val">${fs.filled_slots}/${fs.total_slots} ${sp}%</span></span>`;
         }
         h += '</div>';
       }
@@ -245,6 +247,124 @@ export async function runKBQuery() {
 
 // Expose toggle globally for onclick
 window.__togglePanel = togglePanel;
+
+// ── Mode switch ──
+
+export function switchQueryMode(mode) {
+  _queryMode = mode;
+  const toggle = document.getElementById('query-mode-toggle');
+  if (toggle) {
+    toggle.querySelectorAll('label').forEach(l => {
+      l.classList.toggle('active', l.dataset.mode === mode);
+    });
+  }
+  // Show/hide pipeline info card
+  const info = document.getElementById('pipeline-info');
+  if (info) info.style.display = mode === 'pipeline' ? '' : 'none';
+  // Show/hide mode-specific inputs
+  document.querySelectorAll('.kb-option').forEach(el => {
+    el.style.display = mode === 'kb' ? '' : 'none';
+  });
+  document.querySelectorAll('.pipeline-option').forEach(el => {
+    el.style.display = mode === 'pipeline' ? '' : 'none';
+  });
+  // Update placeholder
+  const input = document.getElementById('query-input');
+  if (input) {
+    input.placeholder = mode === 'pipeline'
+      ? '输入调研话题，如：AI芯片行业最新动态'
+      : '输入你的问题，如：商汤科技2024年营收多少？';
+  }
+  // Update flow hint
+  const hint = document.getElementById('query-flow-hint');
+  if (hint) {
+    if (mode === 'pipeline') {
+      hint.innerHTML =
+        '<span class="fh-step">① 输入话题</span>' +
+        '<span class="fh-arrow">→</span>' +
+        '<span class="fh-step">② 系统自动抓新闻 + AI 深度分析</span>' +
+        '<span class="fh-arrow">→</span>' +
+        '<span class="fh-step">③ 生成结构化报告（带事实核查）</span>';
+    } else {
+      hint.innerHTML =
+        '<span class="fh-step">① 输入问题</span>' +
+        '<span class="fh-arrow">→</span>' +
+        '<span class="fh-step">② 系统从知识库匹配答案</span>' +
+        '<span class="fh-arrow">→</span>' +
+        '<span class="fh-step">③ 点击查看来源原文</span>';
+    }
+  }
+}
+
+export function dispatchQuery() {
+  if (_queryMode === 'pipeline') runPipelineQuery();
+  else runKBQuery();
+}
+
+// ── Pipeline query ──
+
+export async function runPipelineQuery() {
+  const q = document.getElementById('query-input')?.value.trim();
+  if (!q) return;
+  showLoading('query-loading');
+  document.getElementById('query-result').innerHTML = '';
+  try {
+    const template = document.getElementById('pipeline-template')?.value || 'quick';
+    const maxFetch = parseInt(document.getElementById('pipeline-max-fetch')?.value) || 10;
+    const d = await api('/api/pipeline', { query: q, template, max_fetch: maxFetch, verbose: false });
+    let h = '';
+
+    // ── 1. Timing strip ──
+    h += `<div class="pipeline-timing">
+      <div class="pt-item"><span class="pt-label">抓新闻</span><span class="pt-val">${d.fetch_ms}ms</span></div>
+      <div class="pt-item"><span class="pt-label">入知识库</span><span class="pt-val">${d.index_ms}ms</span></div>
+      <div class="pt-item"><span class="pt-label">AI 分析</span><span class="pt-val">${d.process_ms}ms</span></div>
+      <div class="pt-item"><span class="pt-label">生成报告</span><span class="pt-val">${d.output_ms}ms</span></div>
+      <div class="pt-item"><span class="pt-label">耗时</span><span class="pt-val total">${d.total_ms}ms</span></div>
+    </div>`;
+
+    // ── 2. Final output (most important) ──
+    if (d.final_output) {
+      h += `<div class="answer-section"><h3>💡 调研结果</h3><div class="answer-text">${escHtml(d.final_output)}</div></div>`;
+    }
+
+    // ── 3. Scorecard ──
+    const sc = d.scorecard;
+    if (sc) {
+      const ovPct = ((sc.overall_score || 0) * 100).toFixed(0);
+      const grade = sc.grade || '-';
+      const gc = GRADE_COLORS[grade] || 'var(--text2)';
+      h += '<div class="score-panels">';
+      h += `<div class="score-overview-strip">
+        <span class="sos-item"><span class="sos-label">综合</span><span class="sos-val" style="color:${gc}">${grade} ${ovPct}%</span></span>
+      </div>`;
+      // Render stages as retrieval panel (reuse existing renderer)
+      const stages = (sc.stages || []).map(s => ({
+        stage: s.name, name: s.name, score: s.score,
+        grade: s.score >= 0.9 ? 'A' : s.score >= 0.75 ? 'B' : s.score >= 0.6 ? 'C' : s.score >= 0.4 ? 'D' : 'F',
+        details: s.details ? (() => { try { return JSON.parse(s.details); } catch { return { info: s.details }; } })() : null,
+        elapsed_ms: 0,
+      }));
+      h += renderRetrievalPanel(stages);
+      h += '</div>';
+    }
+
+    // ── 4. Errors ──
+    if (d.errors && d.errors.length) {
+      h += `<div class="card" style="border-left:3px solid var(--danger)"><strong>⚠ 调研过程提示:</strong><ul style="margin:8px 0;padding-left:20px;font-size:12px">`;
+      d.errors.forEach(e => { h += `<li>${escHtml(typeof e === 'string' ? e : JSON.stringify(e))}</li>`; });
+      h += '</ul></div>';
+    }
+
+    document.getElementById('query-result').innerHTML = h;
+    const qcEl = document.getElementById('queryCount');
+    if (qcEl) qcEl.textContent = (parseInt(qcEl.textContent) || 0) + 1;
+  } catch (e) {
+    document.getElementById('query-result').innerHTML = `<div class="card"><span class="tag tag-fail">Error</span> ${escHtml(e.message)}</div>`;
+    toast('深度调研失败: ' + e.message, 'error');
+  }
+  hideLoading('query-loading');
+}
 
 // ── K-line analysis ──
 
