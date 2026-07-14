@@ -30,10 +30,10 @@ jobs:
 
       - name: 核心模块导入检查
         run: |
-          python -c "from financial_rag.core.pipeline import Pipeline; print('✅ core OK')"
-          python -c "from financial_rag.guard.reflector import HallucinationGuard; print('✅ guard OK')"
-          python -c "from financial_rag.tools.core import create_financial_registry; print('✅ tools OK')"
-          python -c "from financial_rag.api.analysis_router import router; print('✅ api OK')"
+          python -c "from financial_rag.core.pipeline import PipelineScheduler; print('core OK')"
+          python -c "from financial_rag.guard.reflector import HallucinationGuard; print('guard OK')"
+          python -c "from financial_rag.tools.core import create_financial_registry; print('tools OK')"
+          python -c "from financial_rag.api.analysis_router import router; print('api OK')"
 
   # ────────────────── Job 2: 单元测试 + 覆盖率门禁 ──────────────────
   test:
