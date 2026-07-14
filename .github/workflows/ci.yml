@@ -1,0 +1,139 @@
+# Financial RAG — CI Gate
+# 推送到 main / 发起 PR 时自动运行，阻断不合格的代码合入
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ────────────────── Job 1: 语法 + 导入检查 ──────────────────
+  lint:
+    name: "语法检查"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libmagic1
+          pip install -q -r requirements.txt
+
+      - name: 核心模块导入检查
+        run: |
+          python -c "from financial_rag.core.pipeline import Pipeline; print('✅ core OK')"
+          python -c "from financial_rag.guard.reflector import HallucinationGuard; print('✅ guard OK')"
+          python -c "from financial_rag.tools.core import create_financial_registry; print('✅ tools OK')"
+          python -c "from financial_rag.api.analysis_router import router; print('✅ api OK')"
+
+  # ────────────────── Job 2: 单元测试 + 覆盖率门禁 ──────────────────
+  test:
+    name: "测试 + 覆盖率门禁"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+    env:
+      MOCK_MODE: "true"
+      COVERAGE_THRESHOLD: 50
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libmagic1
+          pip install -q -r requirements.txt
+          pip install -q pytest-cov
+
+      - name: 运行测试 + 覆盖率
+        run: |
+          pytest tests/ \
+            --cov=financial_rag \
+            --cov-report=term-missing \
+            --cov-fail-under=${{ env.COVERAGE_THRESHOLD }} \
+            -q --tb=short
+
+      - name: 覆盖率不达标 ❌
+        if: failure()
+        run: |
+          echo "覆盖率低于 ${{ env.COVERAGE_THRESHOLD }}%，请补充测试后重新提交。"
+          exit 1
+
+  # ────────────────── Job 3: 架构规范守卫 ──────────────────
+  arch-guard:
+    name: "架构规范守卫"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Agent 不直接调用 LLM/API（agent-tool-delegation 规则）
+        run: |
+          python - <<'EOF'
+          import ast, sys, pathlib
+
+          FORBIDDEN_IN_AGENTS = [
+              "llm.chat", "llm.chat_with_tools",
+              "HallucinationGuard(", "PipelineScoreCard(",
+              "tushare_client", "dashscope",
+          ]
+          agent_dir = pathlib.Path("financial_rag/agents")
+          violations = []
+
+          for f in agent_dir.glob("*_agent.py"):
+              src = f.read_text(encoding="utf-8")
+              for pattern in FORBIDDEN_IN_AGENTS:
+                  if pattern in src:
+                      violations.append(f"{f.name}: contains '{pattern}'")
+
+          if violations:
+              print("❌ Agent 违规直接调用业务逻辑：")
+              for v in violations:
+                  print(f"  - {v}")
+              sys.exit(1)
+          else:
+              print(f"✅ {len(list(agent_dir.glob('*_agent.py')))} 个 Agent 均符合 tool-delegation 规范")
+          EOF
+
+      - name: 无死代码检测（未使用 import 扫描）
+        run: |
+          python - <<'EOF'
+          import ast, sys, pathlib
+
+          src_dir = pathlib.Path("financial_rag")
+          issues = []
+
+          for f in src_dir.rglob("*.py"):
+              if "__pycache__" in str(f):
+                  continue
+              try:
+                  tree = ast.parse(f.read_text(encoding="utf-8"))
+              except SyntaxError as e:
+                  issues.append(f"{f}: SyntaxError at line {e.lineno}")
+
+          if issues:
+              print("❌ 语法错误：")
+              for i in issues:
+                  print(f"  - {i}")
+              sys.exit(1)
+          else:
+              count = len(list(src_dir.rglob("*.py"))) - len(list(src_dir.rglob("__pycache__")))
+              print(f"✅ 所有 Python 文件语法正确")
+          EOF

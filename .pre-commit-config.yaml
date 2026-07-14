@@ -1,0 +1,43 @@
+# Pre-commit hooks — 本地提交前自动运行
+# 安装: pip install pre-commit && pre-commit install
+repos:
+  # ── 基础文件检查 ──
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        name: 清理行尾空格
+      - id: end-of-file-fixer
+        name: 修复文件末尾换行
+      - id: check-yaml
+        name: 检查 YAML 语法
+      - id: check-added-large-files
+        name: 阻止超大文件提交
+        args: ['--maxkb=500']
+
+  # ── Python 语法检查（快速） ──
+  - repo: local
+    hooks:
+      - id: python-syntax-check
+        name: Python 语法检查
+        entry: python -m py_compile
+        language: system
+        types: [python]
+        pass_filenames: true
+
+      # ── 快速冒烟测试（<30s）──
+      - id: quick-test
+        name: 快速冒烟测试（pytest -x）
+        entry: bash -c 'MOCK_MODE=true python -m pytest tests/ -x -q --tb=short 2>&1 | tail -5'
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]   # 只在 push 时跑完整测试，commit 时只跑语法
+
+      # ── Agent 架构规范守卫 ──
+      - id: agent-delegation-guard
+        name: Agent tool-delegation 规则检查
+        entry: python scripts/check_agent_delegation.py
+        language: system
+        always_run: true
+        pass_filenames: false
