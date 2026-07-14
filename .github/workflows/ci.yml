@@ -14,6 +14,8 @@ jobs:
     name: "语法检查"
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      PYTHONPATH: "."
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +43,7 @@ jobs:
     needs: lint
     env:
       MOCK_MODE: "true"
+      PYTHONPATH: "."
       COVERAGE_THRESHOLD: 50
 
     steps:
@@ -77,6 +80,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: lint
+    env:
+      PYTHONPATH: "."
     steps:
       - uses: actions/checkout@v4
 
