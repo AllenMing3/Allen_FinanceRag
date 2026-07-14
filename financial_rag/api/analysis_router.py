@@ -27,6 +27,7 @@ from financial_rag.api.models import (
     ChatFollowupRequest, CreateSessionRequest,
 )
 from financial_rag.api.kb_router import _save_analysis_to_kb
+from financial_rag.core.base import AgentContext
 from financial_rag.guard.reflector import HallucinationGuard
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,66 @@ def _run_hallucination_check(result: dict, llm=None, extra_sources: list = None)
         logger.warning(f"HallucinationGuard check failed: {e}")
 
 
+def _run_analysis_via_agent_chain(intent: str, raw_input: str, metadata: dict, parsed_data=None):
+    """通过 Agent 链 (AnalysisAgent → ScoringAgent) 执行深度分析。
+
+    Returns: 前端期望的 result dict，或 None（链失败时走 fallback）。
+    """
+    orch = _state.get("orchestrator")
+    if not orch:
+        return None
+
+    orch.set_pipeline(["AnalysisAgent", "ScoringAgent"])
+    context = AgentContext(
+        raw_input=raw_input,
+        parsed_data=parsed_data,
+        metadata={"intent": intent, **metadata},
+    )
+
+    exec_result = orch.execute(raw_input, context=context)
+
+    analysis_ar = exec_result.get("AnalysisAgent")
+    scoring_ar = exec_result.get("ScoringAgent")
+
+    if not analysis_ar or not analysis_ar.data:
+        return None
+
+    data = analysis_ar.data
+
+    # 从 ScoringAgent 提取防幻觉结果
+    hallucination = None
+    if scoring_ar and scoring_ar.data:
+        hc = scoring_ar.data.get("hallucination_check", {})
+        if isinstance(hc, dict) and hc:
+            hallucination = {
+                "overall_score": round(hc.get("overall_score", 1.0), 3),
+                "risk": hc.get("risk", "unknown"),
+                "passed": hc.get("risk", "unknown") != "high",
+                "layers": {
+                    k: {"score": round(v.get("score", 0), 3)}
+                    for k, v in hc.get("checks", {}).items()
+                    if k != "overall"
+                },
+            }
+
+    return {
+        "assessment": data.get("assessment", ""),
+        "analysis": data.get("analysis", ""),
+        "structured": data.get("structured", {}),
+        "confidence": data.get("confidence", ""),
+        "hallucination": hallucination,
+        "metrics": data.get("metrics", {}),
+        "entities": data.get("entities", {}),
+        "doc_type": data.get("doc_type", ""),
+        "kb_sources": data.get("kb_sources", []),
+        "kb_search_info": data.get("kb_search_info", {}),
+        # Topic-specific fields
+        "topic": data.get("topic"),
+        "news_count": data.get("news_count"),
+        "news": data.get("news"),
+    }
+
+
 # ===================== Endpoints =====================
 
 
@@ -196,71 +257,70 @@ async def api_config():
 
 @router.post("/api/analyze/news")
 async def api_analyze_news(req: AnalyzeNewsRequest):
-    """Analyze pasted news text: structured extraction + KB context + bullish/bearish verdict"""
+    """Analyze pasted news text via Agent chain: AnalysisAgent → ScoringAgent"""
     await asyncio.to_thread(_ensure_init)
-    from financial_rag.services.analysis import analyze_news_text
 
     text = req.text.strip()
     if not text:
         raise HTTPException(400, "请输入新闻内容")
 
     logger.info(f"[API] /analyze/news: text={len(text)}字, query={req.query!r}, kb_built={_state.get('kb_built', False)}")
-    result = analyze_news_text(
-        text,
-        query=req.query,
-        llm=_state["llm"] if _state.get("has_key") else None,
-        retriever=_state.get("retriever"),
-        kb_built=_state.get("kb_built", False),
-    )
-    logger.info(f"[API] /analyze/news: assessment={result.get('assessment')}, "
-                f"analysis_type={type(result.get('analysis')).__name__}, "
-                f"entities_keys={list(result.get('entities', {}).keys())}, "
-                f"metrics_keys={list(result.get('metrics', {}).keys())}")
 
-    # Hallucination guard on the analysis output
-    _run_hallucination_check(result, llm=_state.get("llm") if _state.get("has_key") else None,
-                               extra_sources=[{"text": text}])
+    # --- Try Agent chain (AnalysisAgent → ScoringAgent) ---
+    try:
+        result = _run_analysis_via_agent_chain(
+            intent="news",
+            raw_input=text,
+            metadata={"query": req.query or ""},
+            parsed_data=[{"text": text}],
+        )
+        if result:
+            logger.info(f"[API] /analyze/news [agent chain]: assessment={result.get('assessment')}")
+        else:
+            logger.warning("[API] /analyze/news: agent chain returned no data, falling back")
+            result = None
+    except Exception as e:
+        logger.warning(f"[API] /analyze/news: agent chain failed: {e}, falling back")
+        result = None
 
-    # Auto-create conversation session
+    # --- Fallback: direct service call ---
+    if result is None:
+        from financial_rag.services.analysis import analyze_news_text
+        result = analyze_news_text(
+            text, query=req.query,
+            llm=_state["llm"] if _state.get("has_key") else None,
+            retriever=_state.get("retriever"),
+            kb_built=_state.get("kb_built", False),
+        )
+        _run_hallucination_check(result, llm=_state.get("llm") if _state.get("has_key") else None,
+                                   extra_sources=[{"text": text}])
+        logger.info(f"[API] /analyze/news [fallback]: assessment={result.get('assessment')}")
+
+    # --- Post-processing: session + KB save ---
+    session_topic = req.query or ""
+    if not session_topic:
+        companies = result.get("entities", {}).get("companies", [])
+        if companies:
+            first = companies[0]
+            session_topic = first.get("name", "") if isinstance(first, dict) else str(first)
+        if not session_topic:
+            session_topic = result.get("doc_type", "") or "news"
+
     cm = _state.get("conversation_manager")
     if cm:
-        topic = req.query or ""
-        if not topic:
-            entities = result.get("entities", {})
-            companies = entities.get("companies", [])
-            if companies:
-                first = companies[0]
-                topic = first.get("name", "") if isinstance(first, dict) else str(first)
-            if not topic:
-                topic = result.get("doc_type", "") or "news"
-        session_id = cm.create_session(
-            session_type="news",
-            title=topic[:50],
+        result["session_id"] = cm.create_session(
+            session_type="news", title=session_topic[:50],
             initial_analysis=result.get("analysis", ""),
             context={
-                "news_text": text,
-                "structured": result.get("structured", {}),
-                "metrics": result.get("metrics", {}),
-                "entities": result.get("entities", {}),
+                "news_text": text, "structured": result.get("structured", {}),
+                "metrics": result.get("metrics", {}), "entities": result.get("entities", {}),
                 "kb_sources": result.get("kb_sources", []),
-                "assessment": result.get("assessment", ""),
-                "confidence": result.get("confidence", ""),
+                "assessment": result.get("assessment", ""), "confidence": result.get("confidence", ""),
             },
         )
-        result["session_id"] = session_id
-    # Continuous learning: save analysis conclusion to KB
+
     if result.get("assessment") and result.get("analysis"):
-        # Extract meaningful topic name from entities or query
-        topic = req.query or ""
-        if not topic:
-            entities = result.get("entities", {})
-            companies = entities.get("companies", [])
-            if companies:
-                first = companies[0]
-                topic = first.get("name", "") if isinstance(first, dict) else str(first)
-            if not topic:
-                topic = result.get("doc_type", "") or "news"
-        _save_analysis_to_kb(topic[:20], result["assessment"], str(result["analysis"]), "news",
+        _save_analysis_to_kb(session_topic[:20], result["assessment"], str(result["analysis"]), "news",
                             confidence=result.get("confidence", ""))
         result["saved_to_kb"] = True
 
@@ -269,52 +329,63 @@ async def api_analyze_news(req: AnalyzeNewsRequest):
 
 @router.post("/api/analyze/topic")
 async def api_analyze_topic(req: AnalyzeTopicRequest):
-    """Topic research: fetch news + query KB + LLM comprehensive assessment"""
+    """Topic research via Agent chain: AnalysisAgent → ScoringAgent"""
     await asyncio.to_thread(_ensure_init)
-    from financial_rag.services.analysis import analyze_topic_research
 
     topic = req.topic.strip()
     if not topic:
         raise HTTPException(400, "请输入研究话题")
 
     logger.info(f"[API] /analyze/topic: topic={topic!r}, max_news={req.max_news}, kb_built={_state.get('kb_built', False)}")
-    result = analyze_topic_research(
-        topic,
-        max_news=req.max_news,
-        llm=_state["llm"] if _state.get("has_key") else None,
-        retriever=_state.get("retriever"),
-        kb_built=_state.get("kb_built", False),
-    )
-    logger.info(f"[API] /analyze/topic: assessment={result.get('assessment')}, "
-                f"news_count={result.get('news_count')}, kb_sources={len(result.get('kb_sources', []))}")
 
-    # Hallucination guard on the topic research output
-    topic_news_text = "\n".join(
-        f"{n.get('title', '')} — {n.get('content', '')}"
-        for n in result.get("news", [])[:5]
-    )
-    _run_hallucination_check(result, llm=_state.get("llm") if _state.get("has_key") else None,
-                               extra_sources=[{"text": topic_news_text}] if topic_news_text else [])
+    # --- Try Agent chain (AnalysisAgent → ScoringAgent) ---
+    try:
+        result = _run_analysis_via_agent_chain(
+            intent="deep_topic",
+            raw_input=topic,
+            metadata={"topic": topic, "max_news": req.max_news},
+        )
+        if result:
+            logger.info(f"[API] /analyze/topic [agent chain]: assessment={result.get('assessment')}, "
+                        f"news_count={result.get('news_count')}")
+        else:
+            logger.warning("[API] /analyze/topic: agent chain returned no data, falling back")
+            result = None
+    except Exception as e:
+        logger.warning(f"[API] /analyze/topic: agent chain failed: {e}, falling back")
+        result = None
 
-    # Auto-create conversation session
+    # --- Fallback: direct service call ---
+    if result is None:
+        from financial_rag.services.analysis import analyze_topic_research
+        result = analyze_topic_research(
+            topic, max_news=req.max_news,
+            llm=_state["llm"] if _state.get("has_key") else None,
+            retriever=_state.get("retriever"),
+            kb_built=_state.get("kb_built", False),
+        )
+        topic_news_text = "\n".join(
+            f"{n.get('title', '')} — {n.get('content', '')}"
+            for n in result.get("news", [])[:5]
+        )
+        _run_hallucination_check(result, llm=_state.get("llm") if _state.get("has_key") else None,
+                                   extra_sources=[{"text": topic_news_text}] if topic_news_text else [])
+        logger.info(f"[API] /analyze/topic [fallback]: assessment={result.get('assessment')}")
+
+    # --- Post-processing: session + KB save ---
     cm = _state.get("conversation_manager")
     if cm:
-        session_id = cm.create_session(
-            session_type="topic",
-            title=topic[:50],
+        result["session_id"] = cm.create_session(
+            session_type="topic", title=topic[:50],
             initial_analysis=result.get("analysis", ""),
             context={
-                "topic": topic,
-                "structured": result.get("structured", {}),
-                "metrics": result.get("metrics", {}),
-                "entities": result.get("entities", {}),
+                "topic": topic, "structured": result.get("structured", {}),
+                "metrics": result.get("metrics", {}), "entities": result.get("entities", {}),
                 "kb_sources": result.get("kb_sources", []),
-                "assessment": result.get("assessment", ""),
-                "confidence": result.get("confidence", ""),
+                "assessment": result.get("assessment", ""), "confidence": result.get("confidence", ""),
             },
         )
-        result["session_id"] = session_id
-    # Continuous learning: save analysis conclusion to KB
+
     if result.get("assessment") and result.get("analysis"):
         _save_analysis_to_kb(topic, result["assessment"], str(result["analysis"]), "topic",
                             confidence=result.get("confidence", ""))

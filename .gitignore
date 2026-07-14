@@ -102,6 +102,9 @@ data/**/*.sqlite3
 !data/**/*.jsonl
 !data/**/*.json
 
+# embedding 缓存不入库（可能很大）
+data/knowledge_base/embedding_cache.json
+
 # 日志
 *.log
 logs/

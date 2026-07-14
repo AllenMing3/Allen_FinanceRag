@@ -1,10 +1,21 @@
-"""
-ScoringAgent — 全链路评分 Agent
+"""ScoringAgent — 通用公共评分 Agent
 
 职责:
 - 对 Pipeline 各阶段结果进行质量评分
 - 对最终输出进行防幻觉校验
 - 生成可读的评分报告
+
+设计原则:
+- 公共能力，任何 feature 都能接入
+- 只做 3 个 tool call，不写实现逻辑
+- 所有预加工由上游通过 context.metadata 传入
+
+通用接口字段 (通过 metadata 传入):
+- scoring_source_items: 防幻觉 grounding 源
+- scoring_mode: Guard 模式 ("rag" / "analysis")
+- scoring_text: 待校验的完整文本
+
+RAG 场景兼容: 如果没有通用字段，自动 fallback 到 retrieved_items / final_answer。
 
 Agent 只做编排决策，所有评分逻辑委托给 tools:
 - evaluate_pipeline_quality: 各阶段打分
@@ -42,28 +53,35 @@ class ScoringAgent(BaseAgent):
         return bool(context.final_answer or context.intermediate_findings)
 
     def process(self, context: AgentContext) -> AgentResult:
-        """执行全链路评分 — 全部委托给工具"""
+        """执行全链路评分 — 全部委托给工具
+
+        读取通用接口字段（优先）或 RAG 场景字段（fallback），
+        然后调用 3 个评分工具。
+        """
         metadata = context.metadata
 
-        # 提取各阶段数据
+        # --- 读取通用接口字段（任何 feature 都能传入）---
+        source_items = metadata.get("scoring_source_items")
+        guard_mode = metadata.get("scoring_mode", "rag")
+        check_text = metadata.get("scoring_text") or context.final_answer or ""
+
+        # --- RAG 场景 fallback ---
         fetched_data = metadata.get("fetched_data", [])
         retrieved_items = metadata.get("retrieved_items", [])
         fill_stats = metadata.get("fill_stats")
 
-        # 从 agent 结果中提取成功/失败状态
-        agent_results = []
-        for finding in context.intermediate_findings:
-            agent_results.append({
-                "success": finding.get("success", True),
-                "agent_name": finding.get("stage", "unknown"),
-            })
+        if not source_items:
+            source_items = [
+                {"text": it["text"]}
+                for it in retrieved_items
+                if isinstance(it, dict) and it.get("text")
+            ]
 
-        # 构建防幻觉校验的 source_items
-        source_items = []
-        if context.final_answer:
-            for item in retrieved_items:
-                if isinstance(item, dict) and item.get("text"):
-                    source_items.append({"text": item["text"]})
+        # 从 agent 结果中提取成功/失败状态
+        agent_results = [
+            {"success": f.get("success", True), "agent_name": f.get("stage", "unknown")}
+            for f in context.intermediate_findings
+        ]
 
         # Parallel: evaluate_pipeline_quality ‖ check_hallucination (no data dependency)
         def _evaluate():
@@ -80,12 +98,13 @@ class ScoringAgent(BaseAgent):
             )
 
         def _check_hallucination():
-            if not context.final_answer:
+            if not check_text:
                 return {}
             return self.call_tool(
                 "check_hallucination",
-                output_text=context.final_answer,
+                output_text=check_text,
                 source_items=source_items if source_items else None,
+                mode=guard_mode,
             )
 
         with ThreadPoolExecutor(max_workers=2) as ex:

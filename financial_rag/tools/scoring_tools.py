@@ -103,7 +103,7 @@ def evaluate_pipeline_quality(
     }
 
 
-def check_hallucination(output_text: str, source_items: List = None) -> Dict:
+def check_hallucination(output_text: str, source_items: List = None, mode: str = "rag") -> Dict:
     """对最终输出进行防幻觉校验。
 
     检查维度:
@@ -114,13 +114,14 @@ def check_hallucination(output_text: str, source_items: List = None) -> Dict:
     Args:
         output_text: 最终生成的文本
         source_items: 源数据列表 [{"text": "...", ...}, ...]
+        mode: Guard 模式 — "rag" 期望 [N] 引用 + # Markdown；"analysis" 期望 【关键信号】等括号段落
     """
     from financial_rag.guard.reflector import HallucinationGuard
 
     llm = _scoring_llm_ref["llm"]
     guard = HallucinationGuard(llm=llm)
     sources = source_items or []
-    result = guard.check(output_text, sources)
+    result = guard.check(output_text, sources, mode=mode)
 
     return {
         "overall_score": result.get("overall_score", 1.0),
@@ -202,12 +203,13 @@ EVALUATE_PIPELINE_TOOL = FunctionDef(
 
 CHECK_HALLUCINATION_TOOL = FunctionDef(
     name="check_hallucination",
-    description="对最终输出进行防幻觉校验，检查数值引用是否有来源支撑。",
+    description="对最终输出进行防幻觉校验，检查数值引用是否有来源支撑。支持 rag/analysis 双模式。",
     parameters={
         "type": "object",
         "properties": {
             "output_text": {"type": "string", "description": "最终生成的文本"},
             "source_items": {"type": "array", "description": "源数据列表"},
+            "mode": {"type": "string", "description": "Guard 模式: rag 或 analysis", "default": "rag"},
         },
         "required": ["output_text"],
     },

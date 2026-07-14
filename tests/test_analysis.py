@@ -207,8 +207,14 @@ class TestAnalysisHelpers:
 
     def test_search_kb_no_retriever(self):
         from financial_rag.services.analysis import _search_kb
-        assert _search_kb(None, "test", True) == []
+        sources, info = _search_kb(None, "test", True)
+        assert sources == []
+        assert info["kb_built"] is True
+        assert info["total_results"] == 0
 
     def test_search_kb_not_built(self):
         from financial_rag.services.analysis import _search_kb
-        assert _search_kb(object(), "test", False) == []
+        sources, info = _search_kb(object(), "test", False)
+        assert sources == []
+        assert info["kb_built"] is False
+        assert "reason" in info

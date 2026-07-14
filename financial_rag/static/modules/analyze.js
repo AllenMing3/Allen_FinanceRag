@@ -3,6 +3,50 @@ import { api, apiGet, showLoading, hideLoading } from './api.js';
 import { toast, escHtml, scoreColor } from './ui.js';
 import { verdictBadge, confidenceBadge, directionArrow, severityBar, sentimentPill } from './render.js';
 
+// ── Shared: KB retrieval diagnostics ──
+
+function renderKbSearchInfo(info, sources) {
+  if (!info) return '';
+  let h = '<div data-collapsible="true" style="margin-top:12px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">';
+  h += '<div class="collapsible-header" style="padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:var(--surface2);font-size:12px;font-weight:600">';
+  const srcCount = (sources || []).length;
+  const rawCount = info.total_results || 0;
+  const statusIcon = srcCount > 0 ? '✅' : (info.kb_built ? '⚠️' : '❌');
+  h += `<span>${statusIcon} KB 检索: ${srcCount} 命中 / ${rawCount} 原始</span>`;
+  h += '<span class="collapse-arrow">▶</span>';
+  h += '</div>';
+  h += '<div class="collapsible-body" style="padding:8px 12px;font-size:11px;color:var(--text2);display:none">';
+
+  // Query used
+  h += `<div style="margin-bottom:6px"><strong>检索词:</strong> ${escHtml((info.query || '').slice(0, 100))}${(info.query || '').length > 100 ? '...' : ''}</div>`;
+
+  // KB status
+  if (!info.kb_built) {
+    h += `<div style="color:var(--danger)">❌ ${escHtml(info.reason || 'KB 未构建，请先导入数据并构建索引')}</div>`;
+  } else if (info.reason) {
+    h += `<div style="color:var(--danger)">❌ ${escHtml(info.reason)}</div>`;
+  } else {
+    // Scores
+    h += `<div style="margin-bottom:4px"><strong>阈值:</strong> ${info.threshold || 0.4}</div>`;
+    h += `<div style="margin-bottom:4px"><strong>原始结果数:</strong> ${rawCount} | <strong>通过阈值:</strong> ${info.above_threshold || 0}</div>`;
+    if (info.top_scores && info.top_scores.length) {
+      h += '<div style="margin-bottom:4px"><strong>Top 5 分数:</strong> ';
+      h += info.top_scores.map(s => {
+        const c = s >= (info.threshold || 0.4) ? 'var(--ok)' : 'var(--danger)';
+        return `<span style="color:${c};font-weight:600">${s.toFixed(4)}</span>`;
+      }).join(', ');
+      h += '</div>';
+    }
+    if (rawCount === 0) {
+      h += '<div style="color:var(--text3);margin-top:4px">💡 检索无结果。可能原因：KB 中没有相关内容，或检索词与 KB 文档重叠度低</div>';
+    } else if ((info.above_threshold || 0) === 0) {
+      h += `<div style="color:var(--danger);margin-top:4px">💡 ${rawCount} 条结果全部低于阈值 ${info.threshold}，被过滤。尝试降低阈值或丰富 KB 内容</div>`;
+    }
+  }
+  h += '</div></div>';
+  return h;
+}
+
 // ── Shared: hallucination scorecard ──
 
 function renderHallucinationCard(hal) {
@@ -127,6 +171,10 @@ export async function analyzeNews() {
         h += `<div class="source-result" style="margin-top:6px"><div class="source-rank rank-high">${i + 1}</div><div class="source-body"><div class="text">${escHtml((s.text || '').slice(0, 150))}</div><div class="meta"><span>相关度: <strong style="color:${scoreColor(s.score)}">${(s.score || 0).toFixed(3)}</strong></span></div></div></div>`;
       });
     }
+
+    // KB retrieval diagnostics (always show)
+    h += renderKbSearchInfo(d.kb_search_info, d.kb_sources);
+
     h += '</div>';
     document.getElementById('analyze-news-result').innerHTML = h;
     if (d.saved_to_kb) refreshLearningHistory();
@@ -227,6 +275,10 @@ export async function analyzeTopic() {
         h += `<div class="source-result" style="margin-top:6px"><div class="source-rank rank-high">${i + 1}</div><div class="source-body"><div class="text">${escHtml((s.text || '').slice(0, 150))}</div><div class="meta"><span>相关度: <strong style="color:${scoreColor(s.score)}">${(s.score || 0).toFixed(3)}</strong></span></div></div></div>`;
       });
     }
+
+    // KB retrieval diagnostics (always show)
+    h += renderKbSearchInfo(d.kb_search_info, d.kb_sources);
+
     h += '</div>';
     document.getElementById('analyze-topic-result').innerHTML = h;
     if (d.saved_to_kb) refreshLearningHistory();

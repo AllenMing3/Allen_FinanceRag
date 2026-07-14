@@ -62,8 +62,9 @@ class AnalysisAgent(BaseAgent):
         elif intent == "event_impact":
             findings = self._run_event_chain(context)
         elif intent == "news" and context.parsed_data:
-            # 新闻解读: 已有加载文本时走深度分析
             return self._run_deep_news_chain(context)
+        elif intent == "deep_topic":
+            return self._run_deep_topic_chain(context)
         else:
             findings = self._run_extraction_chain(context)
 
@@ -217,10 +218,24 @@ class AnalysisAgent(BaseAgent):
 
         markdown = self._render_structured_news(structured, analysis_text)
 
+        # 为 ScoringAgent 预加工上下文
+        scoring_text = self._build_scoring_text(structured, analysis_text)
+        kb_sources = result.get("kb_sources", [])
+        source_items = [{"text": combined}]  # 原始新闻文本
+        for kb in kb_sources:
+            if kb.get("text"):
+                source_items.append({"text": kb["text"]})
+
         return AgentResult(
             success=success,
             message=f"深度新闻分析完成: {structured.get('verdict', 'N/A')}",
-            data={"structured": structured, "analysis": analysis_text, "markdown": markdown},
+            data={
+                "structured": structured, "analysis": analysis_text, "markdown": markdown,
+                "metrics": result.get("metrics", {}), "entities": result.get("entities", {}),
+                "doc_type": result.get("doc_type", ""), "kb_sources": kb_sources,
+                "assessment": result.get("assessment", ""), "confidence": result.get("confidence", ""),
+                "kb_search_info": result.get("kb_search_info", {}),
+            },
             context_updates={
                 "final_answer": markdown,
                 "intermediate_findings": [{
@@ -231,9 +246,13 @@ class AnalysisAgent(BaseAgent):
                     "analysis_length": len(analysis_text),
                 }],
                 "metadata": {
-                    "analysis_mode": "deep_news",
+                    "analysis_mode": "news",
                     "verdict": structured.get("verdict", "N/A"),
                     "confidence": structured.get("confidence", "N/A"),
+                    # ScoringAgent 通用接口字段
+                    "scoring_source_items": source_items,
+                    "scoring_mode": "analysis",
+                    "scoring_text": scoring_text,
                 },
             },
         )
@@ -265,10 +284,30 @@ class AnalysisAgent(BaseAgent):
 
         markdown = self._render_structured_topic(structured, analysis_text)
 
+        # 为 ScoringAgent 预加工上下文
+        scoring_text = self._build_scoring_text(structured, analysis_text)
+        kb_sources = result.get("kb_sources", [])
+        # 话题场景: 用新闻文本 + KB 来源作 grounding
+        news_items = result.get("news", [])
+        news_text = "\n".join(
+            f"{n.get('title', '')} — {n.get('content', '')}"
+            for n in news_items[:5] if n.get("title")
+        )
+        source_items = [{"text": news_text}] if news_text else []
+        for kb in kb_sources:
+            if kb.get("text"):
+                source_items.append({"text": kb["text"]})
+
         return AgentResult(
             success=success,
             message=f"深度话题调研完成: {structured.get('verdict', 'N/A')}",
-            data={"structured": structured, "analysis": analysis_text, "markdown": markdown},
+            data={
+                "structured": structured, "analysis": analysis_text, "markdown": markdown,
+                "assessment": result.get("assessment", ""), "confidence": result.get("confidence", ""),
+                "topic": result.get("topic", topic), "news_count": result.get("news_count", 0),
+                "news": result.get("news", []), "kb_sources": kb_sources,
+                "kb_search_info": result.get("kb_search_info", {}),
+            },
             context_updates={
                 "final_answer": markdown,
                 "intermediate_findings": [{
@@ -279,12 +318,66 @@ class AnalysisAgent(BaseAgent):
                     "analysis_length": len(analysis_text),
                 }],
                 "metadata": {
-                    "analysis_mode": "deep_topic",
+                    "analysis_mode": "topic",
                     "verdict": structured.get("verdict", "N/A"),
                     "confidence": structured.get("confidence", "N/A"),
+                    # ScoringAgent 通用接口字段
+                    "scoring_source_items": source_items,
+                    "scoring_mode": "analysis",
+                    "scoring_text": scoring_text,
                 },
             },
         )
+
+    # ===================== 评分文本重建 =====================
+
+    def _build_scoring_text(self, structured: Dict, analysis_text: str) -> str:
+        """从结构化输出重建完整分析文本，供 ScoringAgent 防幻觉校验。
+
+        重建逻辑和 analysis_router._build_full_analysis_text 对齐，
+        确保 Guard 检查的文本和用户看到的一致。
+        """
+        parts = []
+
+        signals = structured.get("key_signals", [])
+        if signals:
+            parts.append("关键信号：")
+            for sig in signals:
+                parts.append(f"  - {sig.get('signal', '')}" if isinstance(sig, dict) else f"  - {sig}")
+
+        impact = structured.get("impact", {})
+        if impact:
+            summaries = [v.get("summary", "") for v in impact.values() if isinstance(v, dict) and v.get("summary")]
+            if summaries:
+                parts.append(f"影响分析：{'；'.join(summaries)}")
+
+        if analysis_text:
+            parts.append(f"综合分析：{analysis_text}")
+
+        sub_topics = structured.get("sub_topics", [])
+        if sub_topics:
+            parts.append("子话题：")
+            for st in sub_topics:
+                if isinstance(st, dict):
+                    parts.append(f"  - {st.get('name', '')}: {st.get('summary', '')}")
+
+        impl = structured.get("investment_implication", "")
+        if impl:
+            parts.append(f"投资启示：{impl}")
+
+        risks = structured.get("risks", [])
+        if risks:
+            parts.append("风险提示：")
+            for r in risks:
+                parts.append(f"  - {r}")
+
+        watch = structured.get("watch_next", [])
+        if watch:
+            parts.append("后续关注：")
+            for w in watch:
+                parts.append(f"  - {w}")
+
+        return "\n".join(parts) if parts else analysis_text
 
     # ===================== 抽取 + 报告工具链 =====================
 

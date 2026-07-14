@@ -67,8 +67,8 @@ def analyze_news_text(
     entities_clean = {k: v for k, v in entities.items() if not k.startswith("_")}
 
     # 2. KB context retrieval
-    kb_sources = _search_kb(retriever, query or text[:200], kb_built)
-    logger.info(f"[analyze_news] KB 检索: {len(kb_sources)} sources")
+    kb_sources, kb_search_info = _search_kb(retriever, query or text[:200], kb_built)
+    logger.info(f"[analyze_news] KB 检索: {len(kb_sources)} sources (raw={kb_search_info.get('total_results', 0)})")
 
     # 3. LLM assessment or rule-based fallback
     if llm:
@@ -89,6 +89,7 @@ def analyze_news_text(
         "entities": entities_clean,
         "doc_type": doc_type,
         "kb_sources": kb_sources,
+        "kb_search_info": kb_search_info,
     }
 
 
@@ -150,8 +151,8 @@ def analyze_topic_research(
             search_query = keywords[0] if keywords else topic
         except Exception:
             pass
-    kb_sources = _search_kb(retriever, search_query, kb_built)
-    logger.info(f"[analyze_topic] 步骤 2/4 完成: KB {len(kb_sources)} sources ({(_time.time()-t1)*1000:.0f}ms)")
+    kb_sources, kb_search_info = _search_kb(retriever, search_query, kb_built)
+    logger.info(f"[analyze_topic] 步骤 2/4 完成: KB {len(kb_sources)} sources (raw={kb_search_info.get('total_results', 0)}) ({(_time.time()-t1)*1000:.0f}ms)")
 
     # 4. LLM assessment or fallback
     logger.info(f"[analyze_topic] 步骤 3/4: LLM 研判...")
@@ -193,6 +194,7 @@ def analyze_topic_research(
             for item in items[:10]
         ],
         "kb_sources": kb_sources,
+        "kb_search_info": kb_search_info,
     }
 
 
@@ -200,16 +202,31 @@ def analyze_topic_research(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _search_kb(retriever, query: str, kb_built: bool, min_score: float = 0.4) -> list:
+def _search_kb(retriever, query: str, kb_built: bool, min_score: float = 0.4) -> tuple:
     """Search KB for relevant context documents.
 
-    Only returns results above min_score threshold to avoid
-    feeding irrelevant content (score < 0.4) to the LLM.
+    Returns:
+        (filtered_sources, search_info) — filtered results + diagnostics dict.
+        search_info is always returned (even on empty/error) so the UI can show
+        the retrieval process.
     """
+    info = {
+        "query": query[:200],
+        "kb_built": kb_built,
+        "total_results": 0,
+        "above_threshold": 0,
+        "top_scores": [],
+        "threshold": min_score,
+    }
     if not kb_built or not retriever:
-        return []
+        info["reason"] = "KB 未构建" if not kb_built else "retriever 为空"
+        return [], info
     try:
         results, _ = retriever.search_with_scores(query, top_k=5)
+        info["total_results"] = len(results)
+        info["top_scores"] = [
+            round(it.get("score", 0), 4) for it in results[:5]
+        ]
         filtered = [
             {
                 "text": it.get("text", ""),
@@ -219,12 +236,14 @@ def _search_kb(retriever, query: str, kb_built: bool, min_score: float = 0.4) ->
             for it in results[:5]
             if it.get("score", 0) >= min_score
         ]
+        info["above_threshold"] = len(filtered)
         if len(results) > 0:
             logger.info(f"[KB search] {len(results)} results, {len(filtered)} above threshold {min_score}")
-        return filtered
+        return filtered, info
     except Exception as e:
         logger.warning(f"KB search failed: {e}")
-        return []
+        info["reason"] = f"检索异常: {e}"
+        return [], info
 
 
 def _parse_verdict(text: str) -> str:
