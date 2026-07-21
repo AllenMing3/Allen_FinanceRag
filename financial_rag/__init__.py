@@ -7,7 +7,6 @@ Financial RAG — AI/科技行业智能分析 RAG 系统
   3. core/pipeline.py    — 5 阶段流水线 (Fetch → Index → Process → Output → Evolve)
   4. core/router.py      — CLI 命令路由 (CommandRouter)
   5. core/factory.py     — 工厂函数 (create_orchestrator, setup_environment)
-  6. core/indexer.py     — 混合检索 + RRF 融合
   7. core/reflector.py   — ReAct 反思 + 防幻觉
   8. core/scorer.py      — 全链路打分卡
   9. core/protocol.py    — Agent 间消息总线 (MessageBus)
@@ -27,7 +26,6 @@ Function Calling 工具系统:
 from financial_rag.config import config, AppConfig
 from financial_rag.core import (
     AgentOrchestrator, ExecutionMode,
-    PipelineOrchestrator, PipelineConfig, PipelineStatus,
     HallucinationGuard,
     PipelineScoreCard, StageScore, ScoreGrade, create_scorecard,
 )
@@ -64,8 +62,6 @@ __all__ = [
     "config", "AppConfig",
     # Core - Orchestration
     "AgentOrchestrator", "ExecutionMode",
-    # Core - Indexer
-    "PipelineOrchestrator", "PipelineConfig", "PipelineStatus",
     # Core - Guard
     "HallucinationGuard",
     # Core - Scorer
