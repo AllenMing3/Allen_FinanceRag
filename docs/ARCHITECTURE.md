@@ -10,7 +10,6 @@
 | **Coordinate** | `core/orchestrator.py` | Register agents, decide execution order, pass context. Metadata merge (not replace), list extend |
 | **Data Orchestrate** | `core/data_orchestrator.py` | Multi-pool text management: TextPreprocessor → DocTypeClassifier → KnowledgePool routing, cross-pool search |
 | **Schedule** | `core/pipeline.py` | 5-phase pipeline: Fetch → Index → Process (Multi-Agent via AgentRouter) → Output (SlotFiller, skippable) → Evolve (Scoring + HallucinationGuard) |
-| **Indexer** | `core/indexer.py` | 4-stage retrieval: Clean → Extract → Retrieve → Verify. BM25 + ChromaDB + RRF fusion |
 | **Guard** | `guard/` | 6-layer anti-hallucination: L1-L4 rule layers (`rule_layers.py`) + L5 LLM Critique (`llm_critique.py`) + L6 LLM Assist (`llm_assist.py`), orchestrated by `HallucinationGuard` (`reflector.py`) |
 | **Score** | `core/scorer.py` | Full-pipeline scorecard: phase coverage, hallucination, citation density, answer relevance |
 
@@ -488,7 +487,6 @@ All endpoints are `async def` — blocking calls wrapped in `asyncio.to_thread()
 | `pipeline.py` | 5-phase PipelineScheduler (Fetch → Index → Process (Multi-Agent via AgentRouter) → Output (SlotFiller, skippable) → Evolve (Scoring + HallucinationGuard)) | `PipelineScheduler`, `PipelineResult` |
 | `router.py` | CLI command dispatch + handlers | `CommandRouter` |
 | `factory.py` | Factory: creates and wires 4 agents + AgentRouter | `create_orchestrator`, `setup_environment` |
-| `indexer.py` | Hybrid retrieval pipeline orchestration | `PipelineOrchestrator` |
 | `scorer.py` | Full-pipeline scorecard | `PipelineScoreCard`, `ScoreGrade` |
 | `ingestion_scorer.py` | Ingestion pipeline quality scorecard: 4-stage scoring (preprocessing → chunking → tokenization → index health) | `IngestionScoreCard` |
 | `protocol.py` | Agent messaging infrastructure | `AgentMessage`, `MessageBus` |

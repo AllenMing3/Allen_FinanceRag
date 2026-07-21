@@ -51,7 +51,7 @@
 
 **Graph RAG — integrated, not just an experiment.** LightRAG knowledge graph is wired into the ingestion pipeline: PDF/image parsed content triggers entity-relation extraction. Agents query the graph on-demand via Function Calling tools (`query_knowledge_graph`, `get_graph_stats`), routed by QueryPlanner's `source: graph` — not forced into every query. Storage is JSON + GraphML files, no external database needed.
 
-**Hybrid retrieval that actually works.** BM25 + ChromaDB ANN vector search (1024-dim) + RRF fusion + qwen3-rerank reranking + metadata filtering + **query expansion** (52 synonym groups + 20 concept association maps, LLM-enhanced for short queries) — six signals combined instead of relying on any single one.
+**Hybrid retrieval that actually works.** BM25 + ChromaDB ANN vector search (1024-dim) + RRF fusion + qwen3-rerank reranking + metadata filtering + **query expansion** (64 synonym groups + 35 concept association maps, LLM-enhanced for short queries) — six signals combined instead of relying on any single one.
 
 **Domain dictionaries that grow without code changes.** `DictionaryRegistry` centralizes 10 dictionary types (stock mappings, financial terms, synonyms, jieba words, etc.) and auto-merges external JSON files from `data/dictionaries/`. Drop in a JSON file → dictionaries expand at next startup. Coverage stats via `reg.summary()` — weak spots visible at a glance.
 
@@ -123,7 +123,7 @@ The user types a natural language question. The system decides everything else.
 | Backend | FastAPI + 4 async routers + python-multipart (file upload) |
 | Frontend | Vanilla JS ES Modules (9 modules) + 6 layered CSS + collapsible cards |
 | Data APIs | Tushare, 10jqka, Sina, EastMoney |
-| Retrieval | BM25 + ChromaDB (ANN) + RRF + TextChunker + QueryParser (52 synonym groups + 20 concept maps) |
+| Retrieval | BM25 + ChromaDB (ANN) + RRF + TextChunker + QueryParser (64 synonym groups + 35 concept maps) |
 | Query Planning | QueryPlanner (LLM decomposition, 5 intents, source/mode-aware sub-queries) |
 | Document Parse | PyMuPDF (PDF, local) + qwen-vl-plus (image multimodal) |
 | Graph RAG | LightRAG (integrated: PDF/image → entity-relation extraction → graph query via Function Calling) |

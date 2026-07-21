@@ -239,20 +239,21 @@ Pipeline 模板选项：`-t quick`（默认）/ `-t fin`（财报）/ `-t news`�
 
 ```
 data/dictionaries/
-├── ai_domain.json        # AI/科技领域术语
-└── stocks_extended.json  # 股票映射扩展
+├── ai_domain.json           # AI/科技领域术语（阿里+智谱AI为核心焦点）
+├── company_knowledge.json   # 公司级结构化知识（stocks/概念/同义词）
+└── stocks_extended.json     # 股票映射扩展
 ```
 
 **当前覆盖情况**（内置 + 外部 JSON 合并后）：
 
 | 字典 | 规模 | 说明 |
 |------|------|------|
-| stock_map | 33 条 | 股票名称/别名 → 代码映射 |
-| financial_terms | 64 个 | BM25 高权重词 |
-| industry_terms | 73 个 | BM25 中权重词 |
-| synonym_lookup | 143 条 (52 组) | 同义词双向扩展 |
-| concept_map | 20 组 | 概念关联（如“芯片”→半导体、光刻等） |
-| jieba_words | 91 个 | jieba 分词扩展 |
+| stock_map | 42 条 | 股票名称/别名 → 代码映射（含阿里生态、智谱AI） |
+| financial_terms | 100 个 | BM25 高权重词（含GMV/ARR/经调整EBITA等） |
+| industry_terms | 166 个 | BM25 中权重词（含通义系列/ChatGLM/阿里云产品等） |
+| synonym_lookup | 205 条 (64 组) | 同义词双向扩展（阿里9组+智谱AI 5组+其他AI公司） |
+| concept_map | 35 组 | 概念关联（如“阿里云”→通义千问、百炼平台、达摩院等） |
+| jieba_words | 163 个 | jieba 分词扩展（含阿里生态+智谱AI生态+关键人物） |
 
 **补强方法**：发现某个领域检索不准时，检查对应字典是否覆盖。例如缺少某公司别名，在 `stocks_extended.json` 的 `stock_map` 中加一行即可。
 
