@@ -87,6 +87,16 @@ def _preprocess_docs(raw_docs: list) -> tuple[list, dict]:
         meta["text_length"] = len(text)
         meta["_relevance_keywords"] = kw_count
 
+        # 4. Metadata 抽取（正则，不调LLM）
+        from financial_rag.retrievers.metadata import extract_metadata
+        from datetime import datetime as _dt
+        title = meta.get("title", "")
+        extracted = extract_metadata(text, title=title, existing_meta=meta)
+        meta.update(extracted)
+        # 入库日期（必填）
+        if not meta.get("date_added"):
+            meta["date_added"] = _dt.now().strftime("%Y-%m-%d")
+
         cleaned_docs.append(doc)
         stats["cleaned"] += 1
 

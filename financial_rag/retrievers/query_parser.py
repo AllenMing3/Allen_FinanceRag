@@ -56,12 +56,11 @@ class QueryResult:
     def get_filters(self) -> Dict:
         """返回可用于 metadata 过滤的条件"""
         filters = {}
-        if self.stock_code:
-            filters["stock_code"] = self.stock_code
+        # stock_code 不做过滤（文档侧无此字段）
         if self.date:
-            filters["date"] = self.date
+            filters["publish_date"] = self.date
         if self.date_range:
-            filters.update(self.date_range)
+            filters["publish_date"] = self.date_range
         return filters
 
 

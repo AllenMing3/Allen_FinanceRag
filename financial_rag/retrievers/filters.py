@@ -188,10 +188,9 @@ def build_query_filters(parsed) -> Dict:
         filter dict
     """
     filters = {}
-    if hasattr(parsed, 'stock_code') and parsed.stock_code:
-        filters["stock_code"] = parsed.stock_code
+    # stock_code 不做过滤（文档侧无此字段）
     if hasattr(parsed, 'date') and parsed.date:
-        filters["date"] = parsed.date
+        filters["publish_date"] = parsed.date
     if hasattr(parsed, 'date_range') and parsed.date_range:
-        filters.update(parsed.date_range)
+        filters["publish_date"] = parsed.date_range
     return filters

@@ -13,15 +13,27 @@ from typing import Dict, List, Any, Optional
 logger = logging.getLogger(__name__)
 
 # Chroma metadata 只支持 flat dict (str/int/float/bool)
-_CHROMA_META_SKIP = {"_classify", "_rejected", "chunk_start"}
+# 白名单模式：只保留 metadata.py 定义的字段 + 兼容旧字段
+_CHROMA_META_SKIP = {"_classify", "_rejected", "chunk_start", "_relevance_keywords"}
 
 
 def _flatten_meta(meta: Dict) -> Dict:
-    """将 meta dict 扁平化为 Chroma 兼容格式 (只保留 str/int/float/bool)"""
+    """将 meta dict 扁平化为 Chroma 兼容格式
+
+    策略:
+    - 下划线前缀字段跳过（内部字段）
+    - 嵌套 dict 跳过（Chroma 不支持）
+    - list 转字符串
+    - 其余 str/int/float/bool 保留
+    """
+    from financial_rag.retrievers.metadata import CHROMA_META_WHITELIST
+
     flat = {}
     for k, v in meta.items():
-        if k in _CHROMA_META_SKIP:
+        # 跳过内部字段
+        if k.startswith("_") or k in _CHROMA_META_SKIP:
             continue
+        # 白名单外的字段也保留（兼容未预见的字段），但嵌套dict不行
         if isinstance(v, (str, int, float, bool)):
             flat[k] = v
         elif isinstance(v, dict):
