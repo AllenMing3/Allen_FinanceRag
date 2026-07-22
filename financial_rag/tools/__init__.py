@@ -93,6 +93,20 @@ from financial_rag.tools.analysis_tools import (
     inject_analysis_deps,
     ANALYSIS_TOOLS,
 )
+from financial_rag.tools.kb_tools import (
+    kb_load,
+    kb_save,
+    kb_add,
+    kb_remove,
+    kb_stats,
+    KB_TOOLS,
+)
+from financial_rag.tools.chunk_tools import (
+    chunk_document,
+    chunk_documents_batch,
+    CHUNK_TOOLS,
+    STRATEGY_CONFIGS,
+)
 __all__ = [
     # core
     "FunctionDef",
@@ -148,4 +162,16 @@ __all__ = [
     "analyze_topic_deep",
     "inject_analysis_deps",
     "ANALYSIS_TOOLS",
+    # kb_tools
+    "kb_load",
+    "kb_save",
+    "kb_add",
+    "kb_remove",
+    "kb_stats",
+    "KB_TOOLS",
+    # chunk_tools
+    "chunk_document",
+    "chunk_documents_batch",
+    "CHUNK_TOOLS",
+    "STRATEGY_CONFIGS",
 ]

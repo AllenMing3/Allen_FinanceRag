@@ -773,6 +773,16 @@ def create_financial_registry(retriever=None, llm=None, lightrag_adapter=None) -
     for tool_def in GRAPH_TOOLS:
         registry.add(tool_def)
 
+    # ---- KB 持久化工具 (知识库读写管理) ----
+    from financial_rag.tools.kb_tools import KB_TOOLS
+    for tool_def in KB_TOOLS:
+        registry.add(tool_def)
+
+    # ---- 文档切分工具 (策略可选) ----
+    from financial_rag.tools.chunk_tools import CHUNK_TOOLS
+    for tool_def in CHUNK_TOOLS:
+        registry.add(tool_def)
+
     return registry
 
 
