@@ -683,6 +683,135 @@ ScoringAgent 内部逻辑：先读通用字段（优先），再 fallback 到 RA
 
 **教训**：能力做得再好，如果用户看不到、看不懂，等于没做。前端文案和后端架构同样重要。
 
+--
+
+## Q39: 检索模块为什么做结构重组？
+
+**问题**：`retriever.py` 这个名字只体现了"检索"，但它实际干两件事：入库调度（chunk → embed → Chroma）和检索调度（parse → BM25+Vector → fuse → rerank → gate）。更致命的是，检索器的装配逻辑藏在 `core/factory.py` 里，chunker 写好了但从未被接入运行路径——跑了这么久等于白写。
+
+**发现方式**：对照产品设计文档审计检索能力时，发现 chunker 代码存在但 `HybridRetriever.__init__` 里 `chunker=None`。factory 没传。
+
+**修复**：
+- `retriever.py` → `hybrid_engine.py`：文件名准确反映入库+检索双调度职责
+- 新建 `retrievers/factory.py`：检索器唯一装配入口，从 `core/factory.py` 迁出。打开这个文件就能看到所有零件和配置
+- 新建 `retrievers/README.md`：文件级职责说明 + 两条链路的执行顺序
+- `core/factory.py` 保留 re-export 兼容旧 import
+
+**设计原则**：一个目录 = 一个能力域的全部。打开 `retrievers/` 就能看到检索系统的装配图、调度中心、所有零件。不用跨 4 个文件猜谜语。
+
+---
+
+## Q40: Chunker 重构解决了什么问题？
+
+**问题**：原来的 chunker 是固定 1500 字硬切，不管文档类型。一篇 300 字的短新闻被切成 1 个 chunk 还好，但 5000 字的研报按固定长度切，段落被从中间劈开，语义完整性被破坏。
+
+**设计**：
+- **短文不切**：`skip_threshold=500`，<500 字的文档直接作为单个 chunk，保持原文完整性
+- **长文按段落切**：递归切分器优先在段落边界（`\n\n`）断开，不在句子中间劈
+- **按文档类型路由**：`DOCTYPE_STRATEGY` 映射表，不同 doc_type 用不同 chunk_size/overlap
+
+| doc_type | chunk_size | overlap | 理由 |
+|----------|-----------|---------|------|
+| news | 500 | 0 | 新闻短，不切或只切一刀 |
+| financial_report | 1500 | 100 | 财报长，按段落切 |
+| research | 1500 | 100 | 研报同上 |
+| other | 1000 | 80 | 默认策略 |
+
+**关键修复**：chunker 之前从未被接入 `HybridRetriever`（factory 没传），这次在 `retrievers/factory.py` 中显式组装。
+
+---
+
+## Q41: 检索质量门控是怎么做的？
+
+**问题**：用户问一个知识库里根本没有的问题（如"比特币价格"），系统仍然返回一堆不相关的结果，LLM 基于垃圾上下文编造答案。防幻觉 Guard 能事后检测，但为什么不从一开始就拦住？
+
+**设计**：在 `hybrid_engine.py` 的 `search()` 末尾加硬拦截：
+- Rerank 后 top1 分数 < 0.15 → 直接返回空结果 + 诊断信息
+- 只在有 Rerank 时生效（RRF 分数量纲 0~0.02，Rerank 量纲 0~1，不能混用）
+- 拦截信息存在 `last_gate_info` 字段，包含 blocked/stage/reason/query/top_score/threshold
+
+**诊断透出**：`tools/core.py` 的 search tool 检测到拦截后返回：
+```json
+{"gate_blocked": true, "gate_info": {"stage": "quality_gate", "reason": "...", "top_score": 0.08}}
+```
+Agent 和前端都能看到"为什么没结果"，方便持续调优阈值。
+
+**设计原则**：宁可告诉用户"没找到"，也不给垃圾结果让 LLM 编。门控是防幻觉的第一道防线。
+
+---
+
+## Q42: Metadata 正则抽取是怎么设计的？为什么不用 LLM？
+
+**问题**：文档入库时需要抽取 company/publish_date/sector 等元数据，用于后续检索过滤和来源展示。
+
+**决策**：用正则 + 词典，不用 LLM：
+- **成本**：每篇文档调一次 LLM 抽取 metadata，几百篇文档导入时 API 费用和时间都不可接受
+- **确定性**：正则抽取结果稳定可复现，LLM 每次可能返回不同格式
+- **速度**：正则 <1ms，LLM ~3s
+
+**实现**（`retrievers/metadata.py`）：
+- **company**：词典匹配（STOCK_MAP + stocks_extended.json 33 条）→ 正则兜底（XX科技/集团/股份）
+- **publish_date**：多模式正则（年月日/季度/ISO格式），按优先级排列
+- **sector**：关键词→行业映射，返回出现最多的行业
+
+**数据流**：`ingest_router._preprocess_docs()` 第 4 步调用 `extract_metadata()` → 写入 `doc["meta"]` → `_flatten_meta()` 按白名单过滤后存入 ChromaDB。
+
+---
+
+## Q43: synthesize_report JSON 截断是怎么排查的？
+
+**问题**：导入文章后 `synthesize_report` 始终报 "JSON 解析失败"，3 次重试全挂，走了兜底逻辑。
+
+**排查过程**：
+1. 第一反应是 `max_tokens=2048` 太小 → 改为 4096 → **仍然失败**
+2. 加诊断日志：打印响应长度、开头、结尾、括号平衡状态
+3. 发现：改了 4096 后第一次仍然失败，是因为 **LLM 响应缓存**——第一次失败的截断响应被缓存了，重试拿到的还是同一份烂数据
+4. 清除缓存后，4096 生效，响应 1209 字，一次解析成功
+
+**根因**：两个问题叠加：
+- `max_tokens=2048` 确实太小（DashScope 客户端默认 4096，report_tools 自己限死了）
+- `call_json()` 的 `use_cache=True` 在第一次失败后缓存了截断响应，后续重试拿缓存 → 永远失败
+
+**修复**：max_tokens 2048 → 4096 + 清缓存。重试时 `use_cache=(attempt == 0)` 已经设计了（重试不缓存），但第一次的缓存已经写入。
+
+**教训**：
+- 缓存是双刃剑：成功时省 API 调用，失败时毒化后续重试
+- 调试 JSON 解析问题时，先加日志看"响应到底长什么样"，比猜代码逻辑快 10 倍
+- 改配置后如果"没生效"，先怀疑缓存，再怀疑代码
+
+---
+
+## Q44: 防幻觉诊断信息为什么用户看不到？怎么修的？
+
+**问题**：产品设计文档要求"让用户更清楚知道哪些地方检测了，且检测效果如何"，但实际上用户只能看到一个百分比分数，不知道具体哪句话有问题、哪个数字不匹配、L5/L6 为什么没跑。
+
+**发现方式**：对照产品设计文档（`产品设计文档.txt`）逐条审计 API 响应，发现后端 Guard 产出了丰富的诊断数据（未锚定句子、不匹配数字、逐句判定），但 API 层全部截断成只剩 `{"score": 0.75}`。
+
+**三个根因**：
+1. **API 层截断**：`kb_router.py` 和 `analysis_router.py` 的 3 个构造点都用 `{k: {"score": v.get("score")} for ...}` 只取 score，丢弃所有诊断字段
+2. **L5/L6 静默省略**：规则层 ≥85% 或无 LLM 时，L5/L6 直接不出现在 `checks` 字典里，前端完全无感知
+3. **3 个构造点重复代码**：kb_router、analysis_router fallback、agent chain 各写一遍相同的截断逻辑，改一处漏两处
+
+**修复**：
+- **`guard/reflector.py`**：L5/L6 跳过时写入 `{"skipped": True, "skip_reason": "LLM 未注入" / "规则层已通过"}`，禁止静默省略；`_compute_overall()` 排除跳过层；`format_report()` 跳过层显示"未执行 — 原因"
+- **`guard/serializer.py`（新建）**：共享序列化 helper，白名单机制透出每层诊断详情（L1 的 unanchored 句子、L2 的 unmatched 数字、L6 的 per_sentence 逐句判定），过滤 raw 字段防止泄漏 LLM 原始输出
+- **3 个 API 调用点**：统一替换为 `serialize_guard_result(guard_result)`，一处定义、三处复用
+
+**效果（API 响应对比）**：
+```
+之前: "L1_source_grounding": {"score": 0.75}
+现在: "L1_source_grounding": {"score": 0.75, "anchored": 3, "total": 4,
+       "unanchored": ["公司预计2025年将实现盈利，行业龙头地位进一步巩固"]}
+
+之前: L5/L6 不出现
+现在: "L5_llm_critique": {"skipped": true, "skip_reason": "LLM 未注入，LLM 层无法执行"}
+```
+
+**教训**：
+- 后端产出了数据 ≠ 用户看到了数据。API 序列化层是信息透出的咽喉，截断逻辑必须审计
+- 多处重复的构造逻辑必须抽成共享函数，否则改一处漏两处
+- "不接受静默少测"是产品硬约束——跳过可以，但必须告诉用户为什么跳过
+
 ---
 
 ## 关键数字（面试时可引用）
@@ -692,15 +821,19 @@ ScoringAgent 内部逻辑：先读通用字段（优先），再 fallback 到 RA
 | 总 commit 数 | ~65 |
 | Agent 数量 | 4（从 7 精简） |
 | 注册工具 | 32 个，跨 11 个模块 |
-| 测试覆盖 | 609 tests（27 个测试文件） |
+| 测试覆盖 | 626 tests（28 个测试文件） |
 | 知识库文档 | ~500+ 篇（去重后） |
 | 检索延迟 | BM25 < 50ms，ChromaDB ANN < 200ms |
 | 查询规划 | QueryPlanner: 5 种意图 + 来源/模式感知子查询，LLM 失败自动降级 |
 | 查询扩展 | 52 组同义词 + 20 个概念关联，DictionaryRegistry 统一管理，规则层 0ms + LLM 层可选 |
 | 知识图谱 | LightRAG 集成: PDF/图片 → 实体关系抽取 → Function Calling 查询（local/global/hybrid/mix） |
 | 文档解析 | PyMuPDF (PDF, 本地) + qwen-vl-plus (图片多模态)，闭包注入 + FunctionDef 注册 |
-| 知识库导入 | 预处理门控（清洗 + 相关性 + 长度 + 分类 + 去重），新闻自动入 KB |
-| 全链路评分 | 6 层防幻觉（4 规则 + 2 LLM）+ 5 阶段打分，**双模式** + **权重归一化**（RAG `[N]` 引用 vs 深度分析 `【】` 段落） |
+| 检索架构 | `retrievers/` 目录自包含：factory(装配) + hybrid_engine(调度) + 12 个子模块，README 文件级说明 |
+| 检索门控 | Rerank score < 0.15 硬拦截 + `last_gate_info` 全量诊断（stage/reason/top_score/threshold） |
+| Chunker | skip_threshold=500 + DOCTYPE_STRATEGY 按文档类型路由（news/report/research/other） |
+| Metadata | 正则抽取 company/publish_date/sector，CHROMA_META_WHITELIST 白名单过滤，INPUT 侧闭环 |
+| 知识库导入 | 预处理门控（清洗 + 相关性 + 长度 + 分类 + 去重 + metadata 正则抽取），新闻自动入 KB |
+| 全链路评分 | 6 层防幻觉（4 规则 + 2 LLM）+ 5 阶段打分，**双模式** + **权重归一化** + **诊断数据完整透出**（`guard/serializer.py` 白名单序列化，L5/L6 跳过显式标记） |
 | API 架构 | 4 个 FastAPI Router（KB / Ingest / Analysis / Query），Ingest 支持目录导入 + 文件上传 |
 | 意图路由 | 4 种意图 + general 兜底（kline / event_impact / report / news / general），深度分析页签额外有 `deep_topic` |
 | 领域字典 | 10 种字典类型，外部 JSON 热扩展（`data/dictionaries/*.json`），STOCK_MAP 33 条 / synonym 143 条 |
