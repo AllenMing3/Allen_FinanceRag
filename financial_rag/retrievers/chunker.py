@@ -3,14 +3,18 @@ TextChunker — 文档切分器
 
 将长文档切分为适合检索的语义块（chunks），提升检索精度。
 
-策略:
-- 按字符数切分，支持中文和英文
-- 优先在段落/句子边界切分，避免截断语义
-- 支持 chunk 重叠，保留上下文连贯性
+核心规则:
+- 短文（< skip_threshold 字符）不切分，整篇入库
+- 长文按段落边界（\n\n）切分，保持原文结构
+- 段落过长时在句子边界二次切分
+- chunk 间有重叠，保留上下文连贯性
 
 用法:
-    chunker = TextChunker(chunk_size=500, chunk_overlap=50)
+    chunker = TextChunker()  # 默认: <500不切, 长文1500字/100重叠
     chunks = chunker.split(text, meta={"source": "news"})
+
+    # 按文档类型自动选策略
+    chunks = chunker.split_by_doctype(text, doc_type="financial_report", meta={...})
 """
 from typing import List, Dict, Optional
 import re
@@ -19,34 +23,48 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# ===================== 文档类型 → 切分策略 =====================
+
+DOCTYPE_STRATEGY = {
+    # doc_type: (chunk_size, chunk_overlap)
+    "news":             (500,  0),     # 新闻短，基本不切
+    "financial_report": (1500, 100),   # 财报长，按段落切
+    "research":         (1500, 100),   # 研报同财报
+    "concept":          (1000, 80),    # 概念解释，中等
+    "other":            (1000, 80),    # 默认
+}
+
+
 class TextChunker:
     """
     文档切分器 — 将长文档切分为检索友好的 chunks
 
     设计原则:
-    1. 优先在段落边界切分（\n\n）
-    2. 其次在句子边界切分（。！？.!?）
-    3. 最后硬切分（按字符数）
+    1. 短文不切（< skip_threshold）
+    2. 长文优先在段落边界切分（\n\n），保持原文结构
+    3. 段落过长时在句子边界二次切分
     4. chunk 间有重叠，保留上下文
 
     Args:
-        chunk_size: 每个 chunk 的最大字符数（默认 500）
-        chunk_overlap: 相邻 chunk 的重叠字符数（默认 50）
-        min_chunk_size: 最小 chunk 字符数，低于此值的合并到前一个（默认 50）
-        separators: 切分优先级分隔符列表
+        chunk_size: 每个 chunk 的最大字符数（默认 1500）
+        chunk_overlap: 相邻 chunk 的重叠字符数（默认 100）
+        min_chunk_size: 最小 chunk 字符数，低于此值的合并到前一个（默认 80）
+        skip_threshold: 短文阈值，低于此值不切分（默认 500）
     """
 
     def __init__(
         self,
-        chunk_size: int = 500,
-        chunk_overlap: int = 50,
-        min_chunk_size: int = 50,
+        chunk_size: int = 1500,
+        chunk_overlap: int = 100,
+        min_chunk_size: int = 80,
+        skip_threshold: int = 500,
         separators: Optional[List[str]] = None,
     ):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.min_chunk_size = min_chunk_size
-        self.separators = separators or ["\n\n", "\n", "。", "！", "？", ".", "!", "?", "；", ";", "，", ","]
+        self.skip_threshold = skip_threshold
+        self.separators = separators or ["\n\n", "\n", "。", "！", "？", ".", "!", "?", "；", ";"]
 
     def split(
         self,
@@ -72,7 +90,7 @@ class TextChunker:
         meta = meta or {}
 
         # 短文直接返回，无需切分
-        if len(text) <= self.chunk_size:
+        if len(text) <= self.skip_threshold:
             return [{
                 "text": text.strip(),
                 "meta": {**meta, "chunk_id": 0, "chunk_count": 1, "source_id": source_id},
@@ -119,6 +137,39 @@ class TextChunker:
 
         return results
 
+    def split_by_doctype(
+        self,
+        text: str,
+        doc_type: str = "other",
+        meta: Optional[Dict] = None,
+        source_id: str = "",
+    ) -> List[Dict]:
+        """
+        根据文档类型自动选择切分策略
+
+        路由规则:
+        - news: 新闻短，chunk_size=500, 无重叠
+        - financial_report / research: 长文，chunk_size=1500, 100重叠
+        - concept / other: 中等，chunk_size=1000, 80重叠
+
+        Args:
+            text: 原始文本
+            doc_type: 文档类型 (news/financial_report/research/concept/other)
+            meta: 附加元数据
+            source_id: 来源文档 ID
+        """
+        chunk_size, overlap = DOCTYPE_STRATEGY.get(doc_type, DOCTYPE_STRATEGY["other"])
+
+        # 临时调整参数（不改变实例默认值）
+        orig_size, orig_overlap = self.chunk_size, self.chunk_overlap
+        self.chunk_size = chunk_size
+        self.chunk_overlap = overlap
+        try:
+            return self.split(text, meta=meta, source_id=source_id)
+        finally:
+            self.chunk_size = orig_size
+            self.chunk_overlap = orig_overlap
+
     def split_documents(self, documents: List[Dict]) -> List[Dict]:
         """
         批量切分文档列表
@@ -142,7 +193,12 @@ class TextChunker:
                     f"skipping (source={source_id})"
                 )
                 continue
-            chunks = self.split(text, meta=meta, source_id=source_id)
+            chunks = self.split_by_doctype(
+                text,
+                doc_type=meta.get("doc_type", "other"),
+                meta=meta,
+                source_id=source_id,
+            )
             all_chunks.extend(chunks)
 
         if empty_docs > 0:

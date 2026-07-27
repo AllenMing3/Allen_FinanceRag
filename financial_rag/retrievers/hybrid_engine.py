@@ -1,13 +1,19 @@
 """
-Hybrid 混合检索器 — 调度层
+HybridEngine — 检索系统核心调度层
 
-职责: 编排 BM25 + Vector + RRF + Rerank + Filter 的检索流程。
+承担两大调度职责:
+1. 入库调度: 文档 → Chunker切分 → BM25索引 → Embedding → ChromaDB
+2. 检索调度: Query → Parse → BM25+Vector → RRF融合 → Rerank → Filter → 质量门控
+
 不包含具体实现，全部委托给子模块:
-- BM25Engine: 关键词检索
+- TextChunker:  文档切分
+- BM25Engine:   关键词检索
 - VectorEngine: 语义检索
-- rrf_fusion: 多通道融合
+- rrf_fusion:   多通道融合
 - apply_filters: 元数据过滤
-- save/load_index: 持久化
+- 质量门控:     rerank_score < threshold 拦截
+
+装配入口: retrievers/factory.py
 """
 from typing import Dict, Any, List, Optional, Tuple
 import logging
@@ -74,6 +80,10 @@ class HybridRetriever:
         self.documents: List[Dict] = []
         self.doc_embeddings: Optional[List[List[float]]] = None
         self._last_ingestion_score: Optional[IngestionScoreCard] = None
+
+        # 检索质量门控
+        self.gate_threshold = cfg.get("gate_threshold", 0.15)  # rerank score 低于此值拦截
+        self.last_gate_info: Optional[Dict] = None  # 最近一次门控诊断
 
     # ===================== 索引 =====================
 
@@ -368,7 +378,48 @@ class HybridRetriever:
             f"Fused={len(candidates)}, "
             f"Rerank={'ON' if (use_rerank and self.reranker) else 'OFF'}"
         )
-        return candidates[:top_k]
+
+        # 7. 检索质量门控 — 拦截低质量结果
+        final = candidates[:top_k]
+        self.last_gate_info = None
+
+        if not final:
+            # 零结果 — 记录诊断
+            self.last_gate_info = {
+                "blocked": True,
+                "stage": "retrieval",
+                "reason": "检索结果为空，知识库中无匹配文档",
+                "query": query,
+                "bm25_count": len(bm25_results),
+                "vector_count": len(vector_results),
+                "fused_count": len(candidates),
+                "threshold": self.gate_threshold,
+            }
+            logger.warning(f"[Gate] 拦截: 检索结果为空 (query={query[:50]})")
+            return []
+
+        # 只有走了 Rerank 才做分数门控（RRF 分数和 Rerank 分数量纲不同）
+        has_rerank = use_rerank and self.reranker and final[0].get("rerank_score") is not None
+        if has_rerank:
+            top_score = final[0]["rerank_score"]
+            if top_score < self.gate_threshold:
+                self.last_gate_info = {
+                    "blocked": True,
+                    "stage": "quality_gate",
+                    "reason": f"检索质量过低: rerank_score={top_score:.4f} < 阈值{self.gate_threshold}",
+                    "query": query,
+                    "top_score": round(top_score, 4),
+                    "threshold": self.gate_threshold,
+                    "result_count": len(final),
+                    "top_text_preview": final[0].get("text", "")[:80],
+                }
+                logger.warning(
+                    f"[Gate] 拦截: rerank_score={top_score:.4f} < {self.gate_threshold} "
+                    f"(query={query[:50]})"
+                )
+                return []
+
+        return final
 
     # ===================== Rerank =====================
 

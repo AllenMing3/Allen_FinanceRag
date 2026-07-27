@@ -1,4 +1,4 @@
-from .retriever import HybridRetriever, jieba_tokenizer
+from .hybrid_engine import HybridRetriever, jieba_tokenizer
 from .chunker import TextChunker
 from .query_parser import QueryParser, QueryResult
 from .bm25_engine import BM25Engine

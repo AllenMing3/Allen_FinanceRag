@@ -163,7 +163,7 @@ class DataOrchestrator:
     @staticmethod
     def _default_retriever():
         """创建默认的基础 HybridRetriever (无 API 依赖)"""
-        from financial_rag.retrievers.retriever import HybridRetriever
+        from financial_rag.retrievers.hybrid_engine import HybridRetriever
         return HybridRetriever()
 
     def _get_preprocessor(self):

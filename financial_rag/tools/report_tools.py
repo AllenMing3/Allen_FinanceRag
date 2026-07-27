@@ -82,7 +82,7 @@ def synthesize_report(
         report_json = caller.call_json(
             prompt,
             system=NEWS_SYNTHESIS_SYSTEM,
-            max_tokens=2048,
+            max_tokens=4096,
             temperature=0.1,
         )
         # 防御: call_json 可能返回 str/list，统一为 dict
@@ -94,7 +94,7 @@ def synthesize_report(
             response = caller.call(
                 prompt,
                 system=NEWS_SYNTHESIS_SYSTEM,
-                max_tokens=2048,
+                max_tokens=4096,
                 temperature=0.1,
             )
             report_json = {"summary": response.content.strip(), "key_findings": [], "title": query}

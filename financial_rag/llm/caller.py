@@ -72,6 +72,7 @@ def _extract_balanced_json(text: str) -> Optional[Dict]:
     """用平衡括号算法提取第一个完整的 JSON 对象"""
     start = text.find('{')
     if start < 0:
+        logger.debug("[JSON解析] 未找到 '{'，跳过")
         return None
 
     depth = 0
@@ -104,9 +105,15 @@ def _extract_balanced_json(text: str) -> Optional[Dict]:
                 candidate = text[start:i + 1]
                 try:
                     return json.loads(candidate)
-                except (json.JSONDecodeError, ValueError):
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.warning(f"[JSON解析] 括号平衡但 json.loads 失败: {e}, 片段末尾: ...{candidate[-80:]!r}")
                     return None
 
+    # 走到这里说明括号从未闭合 — JSON 被截断
+    logger.warning(
+        f"[JSON解析] JSON 未闭合 (depth={depth}, in_string={in_string}), "
+        f"总长={len(text)}, 末尾50字: ...{text[-50:]!r}"
+    )
     return None
 
 
@@ -248,19 +255,28 @@ class LLMCaller:
                 **kwargs,
             )
 
+            content = resp.content or ""
+            logger.info(
+                f"[LLMCaller] JSON attempt {attempt + 1}/{max_json_retries + 1}: "
+                f"响应长度={len(content)}字, "
+                f"开头={content[:60]!r}, "
+                f"结尾={content[-60:]!r}"
+            )
+
             # 尝试解析 dict
-            result = parse_json_from_text(resp.content)
+            result = parse_json_from_text(content)
             if result is not None:
+                logger.info(f"[LLMCaller] JSON 解析成功, keys={list(result.keys()) if isinstance(result, dict) else 'list'}")
                 return result
 
             # 尝试解析 list
-            list_result = parse_json_list_from_text(resp.content)
+            list_result = parse_json_list_from_text(content)
             if list_result is not None:
+                logger.info(f"[LLMCaller] JSON list 解析成功, len={len(list_result)}")
                 return list_result
 
             logger.warning(
-                f"[LLMCaller] JSON 解析失败 (attempt {attempt + 1}/{max_json_retries + 1}): "
-                f"content={resp.content[:120]!r}"
+                f"[LLMCaller] JSON 解析失败 (attempt {attempt + 1}/{max_json_retries + 1})"
             )
 
         logger.error("[LLMCaller] JSON 解析全部重试耗尽，返回 None")

@@ -177,21 +177,24 @@ class TestQueryTypeClassification:
 class TestQueryResultMethods:
     def test_get_filters_with_stock(self, parser):
         result = parser.parse("茅台最近行情")
+        # stock_code 不再作为 metadata 过滤条件（文档侧无此字段）
         filters = result.get_filters()
-        assert "stock_code" in filters
-        assert filters["stock_code"] == "600519.SH"
+        assert "stock_code" not in filters
+        # 但 QueryResult 仍然抽取股票信息（给 K线工具用）
+        assert result.stock_code == "600519.SH"
 
     def test_get_filters_with_date(self, parser):
         result = parser.parse("2024-06-01的市场报告")
         filters = result.get_filters()
-        assert "date" in filters
-        assert filters["date"] == "2024-06-01"
+        assert "publish_date" in filters
+        assert filters["publish_date"] == "2024-06-01"
 
     def test_get_filters_with_date_range(self, parser):
         result = parser.parse("最近一周的走势")
         filters = result.get_filters()
-        assert "gte" in filters
-        assert "lte" in filters
+        assert "publish_date" in filters
+        assert "gte" in filters["publish_date"]
+        assert "lte" in filters["publish_date"]
 
     def test_get_filters_empty(self, parser):
         result = parser.parse("AI行业分析")

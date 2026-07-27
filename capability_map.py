@@ -24,6 +24,18 @@ CAPABILITY_MAP = {
         "实现": "financial_rag/retrievers/preprocessor.py",
         "说明": "HTML去除、样板行删除、相关性门控、最低字数。改门控标准去 ingest_router 第36行",
     },
+    "Metadata 治理": {
+        "tools": ["(内部基础设施，不注册为 tool)"],
+        "入口": "financial_rag/retrievers/metadata.py  ← Schema定义 + 正则抽取器",
+        "实现": "入库: api/ingest_router.py _preprocess_docs() 调用 extract_metadata()",
+        "子模块": {
+            "Schema定义": "retrievers/metadata.py → DocMetadata dataclass",
+            "正则抽取": "retrievers/metadata.py → extract_metadata() (company/date/sector)",
+            "Chroma白名单": "retrievers/metadata.py → CHROMA_META_WHITELIST",
+            "过滤消费": "retrievers/filters.py + query_parser.py get_filters()",
+        },
+        "说明": "改metadata字段 → metadata.py; 改抽取规则 → metadata.py; 改过滤逻辑 → filters.py",
+    },
     "检索（混合）": {
         "tools": ["search_financial_data"],
         "入口": "financial_rag/tools/core.py → _make_search_tool()",

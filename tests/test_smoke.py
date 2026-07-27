@@ -159,7 +159,7 @@ class TestRetrievalSmoke:
     """HybridRetriever basic search capability"""
 
     def test_bm25_search(self):
-        from financial_rag.retrievers.retriever import HybridRetriever
+        from financial_rag.retrievers.hybrid_engine import HybridRetriever
         r = HybridRetriever()
         docs = [
             {"text": "商汤科技营收增长36%至50亿元", "meta": {"source": "a"}},
@@ -172,7 +172,7 @@ class TestRetrievalSmoke:
         assert "商汤" in results[0]["text"]
 
     def test_incremental_add(self):
-        from financial_rag.retrievers.retriever import HybridRetriever
+        from financial_rag.retrievers.hybrid_engine import HybridRetriever
         r = HybridRetriever()
         docs = [{"text": "first doc", "meta": {"source": "s1"}}]
         r.index(docs, precompute_embeddings=False)

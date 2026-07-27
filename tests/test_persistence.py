@@ -212,7 +212,7 @@ class TestIndexPersistence:
 
     def test_save_load_roundtrip(self, tmp_path):
         """Save index → load → same documents"""
-        from financial_rag.retrievers.retriever import HybridRetriever
+        from financial_rag.retrievers.hybrid_engine import HybridRetriever
 
         docs = [
             {"text": "商汤科技2024年营收增长36%", "meta": {"source": "test1"}},

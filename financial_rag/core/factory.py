@@ -67,33 +67,9 @@ def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
 
 
 def create_hybrid_retriever() -> Any:
-    """创建带阿里 Embedding + Rerank + Jieba + ChromaDB 的混合检索器"""
-    from financial_rag.llm import get_embedding, get_reranker
-    from financial_rag.retrievers import HybridRetriever, jieba_tokenizer
-    from financial_rag.config import config as _cfg
-
-    api_key = os.environ.get("DASHSCOPE_API_KEY", "")
-
-    tokenizer = None
-    try:
-        tokenizer = jieba_tokenizer()
-    except ImportError:
-        pass
-
-    # Chroma 持久化目录
-    chroma_dir = os.path.join(_cfg.kb_dir, "chroma")
-    os.makedirs(chroma_dir, exist_ok=True)
-
-    if not api_key:
-        print("[WARN] 未设置 DASHSCOPE_API_KEY，回退到纯本地检索")
-        return HybridRetriever(tokenizer=tokenizer, chroma_persist_dir=chroma_dir)
-
-    return HybridRetriever(
-        embedder=get_embedding(api_key=api_key),
-        reranker=get_reranker(api_key=api_key),
-        tokenizer=tokenizer,
-        chroma_persist_dir=chroma_dir,
-    )
+    """创建混合检索引擎 — 实际实现在 retrievers/factory.py"""
+    from financial_rag.retrievers.factory import create_hybrid_retriever as _create
+    return _create()
 
 
 def setup_environment() -> bool:

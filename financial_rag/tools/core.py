@@ -313,6 +313,17 @@ def _make_search_tool():
             return {"error": "检索器未初始化", "results": []}
 
         results = retriever.search(query, top_k=top_k)
+
+        # 检索质量门控: 拦截时返回诊断信息
+        if not results and retriever.last_gate_info:
+            return {
+                "query": query,
+                "total_found": 0,
+                "results": [],
+                "gate_blocked": True,
+                "gate_info": retriever.last_gate_info,
+            }
+
         items = []
         for r in results:
             text = r.get("text", "")
