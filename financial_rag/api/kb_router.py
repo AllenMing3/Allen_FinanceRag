@@ -131,6 +131,7 @@ async def api_kb_query(req: QueryRequest):
     logger.info(f"[API] /kb-query: query={req.query!r}, top_k={req.top_k}")
     from financial_rag.core.scorer import PipelineScoreCard, ScoreGrade
     from financial_rag.guard.reflector import HallucinationGuard
+    from financial_rag.guard.serializer import serialize_guard_result
 
     if not _state.get("kb_built"):
         # Auto-build if docs exist but not indexed
@@ -203,16 +204,7 @@ async def api_kb_query(req: QueryRequest):
                 layer_scores={k: v.get("score", 0) for k, v in guard_result.get("checks", {}).items()},
                 risk=guard_result["risk"],
             )
-            hallucination = {
-                "overall_score": round(guard_result["overall_score"], 3),
-                "risk": guard_result["risk"],
-                "passed": guard_result["passed"],
-                "layers": {
-                    k: {"score": round(v.get("score", 0), 3)}
-                    for k, v in guard_result.get("checks", {}).items()
-                    if k != "overall"
-                },
-            }
+            hallucination = serialize_guard_result(guard_result)
         except Exception as e:
             logger.warning(f"HallucinationGuard check failed: {e}")
 

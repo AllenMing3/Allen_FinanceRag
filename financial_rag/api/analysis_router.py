@@ -29,6 +29,7 @@ from financial_rag.api.models import (
 from financial_rag.api.kb_router import _save_analysis_to_kb
 from financial_rag.core.base import AgentContext
 from financial_rag.guard.reflector import HallucinationGuard
+from financial_rag.guard.serializer import serialize_guard_result
 
 logger = logging.getLogger(__name__)
 
@@ -133,16 +134,7 @@ def _run_hallucination_check(result: dict, llm=None, extra_sources: list = None)
     try:
         guard = HallucinationGuard(llm=llm)
         guard_result = guard.check(full_text, guard_sources, mode="analysis")
-        result["hallucination"] = {
-            "overall_score": round(guard_result["overall_score"], 3),
-            "risk": guard_result["risk"],
-            "passed": guard_result["passed"],
-            "layers": {
-                k: {"score": round(v.get("score", 0), 3)}
-                for k, v in guard_result.get("checks", {}).items()
-                if k != "overall"
-            },
-        }
+        result["hallucination"] = serialize_guard_result(guard_result)
     except Exception as e:
         logger.warning(f"HallucinationGuard check failed: {e}")
 
@@ -178,16 +170,7 @@ def _run_analysis_via_agent_chain(intent: str, raw_input: str, metadata: dict, p
     if scoring_ar and scoring_ar.data:
         hc = scoring_ar.data.get("hallucination_check", {})
         if isinstance(hc, dict) and hc:
-            hallucination = {
-                "overall_score": round(hc.get("overall_score", 1.0), 3),
-                "risk": hc.get("risk", "unknown"),
-                "passed": hc.get("risk", "unknown") != "high",
-                "layers": {
-                    k: {"score": round(v.get("score", 0), 3)}
-                    for k, v in hc.get("checks", {}).items()
-                    if k != "overall"
-                },
-            }
+            hallucination = serialize_guard_result(hc)
 
     return {
         "assessment": data.get("assessment", ""),

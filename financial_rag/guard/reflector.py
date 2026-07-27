@@ -80,7 +80,7 @@ class HallucinationGuard:
         checks["L3_citation_integrity"] = l3_citation_integrity(answer, sources, mode=mode)
         checks["L4_structure_compliance"] = l4_structure_compliance(answer, mode=mode)
 
-        # L5+L6: LLM 层 — 条件触发
+        # L5+L6: LLM 层 — 条件触发，跳过时写入显式标记（禁止静默省略）
         rule_score = self._compute_rule_score(checks)
         if self._llm is not None and rule_score < self.LLM_TRIGGER_THRESHOLD:
             logger.info(f"[Guard] L5/L6 触发 (rule_score={rule_score:.2f} < {self.LLM_TRIGGER_THRESHOLD})")
@@ -89,9 +89,13 @@ class HallucinationGuard:
             logger.info(f"[Guard] L5={checks['L5_llm_critique'].get('score', 0):.2f}, L6={checks['L6_llm_assist'].get('score', 0):.2f}")
         else:
             if self._llm is None:
+                reason = "LLM 未注入，LLM 层无法执行"
                 logger.debug("L5/L6 skipped: no LLM injected")
             else:
+                reason = f"规则层得分 {rule_score:.0%} ≥ {self.LLM_TRIGGER_THRESHOLD:.0%}，LLM 层未触发"
                 logger.debug(f"L5/L6 skipped: rule score {rule_score:.2f} >= {self.LLM_TRIGGER_THRESHOLD}")
+            checks["L5_llm_critique"] = {"score": 0.0, "skipped": True, "skip_reason": reason}
+            checks["L6_llm_assist"] = {"score": 0.0, "skipped": True, "skip_reason": reason}
 
         checks["overall"] = self._compute_overall(checks)
 
@@ -104,7 +108,7 @@ class HallucinationGuard:
             "checks": checks,
             "unverified": checks.get("L1_source_grounding", {}).get("unanchored", []),
             "report": self.format_report(overall_score, checks),
-            "llm_layers_active": "L5_llm_critique" in checks,
+            "llm_layers_active": not checks.get("L5_llm_critique", {}).get("skipped", True),
         }
 
     def _compute_rule_score(self, checks: Dict) -> float:
@@ -131,8 +135,11 @@ class HallucinationGuard:
     # ================== 综合 + 格式化 ==================
 
     def _compute_overall(self, checks: Dict) -> Dict:
-        # 归一化权重：只对实际执行的层求加权平均，避免跳过的层拖低总分
-        active_weights = {k: w for k, w in self.LAYER_WEIGHTS.items() if k in checks}
+        # 归一化权重：只对实际执行的层求加权平均，跳过的层不参与计算
+        active_weights = {
+            k: w for k, w in self.LAYER_WEIGHTS.items()
+            if k in checks and not checks[k].get("skipped")
+        }
         total_weight = sum(active_weights.values())
         if total_weight == 0:
             return {"score": 0.0, "passed": False}
@@ -221,25 +228,31 @@ class HallucinationGuard:
         # L5 LLM质疑
         l5 = checks.get("L5_llm_critique")
         if l5:
-            l5_score = l5.get("score", 0)
-            fp = l5.get("false_positives", [])
-            fn = l5.get("false_negatives", [])
-            lines.append(f"├ LLM质疑: {l5_score:.0%} — 发现 {len(fp)} 条假阳性, {len(fn)} 条假阴性")
-            for item in (fp + fn)[:3]:
-                lines.append(f"  - {item}")
+            if l5.get("skipped"):
+                lines.append(f"├ LLM质疑: 未执行 — {l5.get('skip_reason', '未知原因')}")
+            else:
+                l5_score = l5.get("score", 0)
+                fp = l5.get("false_positives", [])
+                fn = l5.get("false_negatives", [])
+                lines.append(f"├ LLM质疑: {l5_score:.0%} — 发现 {len(fp)} 条假阳性, {len(fn)} 条假阴性")
+                for item in (fp + fn)[:3]:
+                    lines.append(f"  - {item}")
 
         # L6 LLM协助
         l6 = checks.get("L6_llm_assist")
         if l6:
-            l6_score = l6.get("score", 0)
-            unsupported = l6.get("unsupported_claims", [])
-            fabricated = l6.get("fabricated_claims", [])
-            total_claims = l6.get("total_claims", 0)
-            supported = l6.get("supported_claims", 0)
-            lines.append(f"└ LLM协助: {l6_score:.0%} — {supported}/{total_claims} 句有语义支撑")
-            for item in fabricated[:3]:
-                lines.append(f"  - 编造: \"{item}\"")
-            for item in unsupported[:3]:
-                lines.append(f"  - 无据: \"{item}\"")
+            if l6.get("skipped"):
+                lines.append(f"└ LLM协助: 未执行 — {l6.get('skip_reason', '未知原因')}")
+            else:
+                l6_score = l6.get("score", 0)
+                unsupported = l6.get("unsupported_claims", [])
+                fabricated = l6.get("fabricated_claims", [])
+                total_claims = l6.get("total_claims", 0)
+                supported = l6.get("supported_claims", 0)
+                lines.append(f"└ LLM协助: {l6_score:.0%} — {supported}/{total_claims} 句有语义支撑")
+                for item in fabricated[:3]:
+                    lines.append(f"  - 编造: \"{item}\"")
+                for item in unsupported[:3]:
+                    lines.append(f"  - 无据: \"{item}\"")
 
         return "\n".join(lines)
