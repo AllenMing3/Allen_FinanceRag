@@ -814,6 +814,61 @@ Agent 和前端都能看到"为什么没结果"，方便持续调优阈值。
 
 ---
 
+## Q45: BM25 为什么从 rank_bm25 换成 SQLite FTS5？
+
+**问题**：原 BM25 用 `rank_bm25.BM25Okapi` 纯内存实现，每次 `add()` 都全量重建整个语料（O(N)）。81 篇时无感，但文档量增长后每次导入一个文件就重建一次，且重启后索引丢失需从头构建。面试时一说"BM25 每次全量 rebuild"立刻被 diss 为 demo 级。
+
+**对比成熟项目**：Dify 用 Elasticsearch / Weaviate 等支持增量写入的引擎；RAGFlow 用 ES 倒排索引。共同点：**写入即生效，无需重建**。
+
+**为什么选 SQLite FTS5 而非 ES**：
+- ES 需要 JVM + 独立服务 + IK 插件，本地开发体验极差
+- 项目规模（百~千篇级）远未到 ES 的设计目标（亿级）
+- FTS5 是 Python 标准库 `sqlite3` 内置，零依赖、零部署
+- 天然支持 BM25 排序（`bm25()` 函数）、增量 INSERT/DELETE、持久化
+
+**实现**：
+- `bm25_engine.py` 全部重写：建 `kb_fts` FTS5 虚拟表，文档经 jieba 分词后空格拼接存入
+- 搜索：分词 → FTS5 MATCH（OR 语义）→ `bm25()` 排序
+- `hybrid_engine.add()` → `bm25.add(documents)`：真增量 INSERT
+- `hybrid_engine.remove_by_indices()` → `bm25.remove_by_docs()`：真增量 DELETE
+- 索引落盘 `data/knowledge_base/bm25_index.db`，重启秒加载
+- `requirements.txt` 移除 `rank_bm25`
+
+**效果**：
+```
+之前: add 50篇 → 全量 rebuild × 50次（每次 O(N)）
+现在: add 50篇 → 50次 INSERT（每次 O(1)）
+之前: 重启 → 索引丢失，需重新 build
+现在: 重启 → 打开 .db 文件，毫秒级恢复
+```
+
+---
+
+## Q46: Embedding 并发化怎么做的？提速多少？
+
+**问题**：`DashScopeEmbedding.embed()` 内部串行循环调 API（每批 10 条，等返回再发下一批）。200 个 chunk = 20 批 × ~1s/批 = **串行 20s**。`embedding_cache.py` 外面还套了一层手动切 10 的冗余循环。
+
+**成熟做法**（Dify / 生产 RAG）：asyncio + Semaphore(5~10) 并发发 batch，吞吐提升 5-10x。
+
+**实现**（最小改动）：
+- `dashscope_client.py`：`embed()` 拆出 `_call_batch()` 单批方法，多批时用 `ThreadPoolExecutor.map()` 并发执行（MAX_WORKERS=5），`pool.map` 保证结果顺序
+- 单批（≤10 条）直接调用，无线程池开销
+- `embedding_cache.py`：去掉冗余的 `for j in range(0, len, 10)` 循环，一次性把未命中文本交给 `embedder.embed_documents()`（内部已会分批+并发）
+
+**为什么用线程池而非 asyncio**：DashScope SDK 是同步阻塞的（`dashscope.TextEmbedding.call()`），没有 async 接口。线程池是最干净的并发方式，无需改写 SDK 调用方式。
+
+**效果**：
+```
+之前: 200条 → 20批串行 → ~20s
+现在: 200条 → 20批 / 5并发 = 4轮 → ~4s（5x 提速）
+```
+
+**教训**：
+- `ThreadPoolExecutor` 早就 import 了但从没用过——"import 了 ≠ 用了"
+- 两层串行叠加（client 内 + cache 外）要一起修，否则只修一层等于没修
+
+---
+
 ## 关键数字（面试时可引用）
 
 | 指标 | 数据 |
@@ -823,12 +878,13 @@ Agent 和前端都能看到"为什么没结果"，方便持续调优阈值。
 | 注册工具 | 32 个，跨 11 个模块 |
 | 测试覆盖 | 626 tests（28 个测试文件） |
 | 知识库文档 | ~500+ 篇（去重后） |
-| 检索延迟 | BM25 < 50ms，ChromaDB ANN < 200ms |
+| 检索延迟 | BM25 FTS5 < 10ms（SQLite 持久化），ChromaDB ANN < 200ms |
 | 查询规划 | QueryPlanner: 5 种意图 + 来源/模式感知子查询，LLM 失败自动降级 |
 | 查询扩展 | 52 组同义词 + 20 个概念关联，DictionaryRegistry 统一管理，规则层 0ms + LLM 层可选 |
 | 知识图谱 | LightRAG 集成: PDF/图片 → 实体关系抽取 → Function Calling 查询（local/global/hybrid/mix） |
 | 文档解析 | PyMuPDF (PDF, 本地) + qwen-vl-plus (图片多模态)，闭包注入 + FunctionDef 注册 |
 | 检索架构 | `retrievers/` 目录自包含：factory(装配) + hybrid_engine(调度) + 12 个子模块，README 文件级说明 |
+| 入库性能 | BM25 真增量（SQLite FTS5）+ Embedding 5 路并发（ThreadPoolExecutor），200 chunk embedding ~4s |
 | 检索门控 | Rerank score < 0.15 硬拦截 + `last_gate_info` 全量诊断（stage/reason/top_score/threshold） |
 | Chunker | skip_threshold=500 + DOCTYPE_STRATEGY 按文档类型路由（news/report/research/other） |
 | Metadata | 正则抽取 company/publish_date/sector，CHROMA_META_WHITELIST 白名单过滤，INPUT 侧闭环 |
