@@ -58,6 +58,9 @@ def create_hybrid_retriever() -> Any:
     chroma_dir = os.path.join(_cfg.kb_dir, "chroma")
     os.makedirs(chroma_dir, exist_ok=True)
 
+    # ---- BM25 FTS5 数据库 ----
+    bm25_db_path = os.path.join(_cfg.kb_dir, "bm25_index.db")
+
     # ---- 组装 ----
     if not api_key:
         logger.warning("未设置 DASHSCOPE_API_KEY，回退给纯本地检索（BM25 + Jaccard）")
@@ -66,6 +69,7 @@ def create_hybrid_retriever() -> Any:
             chunker=chunker,
             parser=parser,
             chroma_persist_dir=chroma_dir,
+            bm25_db_path=bm25_db_path,
         )
 
     return HybridRetriever(
@@ -75,4 +79,5 @@ def create_hybrid_retriever() -> Any:
         chunker=chunker,
         parser=parser,
         chroma_persist_dir=chroma_dir,
+        bm25_db_path=bm25_db_path,
     )

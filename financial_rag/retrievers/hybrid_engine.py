@@ -56,6 +56,7 @@ class HybridRetriever:
         parser: Any = None,
         chroma_persist_dir: Optional[str] = None,
         embedding_cache: Optional[EmbeddingCache] = None,
+        bm25_db_path: Optional[str] = None,
     ):
         cfg = config or {}
         self.rrf_k = cfg.get("rrf_k", 60)
@@ -69,7 +70,7 @@ class HybridRetriever:
         self._emb_cache = embedding_cache or EmbeddingCache.get_instance()
 
         # 子引擎
-        self._bm25 = BM25Engine(tokenizer=tokenizer)
+        self._bm25 = BM25Engine(tokenizer=tokenizer, db_path=bm25_db_path)
         self._vector = VectorEngine(
             embedder=embedder, tokenizer=tokenizer,
             chroma_persist_dir=chroma_persist_dir,
@@ -151,7 +152,7 @@ class HybridRetriever:
             documents = self._chunker.split_documents(documents)
 
         self.documents.extend(documents)
-        self._bm25.build(self.documents)
+        self._bm25.add(documents)  # FTS5 真增量，无需全量重建
 
         # 增量添加时也计算新文档的 embeddings + 索引到 Chroma（走缓存）
         if self.embedder and self._vector.has_embedding:
@@ -508,7 +509,7 @@ class HybridRetriever:
             self.doc_embeddings = [
                 emb for i, emb in enumerate(self.doc_embeddings) if i not in remove_set
             ]
-        self._bm25.build(self.documents)
+        self._bm25.remove_by_docs(removed_docs)  # FTS5 增量删除
         logger.info(f"HybridRetriever: removed {len(remove_set)} docs, {len(self.documents)} remaining")
 
     def clear(self):

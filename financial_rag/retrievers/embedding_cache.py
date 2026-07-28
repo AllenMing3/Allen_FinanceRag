@@ -93,14 +93,10 @@ class EmbeddingCache:
 
         hits = len(texts) - len(uncached_texts)
 
-        # 2. 未命中的调 API
+        # 2. 未命中的调 API（embedder 内部已支持分批 + 并发，无需手动切片）
         new_vectors: Dict[str, List[float]] = {}
         if uncached_texts and embedder is not None:
-            batch_results = []
-            for j in range(0, len(uncached_texts), 10):
-                batch_results.extend(
-                    embedder.embed_documents(uncached_texts[j:j + 10])
-                )
+            batch_results = embedder.embed_documents(uncached_texts)
             for idx, vec in zip(uncached_indices, batch_results):
                 key = keys[idx]
                 self._cache[key] = vec

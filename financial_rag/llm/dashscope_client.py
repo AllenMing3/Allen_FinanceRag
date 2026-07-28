@@ -12,7 +12,7 @@ import os
 import logging
 from typing import List, Dict, Optional, Union
 from dataclasses import dataclass, field
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -290,10 +290,11 @@ class DashScopeEmbedding:
     """阿里百炼 Text Embedding 客户端
 
     支持模型: text-embedding-v3 (1024维 默认)
-    批量处理，自动分批（单次最多 10 条）
+    批量处理，自动分批（单次最多 10 条），多批并发（ThreadPoolExecutor）
     """
 
-    BATCH_SIZE = 10
+    BATCH_SIZE = 10       # DashScope 单次 API 上限 10 条
+    MAX_WORKERS = 5       # 并发线程数（控制 QPS，避免 429）
 
     def __init__(
         self,
@@ -310,31 +311,63 @@ class DashScopeEmbedding:
         if not HAS_DASHSCOPE:
             raise ImportError("请安装 dashscope: pip install dashscope")
 
+    def _call_batch(self, chunk: List[str]) -> tuple:
+        """单批 API 调用（线程内执行）
+
+        Returns:
+            (embeddings_list, total_tokens)
+        """
+        resp = dashscope.TextEmbedding.call(
+            api_key=self.api_key,
+            model=self.model,
+            input=chunk,
+        )
+        if resp.status_code == 200:
+            embs = [item["embedding"] for item in resp.output["embeddings"]]
+            tokens = resp.usage.get("total_tokens", 0)
+            return embs, tokens
+        else:
+            raise RuntimeError(
+                f"DashScope Embedding error: code={resp.status_code}, "
+                f"message={resp.message}"
+            )
+
     def embed(self, texts: Union[str, List[str]]) -> EmbeddingResponse:
-        """文本转向量 — 自动分批"""
+        """文本转向量 — 自动分批 + 并发执行
+
+        单批(≤10条)直接调用；多批时 ThreadPoolExecutor 并发，
+        200 条文本: 20 批 × 5 并发 = 4 轮，耗时从 ~20s 降至 ~4s。
+        """
         is_single = isinstance(texts, str)
         batch = [texts] if is_single else texts
 
-        all_embeddings = []
-        total_tokens = 0
+        # 切分为 API 批次
+        chunks = [batch[i:i + self.BATCH_SIZE]
+                  for i in range(0, len(batch), self.BATCH_SIZE)]
 
-        for i in range(0, len(batch), self.BATCH_SIZE):
-            chunk = batch[i:i + self.BATCH_SIZE]
-            resp = dashscope.TextEmbedding.call(
-                api_key=self.api_key,
-                model=self.model,
-                input=chunk,
+        if not chunks:
+            return EmbeddingResponse(
+                embeddings=[], model=self.model,
+                dimensions=self.dimensions, usage={"total_tokens": 0, "texts": 0},
             )
 
-            if resp.status_code == 200:
-                for emb in resp.output["embeddings"]:
-                    all_embeddings.append(emb["embedding"])
-                total_tokens += resp.usage.get("total_tokens", 0)
-            else:
-                raise RuntimeError(
-                    f"DashScope Embedding error: code={resp.status_code}, "
-                    f"message={resp.message}"
-                )
+        # 单批直接调用（无需线程池开销）
+        if len(chunks) == 1:
+            embs, tokens = self._call_batch(chunks[0])
+            return EmbeddingResponse(
+                embeddings=embs, model=self.model,
+                dimensions=self.dimensions,
+                usage={"total_tokens": tokens, "texts": len(batch)},
+            )
+
+        # 多批并发（pool.map 保证结果顺序与输入一致）
+        all_embeddings: List[List[float]] = []
+        total_tokens = 0
+
+        with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as pool:
+            for embs, tokens in pool.map(self._call_batch, chunks):
+                all_embeddings.extend(embs)
+                total_tokens += tokens
 
         return EmbeddingResponse(
             embeddings=all_embeddings,
