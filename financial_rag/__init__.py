@@ -30,8 +30,7 @@ from financial_rag.core import (
     PipelineScoreCard, StageScore, ScoreGrade, create_scorecard,
 )
 from financial_rag.agents import (
-    IngestionAgent, AnalysisAgent,
-    CoordinatorAgent, ScoringAgent,
+    IngestionAgent, AnalysisAgent, ScoringAgent,
 )
 from financial_rag.retrievers import HybridRetriever, jieba_tokenizer
 from financial_rag.templates import (
@@ -67,8 +66,7 @@ __all__ = [
     # Core - Scorer
     "PipelineScoreCard", "StageScore", "ScoreGrade", "create_scorecard",
     # Agents
-    "IngestionAgent", "AnalysisAgent",
-    "CoordinatorAgent", "ScoringAgent",
+    "IngestionAgent", "AnalysisAgent", "ScoringAgent",
     # Retrievers
     "HybridRetriever", "jieba_tokenizer",
     # Templates & Slot-Filling

@@ -125,17 +125,17 @@ CAPABILITY_MAP = {
         "说明": "改模型/参数 → config.py; 改调用逻辑 → dashscope_client.py",
     },
     "Agent编排": {
-        "tools": ["classify_query_intent", "select_agent_chain"],
+        "tools": ["(路由不是tool，见 core/agent_router.py)"],
         "入口": "financial_rag/agents/ 目录",
         "实现": {
-            "调度Agent": "agents/coordinator_agent.py",
+            "意图路由": "core/agent_router.py  ← AgentRouter.classify/route",
             "分析Agent": "agents/analysis_agent.py  ← 最重的一个",
             "评分Agent": "agents/scoring_agent.py",
             "摄取Agent": "agents/ingestion_agent.py",
             "编排器": "core/orchestrator.py",
             "工厂": "core/factory.py  ← Agent创建和接线",
         },
-        "说明": "改Agent流程 → 对应agent文件; 改调度顺序 → orchestrator.py",
+        "说明": "改Agent流程 → 对应agent文件; 改意图链/调度顺序 → agent_router.py + orchestrator.py",
     },
     "前端": {
         "tools": ["(无)"],

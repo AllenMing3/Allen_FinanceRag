@@ -54,23 +54,19 @@ SAMPLE_TEXT = """
 
 
 class TestAgentChainSmoke:
-    """Full chain: Coordinator → Ingestion → Analysis → Scoring"""
+    """Routing (AgentRouter) + chain: Ingestion → Analysis → Scoring"""
 
-    def test_coordinator_classifies_kline(self, tools):
-        from financial_rag.agents.coordinator_agent import CoordinatorAgent
-        agent = _bind(CoordinatorAgent(), tools)
-        ctx = AgentContext(raw_input="茅台最近走势怎么样")
-        result = agent.run(ctx)
-        assert result.success
-        assert result.data["intent"] == "kline"
+    def test_router_classifies_kline(self):
+        """意图路由 — 原 CoordinatorAgent 职责，现由 AgentRouter 直接承担"""
+        from financial_rag.core.agent_router import create_agent_router
+        decision = create_agent_router().route("茅台最近走势怎么样")
+        assert decision.intent == "kline"
+        assert "AnalysisAgent" in decision.agent_chain
 
-    def test_coordinator_classifies_report(self, tools):
-        from financial_rag.agents.coordinator_agent import CoordinatorAgent
-        agent = _bind(CoordinatorAgent(), tools)
-        ctx = AgentContext(raw_input="商汤科技2024年营收增长了多少")
-        result = agent.run(ctx)
-        assert result.success
-        assert result.data["intent"] in ("report", "general")
+    def test_router_classifies_report(self):
+        from financial_rag.core.agent_router import create_agent_router
+        decision = create_agent_router().route("商汤科技2024年营收增长了多少")
+        assert decision.intent in ("report", "general")
 
     def test_ingestion_processes_text(self, tools):
         from financial_rag.agents.ingestion_agent import IngestionAgent
@@ -111,18 +107,14 @@ class TestAgentChainSmoke:
         assert "pipeline_scores" in result.data
 
     def test_full_chain_no_crash(self, tools):
-        """End-to-end: Coordinator → Ingestion → Analysis → Scoring (no crash)"""
-        from financial_rag.agents.coordinator_agent import CoordinatorAgent
+        """End-to-end: Routing → Ingestion → Analysis → Scoring (no crash)"""
         from financial_rag.agents.ingestion_agent import IngestionAgent
         from financial_rag.agents.analysis_agent import AnalysisAgent
         from financial_rag.agents.scoring_agent import ScoringAgent
 
-        # Coordinator
-        coord = _bind(CoordinatorAgent(), tools)
-        ctx = AgentContext(raw_input="分析商汤科技2024年报")
-        coord_result = coord.run(ctx)
-        assert coord_result.success
-        intent = coord_result.data["intent"]
+        # Routing (AgentRouter 直接完成意图分类)
+        from financial_rag.core.agent_router import create_agent_router
+        intent = create_agent_router().classify("分析商汤科技2024年报").name
 
         # Ingestion
         ingest = _bind(IngestionAgent(), tools)

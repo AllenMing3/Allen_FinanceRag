@@ -6,13 +6,13 @@
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
-> [Architecture Docs](docs/ARCHITECTURE.md) · [User Guide (中文)](USER_GUIDE.md) · [Interview Q&A (中文)](docs/PROJECT_QA.md)
+> [Architecture Docs (中文)](docs/ARCHITECTURE.md) — the single source of truth
 
 ---
 
 <p align="center">
   <img src="docs/screenshots/agent_architecture.png" alt="Agent Architecture" width="100%">
-  <em>4-agent chain: Coordinator → Ingestion → Analysis → Scoring, with intent-based routing</em>
+  <em>3-agent chain: Ingestion → Analysis → Scoring, with AgentRouter intent-based routing</em>
 </p>
 
 <p align="center">
@@ -29,9 +29,9 @@
 
 ## What Makes This Different
 
-**Intent-aware routing.** The same word "Apple" routes to K-line analysis for stock price queries, event impact scoring for acquisition news, or report synthesis for earnings data — decided by the Coordinator agent, not the user.
+**Intent-aware routing.** The same word "Apple" routes to K-line analysis for stock price queries, event impact scoring for acquisition news, or report synthesis for earnings data — decided by the AgentRouter, not the user.
 
-**Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 32 registered tools across 11 modules. Agents stay thin and testable.
+**Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 37 registered tools across 11 modules. Agents stay thin and testable.
 
 **File upload from browser.** PDF and image files can be uploaded directly via drag-and-drop or file picker in the web UI. Uploaded files are parsed server-side (PyMuPDF for PDF, qwen-vl-plus for images) and routed to both the knowledge base and the LightRAG knowledge graph — no manual directory path needed.
 
@@ -57,7 +57,7 @@
 
 **LLM calls never fail silently.** `LLMCaller` wraps every LLM invocation with retry, balanced-bracket JSON parsing, response caching, and anti-hallucination constraints — one unified layer for the entire system.
 
-**609 tests, zero API keys.** All tests pass in under 6 seconds using mocked data sources. LLM and embedding stay real in tests — only external APIs are mocked.
+**594 tests, zero API keys.** All tests pass in under 10 seconds using mocked data sources. LLM and embedding stay real in tests — only external APIs are mocked.
 
 ---
 
@@ -79,8 +79,7 @@
 └────────────────────────────┬─────────────────────────────────┘
                              │
 ┌────────────────────────────▼─────────────────────────────────┐
-│  Agents (4)                                                  │
-│  Coordinator  → classifies intent, selects agent chain       │
+│  Agents (3)                                                  │
 │  Ingestion    → fetches and indexes source documents         │
 │  Analysis     → routes to tools by intent, assembles result  │
 │  Scoring      → hallucination guard + quality evaluation     │
@@ -98,7 +97,7 @@
 
 ## How Routing Works
 
-The Coordinator agent classifies each query into one of five intents, then the scheduler assembles the appropriate agent chain:
+The AgentRouter classifies each query into one of five intents, then the scheduler assembles the appropriate agent chain:
 
 | Intent | Example Query | Chain |
 |--------|---------------|-------|
@@ -181,9 +180,7 @@ Tests mock only **data sources** (Tushare, news APIs). LLM, embedding, and reran
 
 ## Documentation
 
-- **[Architecture Docs](docs/ARCHITECTURE.md)** — system design, data flow, agent coordination
-- **[User Guide (中文)](USER_GUIDE.md)** — feature walkthrough and usage examples
-- **[Interview Q&A (中文)](docs/PROJECT_QA.md)** — technical depth for interviews
+- **[Architecture Docs (中文)](docs/ARCHITECTURE.md)** — the single source of truth: business paths, agent/tool inventory, backlog
 
 ---
 

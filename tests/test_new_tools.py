@@ -1,9 +1,8 @@
 """
-Test new tool modules — scoring_tools, coordinator_tools, report_tools, event_impact_tools
+Test new tool modules — scoring_tools, report_tools, event_impact_tools
 
 Covers:
 - scoring_tools: evaluate_pipeline_quality, check_hallucination, generate_score_report
-- coordinator_tools: classify_query_intent, select_agent_chain
 - report_tools: synthesize_report (fallback mode, no LLM)
 - event_impact_tools: fallback_assess
 - STOCK_MAP shared data location
@@ -97,53 +96,6 @@ class TestGenerateScoreReport:
         from financial_rag.tools.scoring_tools import generate_score_report
         result = generate_score_report(query="test")
         assert "report" in result
-
-
-# ===================== Coordinator Tools =====================
-
-
-class TestClassifyQueryIntent:
-
-    def test_kline_intent(self):
-        from financial_rag.tools.coordinator_tools import classify_query_intent
-        result = classify_query_intent("茅台走势分析")
-        assert result["intent"] == "kline"
-        assert result["confidence"] > 0
-
-    def test_event_intent(self):
-        from financial_rag.tools.coordinator_tools import classify_query_intent
-        result = classify_query_intent("2024年6月1日发生了什么大事")
-        assert result["intent"] == "event_impact"
-
-    def test_general_intent(self):
-        from financial_rag.tools.coordinator_tools import classify_query_intent
-        result = classify_query_intent("随便聊聊")
-        assert result["intent"] == "general"
-
-
-class TestSelectAgentChain:
-
-    def test_kline_chain(self):
-        from financial_rag.tools.coordinator_tools import select_agent_chain
-        result = select_agent_chain(intent="kline")
-        assert "AnalysisAgent" in result["agent_chain"]
-        assert "ScoringAgent" in result["agent_chain"]
-
-    def test_event_chain(self):
-        from financial_rag.tools.coordinator_tools import select_agent_chain
-        result = select_agent_chain(intent="event_impact")
-        assert "AnalysisAgent" in result["agent_chain"]
-
-    def test_low_confidence_adds_ingestion(self):
-        from financial_rag.tools.coordinator_tools import select_agent_chain
-        result = select_agent_chain(intent="kline", confidence=0.2)
-        assert "IngestionAgent" in result["agent_chain"]
-
-    def test_unknown_intent_uses_default(self):
-        from financial_rag.tools.coordinator_tools import select_agent_chain
-        result = select_agent_chain(intent="unknown_type")
-        assert len(result["agent_chain"]) > 0
-        assert "AnalysisAgent" in result["agent_chain"]
 
 
 # ===================== Report Tools =====================

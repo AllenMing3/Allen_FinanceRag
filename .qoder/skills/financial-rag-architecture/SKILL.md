@@ -74,7 +74,7 @@ This system is purpose-built for the **AI/technology sector**. All prompts, metr
 
 ---
 
-## 3. Agent Architecture (4 Agents)
+## 3. Agent Architecture (3 Agents)
 
 ### Core Principle: Lightweight Decision-Makers
 
@@ -113,23 +113,22 @@ result = self.call_tool("tool_name", param1=value1, param2=value2)
 
 | Agent | File | can_handle() | Tool Calls | Output |
 |-------|------|------------|-----------|--------|
-| **CoordinatorAgent** | `agents/coordinator_agent.py` | always (first in chain) | `classify_query_intent`, `select_agent_chain` | intent + agent_chain + routing metadata |
 | **IngestionAgent** | `agents/ingestion_agent.py` | always (BaseAgent) | `extract_document_metadata`, `detect_document_type`, `parse_pdf_file`, `describe_image_file` | Cleaned text + metadata (source, company, date, doc_type, parse_type) |
 | **AnalysisAgent** | `agents/analysis_agent.py` | always (unified) | `extract_financial_metrics`, `extract_entities`, `analyze_kline`, `assess_event_impact`, `synthesize_report` | Intent-aware: metrics + entities + K-line/event + Markdown report |
 | **ScoringAgent** | `agents/scoring_agent.py` | has final_answer or findings | `evaluate_pipeline_quality`, `check_hallucination`, `generate_score_report` | Per-stage scores + hallucination check + grade (A/B/C/D) |
 
-**Agent consolidation**: The original 7 agents were consolidated to 4. `AnalysisAgent` merges the old ExtractionAgent + KLineAgent + EventImpactAgent + ReportAgent. It reads `context.metadata.intent` (set by Coordinator) to select the right tool chain.
+**Agent consolidation**: The original 7 agents were consolidated to 3 (the former CoordinatorAgent was deleted as dead code — routing lives in `AgentRouter`). `AnalysisAgent` merges the old ExtractionAgent + KLineAgent + EventImpactAgent + ReportAgent. It reads `context.metadata.intent` (set by AgentRouter via Pipeline/API) to select the right tool chain.
 
 ### AgentRouter: Query Intent → Agent Chain
 
 The **AgentRouter** (`core/agent_router.py`) dynamically selects which agent chain to execute based on query intent:
 
 ```
-Query: "茅台最近走势" → AgentRouter → kline → [CoordinatorAgent, AnalysisAgent, ScoringAgent]
-Query: "2024-06-01发生了什么" → AgentRouter → event_impact → [CoordinatorAgent, AnalysisAgent, ScoringAgent]
-Query: "商汤科技营收多少" → AgentRouter → report → [CoordinatorAgent, IngestionAgent, AnalysisAgent, ScoringAgent]
-Query: "最新AI新闻" → AgentRouter → news → [CoordinatorAgent, IngestionAgent, AnalysisAgent, ScoringAgent]
-Query: "其他分析" → AgentRouter → general → [CoordinatorAgent, IngestionAgent, AnalysisAgent, ScoringAgent]
+Query: "茅台最近走势" → AgentRouter → kline → [AnalysisAgent, ScoringAgent]
+Query: "2024-06-01发生了什么" → AgentRouter → event_impact → [AnalysisAgent, ScoringAgent]
+Query: "商汤科技营收多少" → AgentRouter → report → [IngestionAgent, AnalysisAgent, ScoringAgent]
+Query: "最新AI新闻" → AgentRouter → news → [IngestionAgent, AnalysisAgent, ScoringAgent]
+Query: "其他分析" → AgentRouter → general → [IngestionAgent, AnalysisAgent, ScoringAgent]
 ```
 
 **Routing flow in Pipeline Phase 3:**
@@ -140,9 +139,9 @@ Query: "其他分析" → AgentRouter → general → [CoordinatorAgent, Ingesti
 
 **Key design decisions:**
 - Pattern-based classification (keywords + regex), no LLM needed for routing
-- `CoordinatorAgent` runs first to set intent for AnalysisAgent
+- `AgentRouter` injects intent + routing metadata (date/stock_code) into `AgentContext.metadata`
 - `ScoringAgent` always runs last to evaluate the full pipeline
-- Specialist tool chains (K-line/event) are selected inside AnalysisAgent based on intent
+- Specialist tool chains (K-line/event/deep news/deep topic) are selected inside AnalysisAgent based on intent
 
 ### AgentContext: Shared Data Container
 
@@ -440,7 +439,6 @@ ReAct cycle: Think → Retrieve → Act → Observe → Judge
 |---------|-----------|----------|
 | `config.llm` | model, embedding_model, rerank_model, temperature | qwen-plus, text-embedding-v3, qwen3-rerank, 0.0 |
 | `config.rag` | chunk_size, chunk_overlap, similarity_top_k | 512, 50, 5 |
-| `config.coordinator` | execution_mode, max_parallel_agents, max_retries | sequential, 3, 2 |
 | `config.pipeline` | hybrid_top_k, rrf_k, bm25_weight, vector_weight | 10, 60, 0.3, 0.7 |
 | `config.reflection` | max_retrievals, max_steps, min_confidence | 3, 6, 0.6 |
 | `config.tushare` | token, default_stocks | env, [600519, 000858, ...] |
@@ -452,10 +450,10 @@ ReAct cycle: Think → Retrieve → Act → Observe → Judge
 
 | Layer | Files |
 |-------|-------|
-| **Agents** | `agents/coordinator_agent.py`, `agents/ingestion_agent.py`, `agents/analysis_agent.py` (unified), `agents/scoring_agent.py`, `agents/utils.py` |
-| **Core** | `core/base.py` (BaseAgent+AgentContext+AgentResult), `core/orchestrator.py`, `core/pipeline.py`, `core/indexer.py`, `core/factory.py`, `core/agent_router.py`, `core/protocol.py`, `core/router.py`, `core/scorer.py`, `core/data_orchestrator.py` |
-| **Retrieval** | `retrievers/retriever.py` (HybridRetriever), `retrievers/bm25_engine.py`, `retrievers/vector_engine.py`, `retrievers/fusion.py`, `retrievers/filters.py`, `retrievers/chunker.py`, `retrievers/persistence.py`, `retrievers/preprocessor.py`, `retrievers/query_parser.py`, `retrievers/dictionaries.py` |
-| **Tools** | `tools/core.py` (FunctionRegistry+ToolExecutor+ToolCallSession), `tools/extraction_tools.py`, `tools/document_parse_tools.py`, `tools/graph_tools.py`, `tools/news_tools.py`, `tools/kline_tools.py`, `tools/event_impact_tools.py`, `tools/coordinator_tools.py`, `tools/scoring_tools.py`, `tools/report_tools.py` |
+| **Agents** | `agents/ingestion_agent.py`, `agents/analysis_agent.py` (unified), `agents/scoring_agent.py`, `agents/utils.py` |
+| **Core** | `core/base.py` (BaseAgent+AgentContext+AgentResult), `core/orchestrator.py`, `core/pipeline.py`, `core/factory.py`, `core/agent_router.py`, `core/router.py`, `core/scorer.py`, `core/ingestion_scorer.py` (`core/protocol.py`/`data_orchestrator.py` 存在但未接入生产) |
+| **Retrieval** | `retrievers/hybrid_engine.py` (HybridRetriever), `retrievers/bm25_engine.py`, `retrievers/vector_engine.py`, `retrievers/fusion.py`, `retrievers/filters.py`, `retrievers/chunker.py`, `retrievers/persistence.py`, `retrievers/preprocessor.py`, `retrievers/query_parser.py`, `retrievers/metadata.py`, `retrievers/dictionaries.py` |
+| **Tools** | `tools/core.py` (FunctionRegistry+ToolExecutor+ToolCallSession), `tools/extraction_tools.py`, `tools/document_parse_tools.py`, `tools/graph_tools.py`, `tools/news_tools.py`, `tools/kline_tools.py`, `tools/event_impact_tools.py`, `tools/kb_tools.py`, `tools/chunk_tools.py`, `tools/scoring_tools.py`, `tools/report_tools.py`, `tools/analysis_tools.py` |
 | **Guard** | `guard/reflector.py` (HallucinationGuard + ReflectionLoop) |
 | **Services** | `services/analysis.py` (pure business logic), `services/persistence.py` (KB/metadata/index I/O + dedup + backup) |
 | **LLM** | `llm/caller.py` (LLMCaller smart layer), `llm/dashscope_client.py`, `llm/model_router.py` |

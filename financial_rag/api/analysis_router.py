@@ -220,7 +220,7 @@ async def api_config():
     # Count tools and agents
     registry = _state.get("registry")
     tool_count = len(registry) if registry else 0
-    agent_count = 4  # Coordinator, Ingestion, Analysis, Scoring
+    agent_count = 3  # Ingestion, Analysis, Scoring (路由由 AgentRouter 承担)
 
     _config_cache = {
         "llm_model": cfg.llm.model,

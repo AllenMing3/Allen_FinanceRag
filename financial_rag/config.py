@@ -41,16 +41,6 @@ class RAGConfig:
 
 
 @dataclass
-class CoordinatorConfig:
-    """Coordinate 架构配置"""
-    execution_mode: str = "sequential"      # sequential / parallel / conditional
-    max_parallel_agents: int = 3
-    max_retries: int = 2
-    timeout_seconds: float = 300.0
-    verbose: bool = True
-
-
-@dataclass
 class PipelineConfig:
     """Indexer 架构配置"""
     hybrid_top_k: int = 10
@@ -116,7 +106,6 @@ class AppConfig:
     # 子配置
     llm: LLMConfig = field(default_factory=LLMConfig)
     rag: RAGConfig = field(default_factory=RAGConfig)
-    coordinator: CoordinatorConfig = field(default_factory=CoordinatorConfig)
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     reflection: ReflectionConfig = field(default_factory=ReflectionConfig)
     tushare: TushareConfig = field(default_factory=TushareConfig)

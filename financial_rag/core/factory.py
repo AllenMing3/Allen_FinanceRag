@@ -15,10 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
-    """创建 4-Agent 编排器 + AgentRouter
+    """创建 3-Agent 编排器 + AgentRouter
 
-    注册 4 个 Agent:
-    - CoordinatorAgent: 智能调度 (意图分类 + Agent 链选择)
+    注册 3 个 Agent:
     - IngestionAgent:   数据摄取 (财报/新闻)
     - AnalysisAgent:    统一分析 (指标抽取 + K线 + 事件 + 报告)
     - ScoringAgent:     全链路评分 + 防幻觉
@@ -30,19 +29,17 @@ def create_orchestrator(retriever=None, llm=None) -> AgentOrchestrator:
         retriever: 可选的 HybridRetriever (注入搜索工具)
         llm: 可选的 DashScopeLLM (注入抽取工具)
     """
-    from financial_rag.agents.coordinator_agent import CoordinatorAgent
     from financial_rag.agents.ingestion_agent import IngestionAgent
     from financial_rag.agents.analysis_agent import AnalysisAgent
     from financial_rag.agents.scoring_agent import ScoringAgent
     from financial_rag.tools import create_financial_registry, ToolExecutor
 
-    # 创建能力注册中心 (含检索/计算/抽取/新闻/分析/事件影响/评分/调度 全部工具)
+    # 创建能力注册中心 (含检索/计算/抽取/新闻/分析/事件影响/评分 全部工具)
     registry = create_financial_registry(retriever=retriever, llm=llm)
     executor = ToolExecutor(registry)
 
     # 创建 Agent 并绑定工具能力
     agents = [
-        CoordinatorAgent(),
         IngestionAgent(),
         AnalysisAgent(),
         ScoringAgent(),

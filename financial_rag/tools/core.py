@@ -752,11 +752,6 @@ def create_financial_registry(retriever=None, llm=None, lightrag_adapter=None) -
     for tool_def in SCORING_TOOLS:
         registry.add(tool_def)
 
-    # ---- 调度工具 (供 CoordinatorAgent 调用) ----
-    from financial_rag.tools.coordinator_tools import COORDINATOR_TOOLS
-    for tool_def in COORDINATOR_TOOLS:
-        registry.add(tool_def)
-
     # ---- 报告合成工具 (供 ReportAgent 调用) ----
     from financial_rag.tools.report_tools import REPORT_TOOLS, inject_report_llm
     if llm:

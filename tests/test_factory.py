@@ -1,7 +1,7 @@
 """Test Factory - create_orchestrator wiring verification
 
 Covers:
-- All 4 agents registered
+- All 3 agents registered
 - AgentRouter attached to orchestrator
 - Agent chains correct (no CoordinatorAgent in chains)
 - Tool binding for all agents
@@ -18,10 +18,9 @@ def orch():
 
 class TestFactoryWiring:
 
-    def test_four_agents_registered(self, orch):
-        assert len(orch.agents) == 4
+    def test_three_agents_registered(self, orch):
+        assert len(orch.agents) == 3
         expected = [
-            "CoordinatorAgent",
             "IngestionAgent",
             "AnalysisAgent",
             "ScoringAgent",
@@ -84,8 +83,8 @@ class TestFactoryNoLLM:
 
     def test_create_without_llm(self):
         orch = create_orchestrator(retriever=None, llm=None)
-        assert len(orch.agents) == 4
+        assert len(orch.agents) == 3
 
     def test_create_without_retriever(self):
         orch = create_orchestrator(retriever=None)
-        assert len(orch.agents) == 4
+        assert len(orch.agents) == 3
