@@ -2,11 +2,12 @@
 
 **Not all queries are equal.** A stock price question needs K-line data. A breaking-news question needs event impact scoring. An earnings question needs report synthesis. FinRAG routes each query to the right agent chain automatically — no manual pipeline selection.
 
-![Tests](https://img.shields.io/badge/tests-609%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-9%20passing-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
-> [Architecture Docs (中文)](docs/ARCHITECTURE.md) — the single source of truth
+
+
 
 ---
 
@@ -57,7 +58,9 @@
 
 **LLM calls never fail silently.** `LLMCaller` wraps every LLM invocation with retry, balanced-bracket JSON parsing, response caching, and anti-hallucination constraints — one unified layer for the entire system.
 
-**594 tests, zero API keys.** All tests pass in under 10 seconds using mocked data sources. LLM and embedding stay real in tests — only external APIs are mocked.
+**Context assembly is observable, not a black box.** A single `ContextBuilder` turns retrieved chunks into the grounding fed to both the LLM and the hallucination guard — one source of truth, no per-path ad-hoc truncation. Every assembly emits a trace (fidelity %, per-item kept/dropped with reasons, budget utilization) surfaced in logs and in the web UI's KB-retrieval panel, so gutted or empty grounding is loud instead of silent.
+
+**Tests prove effect, not just shape.** The old ~600 shallow tests were removed; tests are being rewritten per-module to a stricter standard (assert old-vs-new behavior, observability, cross-component consistency, regression locks). Currently 9 tests in `tests/test_context_builder.py`, no API key needed; LLM and embedding stay real, only external data APIs mocked.
 
 ---
 
@@ -128,7 +131,7 @@ The user types a natural language question. The system decides everything else.
 | Graph RAG | LightRAG (integrated: PDF/image → entity-relation extraction → graph query via Function Calling) |
 | Domain Dicts | DictionaryRegistry (10 types, JSON-extensible: `data/dictionaries/*.json`) |
 | Vector DB | ChromaDB (HNSW ANN, cosine distance, persistent storage) |
-| Testing | pytest — 609 tests across 27 files |
+| Testing | pytest — effect-proving tests, rebuilt per-module (currently 9 in `test_context_builder.py`); CI coverage gate temporarily 0 during rebuild |
 
 ---
 
@@ -171,7 +174,7 @@ python -m financial_rag.main toolcall -l   # list all registered tools
 ## Testing
 
 ```bash
-python -m pytest tests/ -v    # 609 tests, < 6s, no API key needed
+python -m pytest tests/ -v    # 9 tests (rebuild in progress), no API key needed
 ```
 
 Tests mock only **data sources** (Tushare, news APIs). LLM, embedding, and rerank stay real. Extraction tools have regex fallback for fully offline operation.
