@@ -70,9 +70,19 @@ def analyze_news_text(
     kb_sources, kb_search_info = _search_kb(retriever, query or text[:200], kb_built)
     logger.info(f"[analyze_news] KB 检索: {len(kb_sources)} sources (raw={kb_search_info.get('total_results', 0)})")
 
+    # 2b. 统一组装 grounding（唯一真相源：同一份同时喂 LLM 与 Guard，全程可观测）
+    from financial_rag.context_builder import ContextBuilder
+    kb_ctx = ContextBuilder.for_path("deep_analysis").build(kb_sources)
+    kb_search_info["context_trace"] = kb_ctx.trace.to_dict()
+    logger.info(
+        f"[analyze_news] context 组装: 保真率={kb_ctx.trace.fidelity:.1%} "
+        f"({kb_ctx.trace.kept_chars}/{kb_ctx.trace.available_chars}字) 纳入{kb_ctx.trace.included_items}项"
+        + (f" 警告={kb_ctx.trace.warnings}" if kb_ctx.trace.warnings else "")
+    )
+
     # 3. LLM assessment or rule-based fallback
     if llm:
-        assessment, structured, confidence = _llm_news_assessment(llm, text, doc_type, metrics_clean, entities_clean, kb_sources)
+        assessment, structured, confidence = _llm_news_assessment(llm, text, doc_type, metrics_clean, entities_clean, kb_ctx.grounding_text)
     else:
         assessment, structured = _heuristic_assessment(text, doc_type, metrics_clean, entities_clean)
         confidence = ""
@@ -89,6 +99,7 @@ def analyze_news_text(
         "entities": entities_clean,
         "doc_type": doc_type,
         "kb_sources": kb_sources,
+        "kb_grounding": kb_ctx.source_items,
         "kb_search_info": kb_search_info,
     }
 
@@ -154,11 +165,17 @@ def analyze_topic_research(
     kb_sources, kb_search_info = _search_kb(retriever, search_query, kb_built)
     logger.info(f"[analyze_topic] 步骤 2/4 完成: KB {len(kb_sources)} sources (raw={kb_search_info.get('total_results', 0)}) ({(_time.time()-t1)*1000:.0f}ms)")
 
+    # 3b. 统一组装 grounding（唯一真相源 + 全程可观测）
+    from financial_rag.context_builder import ContextBuilder
+    kb_ctx = ContextBuilder.for_path("deep_analysis").build(kb_sources)
+    kb_search_info["context_trace"] = kb_ctx.trace.to_dict()
+    logger.info(f"[analyze_topic] context 组装: 保真率={kb_ctx.trace.fidelity:.1%} ({kb_ctx.trace.kept_chars}/{kb_ctx.trace.available_chars}字)")
+
     # 4. LLM assessment or fallback
     logger.info(f"[analyze_topic] 步骤 3/4: LLM 研判...")
     t2 = _time.time()
     if llm:
-        assessment, structured, confidence = _llm_topic_assessment(llm, topic, items, combined_text, kb_sources)
+        assessment, structured, confidence = _llm_topic_assessment(llm, topic, items, combined_text, kb_ctx.grounding_text)
     else:
         assessment = "neutral"
         confidence = ""
@@ -194,6 +211,7 @@ def analyze_topic_research(
             for item in items[:10]
         ],
         "kb_sources": kb_sources,
+        "kb_grounding": kb_ctx.source_items,
         "kb_search_info": kb_search_info,
     }
 
@@ -378,14 +396,15 @@ def _text_to_structured_topic(text: str, verdict: str, confidence: str, items: l
     }
 
 
-def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities: dict, kb_sources: list) -> tuple:
+def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities: dict, kb_grounding: str) -> tuple:
     """LLM-powered news assessment with structured JSON output — via LLMCaller."""
     from financial_rag.llm.caller import LLMCaller
 
     import json as _json
     metrics_str = _json.dumps(metrics, ensure_ascii=False, indent=2) if metrics else "无"
     entities_str = _json.dumps(entities, ensure_ascii=False, indent=2) if entities else "无"
-    kb_str = "\n".join(f"  - [{s['source']}] (相关度{s['score']:.2f}) {s['text'][:150]}" for s in kb_sources[:3]) if kb_sources else "  (无相关知识库背景)"
+    # grounding 已由 ContextBuilder 统一组装（句边界截断 + 预算控制），此处直接注入
+    kb_str = kb_grounding if kb_grounding else "  (无相关知识库背景)"
 
     system = """你是专业的 AI/科技行业分析师。请对以下新闻进行深度结构化分析。
 
@@ -499,7 +518,7 @@ Step 1: 提取核心事件和关键数据 → Step 2: 量化影响（用具体�
         return "unknown", {"analysis": f"LLM 分析失败: {e}", "verdict": "unknown"}, ""
 
 
-def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_sources: list) -> tuple:
+def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_grounding: str) -> tuple:
     """LLM-powered topic research assessment with structured JSON output — via LLMCaller."""
     from financial_rag.llm.caller import LLMCaller
 
@@ -508,10 +527,8 @@ def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_s
         for item in items[:15]
     ) or "  (未获取到相关新闻)"
 
-    kb_str = "\n".join(
-        f"  - [{s['source']}] (相关度{s['score']:.2f}) {s['text'][:150]}"
-        for s in kb_sources[:3]
-    ) or "  (无相关知识库背景)"
+    # grounding 已由 ContextBuilder 统一组装（句边界截断 + 预算控制），此处直接注入
+    kb_str = kb_grounding if kb_grounding else "  (无相关知识库背景)"
 
     system = """你是专业的 AI/科技行业研究分析师。请对以下话题进行综合结构化研判。
 

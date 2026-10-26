@@ -124,7 +124,8 @@ def _run_hallucination_check(result: dict, llm=None, extra_sources: list = None)
     guard_sources = []
     if extra_sources:
         guard_sources.extend(extra_sources)
-    for kb in result.get("kb_sources", []):
+    # 优先用 ContextBuilder 组装的 kb_grounding（与 LLM 所见同源），回退到原始 kb_sources
+    for kb in (result.get("kb_grounding") or result.get("kb_sources", [])):
         if kb.get("text"):
             guard_sources.append({"text": kb["text"]})
 

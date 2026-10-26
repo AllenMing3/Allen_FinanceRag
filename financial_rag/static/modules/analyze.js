@@ -12,7 +12,10 @@ function renderKbSearchInfo(info, sources) {
   const srcCount = (sources || []).length;
   const rawCount = info.total_results || 0;
   const statusIcon = srcCount > 0 ? '✅' : (info.kb_built ? '⚠️' : '❌');
-  h += `<span>${statusIcon} KB 检索: ${srcCount} 命中 / ${rawCount} 原始</span>`;
+  // 保真率进标题：即便折叠，用户也能一眼看到"喂给 AI 的内容完整度"
+  const ct0 = info.context_trace;
+  const fidBadge = ct0 ? ` · <span style="color:${ct0.fidelity >= 0.8 ? 'var(--ok)' : ct0.fidelity >= 0.5 ? '#f59e0b' : 'var(--danger)'};font-weight:700">保真率 ${(ct0.fidelity * 100).toFixed(0)}%</span>` : '';
+  h += `<span>${statusIcon} KB 检索: ${srcCount} 命中 / ${rawCount} 原始${fidBadge}</span>`;
   h += '<span class="collapse-arrow">▶</span>';
   h += '</div>';
   h += '<div class="collapsible-body" style="padding:8px 12px;font-size:11px;color:var(--text2);display:none">';
@@ -43,7 +46,65 @@ function renderKbSearchInfo(info, sources) {
       h += `<div style="color:var(--danger);margin-top:4px">💡 ${rawCount} 条结果全部低于阈值 ${info.threshold}，被过滤。尝试降低阈值或丰富 KB 内容</div>`;
     }
   }
+  h += renderContextTrace(info.context_trace);
   h += '</div></div>';
+  return h;
+}
+
+// ── Shared: context assembly trace（context-builder 可观测性面板）──
+// 把后端 ContextAssemblyTrace 画出来：保真率头号指标 + 新旧对比 + 逐项取舍 + 警告。
+// 目的：让用户从 UI 直接"看懂" grounding 有没有被腰斩，而非黑盒。
+function renderContextTrace(trace) {
+  if (!trace) return '';
+  const items = trace.items || [];
+  const avail = trace.available_chars || 0;
+  const fid = trace.fidelity || 0;
+  const fidPct = (fid * 100).toFixed(0);
+  const fidColor = fid >= 0.8 ? 'var(--ok)' : fid >= 0.5 ? '#f59e0b' : 'var(--danger)';
+  // 数据驱动对比：同样召回下，旧 [:150]×3 规则会保留多少（非硬编码，随真实数据变化）
+  const oldKept = items.slice(0, 3).reduce((a, it) => a + Math.min(it.available_chars || 0, 150), 0);
+  const oldFid = avail > 0 ? oldKept / avail : 0;
+
+  let h = '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border)">';
+  h += '<div style="font-weight:600;color:var(--text2);margin-bottom:6px">📐 喂给 AI 的上下文组装（context-builder）</div>';
+
+  // 保真率主条
+  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">';
+  h += '<span style="font-size:11px;color:var(--text3);min-width:44px">保真率</span>';
+  h += `<div style="flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden"><div style="width:${fidPct}%;height:100%;background:${fidColor}"></div></div>`;
+  h += `<strong style="color:${fidColor};font-size:12px;min-width:38px;text-align:right">${fidPct}%</strong>`;
+  h += '</div>';
+
+  // 新旧对比一句话——"用户看懂做了什么"的关键
+  h += `<div style="font-size:11px;color:var(--text3);margin-bottom:6px">现组装 <strong style="color:${fidColor}">${trace.kept_chars}</strong>/${avail} 字完整喂入`;
+  if (fid - oldFid > 0.01) {
+    h += ` · 旧 [:150]×3 仅 <strong style="color:var(--danger)">${oldKept}</strong> 字 (${(oldFid * 100).toFixed(0)}%)`;
+  }
+  h += '</div>';
+
+  // 预算 / 规模
+  h += `<div style="font-size:11px;color:var(--text3);margin-bottom:8px">预算 ${trace.budget_chars} 字 · 利用率 ${((trace.budget_utilization || 0) * 100).toFixed(0)}% · ~${trace.estimated_tokens} tokens · 纳入 ${trace.included_items}/${trace.input_items} 项${trace.dropped_items ? ` · 丢弃 ${trace.dropped_items}` : ''}</div>`;
+
+  // 逐项取舍（full/partial/dropped + 原因）
+  const statusMeta = { full: ['完整', 'var(--ok)'], partial: ['部分', '#f59e0b'], dropped: ['丢弃', 'var(--text3)'] };
+  items.forEach(it => {
+    const [label, color] = statusMeta[it.status] || [it.status || '?', 'var(--text3)'];
+    h += '<div style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:2px">';
+    h += `<span style="color:var(--text3);min-width:14px;text-align:right">${it.index}</span>`;
+    h += `<span style="min-width:30px;color:${color};font-weight:600">${label}</span>`;
+    h += `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2)">${escHtml(it.source || '—')}</span>`;
+    h += `<span style="color:var(--text3);min-width:62px;text-align:right">${it.kept_chars}/${it.available_chars}字</span>`;
+    h += `<span style="color:${scoreColor(it.score)};min-width:34px;text-align:right">${(it.score || 0).toFixed(2)}</span>`;
+    h += '</div>';
+    if (it.reason) h += `<div style="font-size:10px;color:var(--text3);margin:-1px 0 3px 52px">← ${escHtml(it.reason)}</div>`;
+  });
+
+  // 警告（静默腰斩 → 显式可见）
+  (trace.warnings || []).forEach(w => {
+    h += `<div style="font-size:11px;color:#f59e0b;margin-top:5px">⚠️ ${escHtml(w)}</div>`;
+  });
+
+  h += '</div>';
   return h;
 }
 
