@@ -116,21 +116,16 @@ class TestParseConsistency:
 
 
 # ===========================================================================
-# ④ 回归锁定：探针抓出的 bug 钉死（本轮只锁不修）
+# ④ 回归锁定：探针抓出并已修复的 bug，钉死防回退
 # ===========================================================================
 @pytest.mark.regression
-class TestKnownBugLocks:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG(step2): _extract_stock 的 6 位数字正则会抓取 8 位日期 YYYYMMDD 的前 6 位，"
-               "把 '20240601' 误判为 stock_code='202406'。契约：纯日期不应产生股票代码。",
-    )
+class TestFixedBugLocks:
     def test_eight_digit_date_not_parsed_as_stock(self, parser):
-        """设计契约：8 位纯日期只应被解析为日期，不得污染 stock_code。
+        """回归锁：8 位纯日期只应解析为日期，不得污染 stock_code。
 
-        当前实现违反此契约（6 位正则贪婪抓取），故 xfail。
-        修复后本用例应转通过——strict=True 会以 XPASS 报错，逼你摘标记，
-        把"已修复"这一事实固化下来。
+        曾违反：_extract_stock 的 6 位数字正则抓取 YYYYMMDD 前 6 位 → '20240601' 误为 '202406'。
+        已修：正则加 (?<!\\d)..(?!\\d) 边界，要求 6 位为独立数字串。
+        退回旧实现→本用例即红。
         """
         r = parser.parse("20240601 的公告")
         assert r.date == "2024-06-01"          # 日期本身解析正确

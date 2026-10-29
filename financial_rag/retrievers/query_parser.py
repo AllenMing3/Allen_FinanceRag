@@ -125,7 +125,9 @@ class QueryParser:
                 return
         
         # 次优先: 6位数字代码
-        m = re.search(r'(\d{6})', query)
+        # 数字边界 (?<!\d)..(?!\d): 要求恰好独立的 6 位数字串，
+        # 避免抓取 8 位日期 YYYYMMDD 的前 6 位（如 '20240601' 误判为 '202406'）。
+        m = re.search(r'(?<!\d)(\d{6})(?!\d)', query)
         if m:
             code = m.group(1)
             if code.startswith("6"):
