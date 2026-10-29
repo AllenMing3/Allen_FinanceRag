@@ -1,66 +1,74 @@
-# FinRAG — Intent-Aware Multi-Agent RAG System
+# FinRAG — Multi-Agent RAG for Chinese Financial / AI-Sector Queries
 
-**Not all queries are equal.** A stock price question needs K-line data. A breaking-news question needs event impact scoring. An earnings question needs report synthesis. FinRAG routes each query to the right agent chain automatically — no manual pipeline selection.
+Query → intent routing → agent chain → hybrid retrieval → grounded answer with a hallucination guard. Built for the AI sector of the Chinese market (stocks, news, research).
 
-![Tests](https://img.shields.io/badge/tests-9%20passing-brightgreen)
+> ### ⚠️ Honest status: V1.0, under active TDD hardening
+>
+> V1.0 is a **working but rough** product. It shipped a lot of surface area fast — multi-agent routing, hybrid retrieval, graph RAG, a web UI — but **quality was asserted in prose, not measured by tests**. The RAG pipeline had essentially *no* end-to-end verification.
+>
+> **The current mission is TDD.** We are retro-fitting a test harness that walks the RAG pipeline **one step at a time**: derive each step's contract, verify real behavior against it, fix what breaks, and lock the fix as a permanent regression asset. No big-bang rewrites. This README reflects that reality instead of overselling.
+
 ![Python](https://img.shields.io/badge/python-3.11-blue)
+![Tests](https://img.shields.io/badge/tests-36%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
+---
 
+## Current Mission — Harness-Driven Hardening
 
+**The method (repeated for every RAG pipeline step):**
+
+1. **Derive "should-be"** from the code contract — the spec, not a guessed answer.
+2. **Probe "as-is"** with a throwaway script against the real components.
+3. **Reconcile.** Where should-be and as-is diverge → a real defect, not a hypothetical.
+4. **Fix in place**, then **crystallize the probe into a permanent test.**
+
+**Four standards every test must meet:**
+
+| Standard | Meaning |
+|----------|---------|
+| ① Prove effect | assert behavior/outcome, not just shape or "didn't crash" |
+| ② Observable | the thing under test emits a trace / assertable output |
+| ③ Consistent | same input → same output; deterministic and offline |
+| ④ Regression-locked | fixed bugs pinned so they can't silently return |
+
+**Pipeline coverage so far:**
+
+| # | RAG step | Status | Test asset |
+|---|----------|--------|-----------|
+| 1 | Ingest — chunk + index | ✅ verified | `tests/test_ingest_step1.py` (6) |
+| 2 | Query parsing | ✅ verified · 1 bug found & fixed | `tests/test_query_parser_step2.py` (21) |
+| 3 | Recall — BM25 + vector | ⬜ not started | — |
+| 4 | RRF fusion | ⬜ not started | — |
+| 5 | Rerank | ⬜ not started | — |
+| 6 | Filter / quality gate | ⬜ not started | — |
+| 7 | Generation grounding | ⬜ not started | — |
+
+Plus the context-assembly layer: `tests/test_context_builder.py` (9).
+
+**Total: 36 passing — offline, no API key needed.** Tests force local retrieval (BM25 + Jaccard) via a `conftest` fixture, so they are deterministic and network-free. LLM/embedding stay real only where a test explicitly exercises them; external data APIs are mocked.
+
+**First real bug the harness caught (Step 2):**
+
+> `_extract_stock`'s 6-digit regex grabbed the first 6 digits of an 8-digit date (`YYYYMMDD`), so `"20240601"` was misparsed as `stock_code="202406"`, polluting downstream filtering/routing. Fixed with digit boundaries `(?<!\d)(\d{6})(?!\d)`; locked by a regression test that turns red if the old behavior ever returns.
 
 ---
 
-<p align="center">
-  <img src="docs/screenshots/agent_architecture.png" alt="Agent Architecture" width="100%">
-  <em>3-agent chain: Ingestion → Analysis → Scoring, with AgentRouter intent-based routing</em>
-</p>
+## What's in the Box (V1.0 features — built; verification in progress)
 
-<p align="center">
-  <img src="docs/screenshots/analysis.png" alt="Smart Query" width="100%">
-  <em>RAG retrieval with hybrid search + K-line technical analysis in one unified query panel</em>
-</p>
+These exist in code. They are **not** yet all covered by the harness — closing that gap is the work in progress above.
 
-<p align="center">
-  <img src="docs/screenshots/kb_management.png" alt="Data Management" width="100%">
-  <em>Knowledge base management: import files, build indexes (BM25 + Embedding + RRF), search and delete by keyword</em>
-</p>
-
----
-
-## What Makes This Different
-
-**Intent-aware routing.** The same word "Apple" routes to K-line analysis for stock price queries, event impact scoring for acquisition news, or report synthesis for earnings data — decided by the AgentRouter, not the user.
-
-**Agents don't do work — tools do.** Every agent is a lightweight orchestrator that only calls `self.call_tool()`. All business logic, API calls, and computation live in 37 registered tools across 11 modules. Agents stay thin and testable.
-
-**File upload from browser.** PDF and image files can be uploaded directly via drag-and-drop or file picker in the web UI. Uploaded files are parsed server-side (PyMuPDF for PDF, qwen-vl-plus for images) and routed to both the knowledge base and the LightRAG knowledge graph — no manual directory path needed.
-
-**News auto-imports to KB with quality gates.** Fetched news articles go through a preprocessing pipeline (text cleaning → relevance gate → minimum length filter → doc type classification) before being added to the knowledge base. Duplicates are automatically detected and skipped. Previously, news only stored metadata — now quality articles become retrievable knowledge.
-
-**Collapsible UI with modular frontend.** The web UI uses native ES Modules split into 9 domain-specific JS modules (`modules/`) and 6 layered CSS files (`styles/`). Cards support `data-collapsible` folding for progressive disclosure — users see a clean overview first, expand sections as needed. Score panels are positioned as diagnostic tools below results (collapsed by default), keeping the answer front and center.
-
-**Deep analysis walks the full Agent chain.** News interpretation and topic research go through `orchestrator([AnalysisAgent, ScoringAgent])` — AnalysisAgent does extraction + KB retrieval + LLM analysis, then ScoringAgent evaluates quality and runs hallucination guard. If the agent chain fails, the system falls back to a direct service call. The ScoringAgent is a **universal capability**: any feature can opt in by setting 3 metadata fields (`scoring_source_items`, `scoring_mode`, `scoring_text`).
-
-**Dual-mode smart query.** The query panel offers two modes: "Knowledge Base Q&A" (hybrid BM25+vector retrieval with LLM answer) and "Deep Research" (full 5-phase Pipeline: fetch news → index → AI analysis → structured report → hallucination guard). User-facing labels are translated from technical terms — no "Pipeline", "RAG", or "Agent" jargon visible to users.
-
-**Every chain ends with a quality gate.** The Scoring agent runs a 6-layer hallucination guard (4 rule layers: source grounding, numerical fidelity, citation integrity, structure compliance + 2 LLM layers: LLM critique, LLM assist) and pipeline quality evaluation before any result reaches the user. The guard is **context-aware**: RAG queries expect `[N]` citations and `# Markdown` headers, while deep analysis uses `【】` bracketed sections with relaxed citation requirements — same guard, different scoring criteria. Weight normalization ensures skipped layers don't drag down the overall score.
-
-**Query planning before retrieval.** `QueryPlanner` uses a single LLM call to decompose complex queries (comparisons, timelines, deep dives) into structured sub-queries — each with a source (kb/news/graph/all) and mode (local/global/hybrid/mix). Simple factual queries skip planning and go straight to retrieval.
-
-**Multi-modal document parsing.** PDF files parsed via PyMuPDF (local, no API) and images analyzed via qwen-vl-plus multimodal model. Parsed content from PDFs and images is automatically routed to the knowledge graph for entity-relation extraction.
-
-**Graph RAG — integrated, not just an experiment.** LightRAG knowledge graph is wired into the ingestion pipeline: PDF/image parsed content triggers entity-relation extraction. Agents query the graph on-demand via Function Calling tools (`query_knowledge_graph`, `get_graph_stats`), routed by QueryPlanner's `source: graph` — not forced into every query. Storage is JSON + GraphML files, no external database needed.
-
-**Hybrid retrieval that actually works.** BM25 + ChromaDB ANN vector search (1024-dim) + RRF fusion + qwen3-rerank reranking + metadata filtering + **query expansion** (64 synonym groups + 35 concept association maps, LLM-enhanced for short queries) — six signals combined instead of relying on any single one.
-
-**Domain dictionaries that grow without code changes.** `DictionaryRegistry` centralizes 10 dictionary types (stock mappings, financial terms, synonyms, jieba words, etc.) and auto-merges external JSON files from `data/dictionaries/`. Drop in a JSON file → dictionaries expand at next startup. Coverage stats via `reg.summary()` — weak spots visible at a glance.
-
-**LLM calls never fail silently.** `LLMCaller` wraps every LLM invocation with retry, balanced-bracket JSON parsing, response caching, and anti-hallucination constraints — one unified layer for the entire system.
-
-**Context assembly is observable, not a black box.** A single `ContextBuilder` turns retrieved chunks into the grounding fed to both the LLM and the hallucination guard — one source of truth, no per-path ad-hoc truncation. Every assembly emits a trace (fidelity %, per-item kept/dropped with reasons, budget utilization) surfaced in logs and in the web UI's KB-retrieval panel, so gutted or empty grounding is loud instead of silent.
-
-**Tests prove effect, not just shape.** The old ~600 shallow tests were removed; tests are being rewritten per-module to a stricter standard (assert old-vs-new behavior, observability, cross-component consistency, regression locks). Currently 9 tests in `tests/test_context_builder.py`, no API key needed; LLM and embedding stay real, only external data APIs mocked.
+- **Intent routing.** `AgentRouter` classifies a query into an intent and assembles the matching agent chain (Ingestion / Analysis / Scoring). No manual pipeline selection.
+- **Thin agents, fat tools.** Agents only orchestrate via `self.call_tool()`; business logic lives in registered tools across 11 tool modules. Enforced by an architecture-guard rule.
+- **Hybrid retrieval.** BM25 + ChromaDB vector search + RRF fusion + rerank + metadata filtering + query expansion. *Retrieval quality is exactly what the harness is being built to measure — it is not yet verified.*
+- **Query planning.** `QueryPlanner` uses one LLM call to decompose complex queries into source/mode-aware sub-queries; simple queries skip it.
+- **Hallucination guard.** ScoringAgent runs a multi-layer guard (rule layers: source grounding, numerical fidelity, citation integrity, structure compliance; plus LLM critique/assist) before a result is returned.
+- **Observable context assembly.** A single `ContextBuilder` turns retrieved chunks into the grounding fed to both the LLM and the guard, and emits a fidelity trace (per-item kept/dropped with reasons). Covered by tests.
+- **Graph RAG.** LightRAG knowledge graph wired into ingestion; queried on demand via function-calling tools, routed by `QueryPlanner`'s `source: graph`.
+- **Multi-modal parsing.** PDF via PyMuPDF (local, no API), images via qwen-vl-plus.
+- **Web UI + CLI.** FastAPI dark-theme UI (drag-and-drop file upload, KB management, dual-mode query) and a CLI.
+- **Extensible dictionaries.** `DictionaryRegistry` merges external JSON from `data/dictionaries/` — coverage grows without a code change.
+- **Resilient LLM layer.** `LLMCaller` wraps every call with retry, JSON repair, and response caching.
 
 ---
 
@@ -100,7 +108,7 @@
 
 ## How Routing Works
 
-The AgentRouter classifies each query into one of five intents, then the scheduler assembles the appropriate agent chain:
+The AgentRouter classifies each query into an intent, then the scheduler assembles the agent chain:
 
 | Intent | Example Query | Chain |
 |--------|---------------|-------|
@@ -111,7 +119,7 @@ The AgentRouter classifies each query into one of five intents, then the schedul
 | Topic research | "Research the AI chip sector" | Analysis (deep_topic) → Scoring |
 | General | anything else | Ingestion → Analysis → Scoring |
 
-The user types a natural language question. The system decides everything else.
+The user types a natural-language question; the system decides the rest.
 
 ---
 
@@ -125,13 +133,13 @@ The user types a natural language question. The system decides everything else.
 | Backend | FastAPI + 4 async routers + python-multipart (file upload) |
 | Frontend | Vanilla JS ES Modules (9 modules) + 6 layered CSS + collapsible cards |
 | Data APIs | Tushare, 10jqka, Sina, EastMoney |
-| Retrieval | BM25 + ChromaDB (ANN) + RRF + TextChunker + QueryParser (64 synonym groups + 35 concept maps) |
-| Query Planning | QueryPlanner (LLM decomposition, 5 intents, source/mode-aware sub-queries) |
+| Retrieval | BM25 + ChromaDB (ANN) + RRF + TextChunker + QueryParser (synonym + concept dictionaries) |
+| Query Planning | QueryPlanner (LLM decomposition, source/mode-aware sub-queries) |
 | Document Parse | PyMuPDF (PDF, local) + qwen-vl-plus (image multimodal) |
-| Graph RAG | LightRAG (integrated: PDF/image → entity-relation extraction → graph query via Function Calling) |
-| Domain Dicts | DictionaryRegistry (10 types, JSON-extensible: `data/dictionaries/*.json`) |
+| Graph RAG | LightRAG (PDF/image → entity-relation extraction → graph query via function calling) |
+| Domain Dicts | DictionaryRegistry (JSON-extensible: `data/dictionaries/*.json`) |
 | Vector DB | ChromaDB (HNSW ANN, cosine distance, persistent storage) |
-| Testing | pytest — effect-proving tests, rebuilt per-module (currently 9 in `test_context_builder.py`); CI coverage gate temporarily 0 during rebuild |
+| Testing | pytest — harness-driven, per-pipeline-step (36 passing, offline); CI gate temporarily manual-only during hardening |
 
 ---
 
@@ -139,7 +147,7 @@ The user types a natural language question. The system decides everything else.
 
 ```bash
 # 1. Clone and setup
-git clone https://github.com/your-username/financial-rag.git
+git clone <your-fork-url>
 cd financial-rag
 
 # 2. Create virtual environment
@@ -157,11 +165,11 @@ pip install -r requirements.txt
 # 4. Configure API key
 cp .env.example .env
 # Edit .env and fill in DASHSCOPE_API_KEY
-https://github.com/ConardLi
+
 # 5. Launch web UI
 python -m financial_rag.main web
 # Opens at http://127.0.0.1:8000 — dark theme, sidebar navigation
-# Upload PDF/images directly via drag-and-drop in the Data Import panel
+# Upload PDF/images via drag-and-drop in the Data Import panel
 
 # 6. Or use CLI
 python -m financial_rag.main pipeline "What happened in AI this week?"
@@ -174,16 +182,37 @@ python -m financial_rag.main toolcall -l   # list all registered tools
 ## Testing
 
 ```bash
-python -m pytest tests/ -v    # 9 tests (rebuild in progress), no API key needed
+python -m pytest tests/ -v    # 36 passing — offline, no API key needed
 ```
 
-Tests mock only **data sources** (Tushare, news APIs). LLM, embedding, and rerank stay real. Extraction tools have regex fallback for fully offline operation.
+The suite **is** the harness described above: per-step, contract-derived, effect-proving tests with regression locks. It grows **one pipeline step at a time** — full RAG-chain coverage is intentionally incomplete (verify a step, then move to the next). The CI gate is temporarily manual-only (`workflow_dispatch`) during this hardening phase.
+
+Tests mock only **data sources** (Tushare, news APIs). Retrieval is forced offline (BM25 + Jaccard) for determinism; LLM/embedding/rerank stay real only where a test explicitly exercises them.
 
 ---
 
 ## Documentation
 
 - **[Architecture Docs (中文)](docs/ARCHITECTURE.md)** — the single source of truth: business paths, agent/tool inventory, backlog
+
+---
+
+## UI (V1.0)
+
+<p align="center">
+  <img src="docs/screenshots/agent_architecture.png" alt="Agent Architecture" width="100%">
+  <em>3-agent chain: Ingestion → Analysis → Scoring, with AgentRouter intent-based routing</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/analysis.png" alt="Smart Query" width="100%">
+  <em>Query panel: hybrid retrieval + K-line technical analysis</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/kb_management.png" alt="Data Management" width="100%">
+  <em>Knowledge base management: import files, build indexes (BM25 + embedding + RRF), search/delete</em>
+</p>
 
 ---
 
