@@ -62,6 +62,17 @@ HumanEval等benchmark评测中，我们的模型（70B参数）在推理任务�
 
 # ===================== Fixtures =====================
 
+@pytest.fixture(autouse=True)
+def _force_local_retrieval(monkeypatch):
+    """测试期强制检索走本地（BM25+Jaccard），不碰真实 embedding/rerank API。
+
+    根因：config.py 导入期 load_dotenv(override=True) 会把 .env 里的 DASHSCOPE_API_KEY
+    注入 os.environ，而 create_hybrid_retriever 在调用时读 env → 测试会误走真实 API。
+    此处在每个用例前删除该 key，使检索确定性、离线、可复现。仅测试层生效，不改生产代码。
+    """
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+
+
 @pytest.fixture
 def registry():
     """Create a financial registry without LLM (regex fallback mode)"""
