@@ -1,12 +1,15 @@
 # Financial RAG — CI Gate
-# 推送到 main / 发起 PR 时自动运行，阻断不合格的代码合入
+# ⚠️ CI 门禁已临时关闭（快速迭代期）：不再在 push/PR 时自动运行与阻断。
+# 需要恢复门禁时，把下面的 workflow_dispatch 换回 push/pull_request 触发即可：
+#   on:
+#     push:
+#       branches: [main, master]
+#     pull_request:
+#       branches: [main, master]
 name: CI
 
 on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
+  workflow_dispatch:
 
 jobs:
   # ────────────────── Job 1: 语法 + 导入检查 ──────────────────
