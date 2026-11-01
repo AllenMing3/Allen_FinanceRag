@@ -206,14 +206,24 @@ class QueryParser:
             if term not in seen:
                 seen.add(term)
                 unique_keywords.append((term, weight))
-        
-        # 如果没提取到任何关键词，用分词兜底（过滤停用词）
-        if not unique_keywords:
-            tokens = self._fallback_tokenize(query)
-            for token in tokens:
-                if token not in STOP_WORDS and len(token) > 1:
-                    unique_keywords.append((token, 1.0))
-        
+
+        # 残余分词补充：保留未被词典覆盖的核心意图/实体词
+        # 旧逻辑 `if not unique_keywords` 是全有或全无——只要命中一个词典词，
+        # 未登录核心词（如"大模型融资"的"融资"、"昇腾芯片"的"昇腾"）就被静默丢弃，
+        # 导致下游 BM25 query tokens 缺失关键信号（Step 3 召回 MISS 的上游根因）。
+        # 修复：无论词典是否命中，都对"残余文本"（去掉已覆盖词+停用词后）分词补充。
+        covered = {term.lower() for term, _ in unique_keywords}
+        residual = query_lower
+        for term in sorted(covered, key=len, reverse=True):
+            residual = residual.replace(term, " ")
+        # 先去停用词，避免滑窗在"科技的最近"这类残余上产生"技的""的最"跨词垃圾
+        for sw in STOP_WORDS:
+            residual = residual.replace(sw.lower(), " ")
+        for token in self._fallback_tokenize(residual):
+            if token not in STOP_WORDS and len(token) > 1 and token not in covered:
+                unique_keywords.append((token, 1.0))
+                covered.add(token)
+
         result.keywords = unique_keywords
     
     def _fallback_tokenize(self, text: str) -> List[str]:
