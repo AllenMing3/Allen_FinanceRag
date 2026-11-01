@@ -512,6 +512,28 @@ class HybridRetriever:
         self._bm25.remove_by_docs(removed_docs)  # FTS5 增量删除
         logger.info(f"HybridRetriever: removed {len(remove_set)} docs, {len(self.documents)} remaining")
 
+    def remove_by_doc_ids(self, doc_ids: List[str]):
+        """按逻辑文档 ID 删除（自动移除该 doc_id 下所有 chunks）。
+
+        解决 remove(indices) 在 chunker 激活后位置索引对不上的问题：
+        kb_docs（原始）的位置 ≠ retriever.documents（切分后）的位置。
+        本方法按 meta.doc_id 匹配，不依赖位置。
+        """
+        if not doc_ids:
+            return
+        id_set = set(doc_ids)
+        removed_docs = [d for d in self.documents if d.get("meta", {}).get("doc_id") in id_set]
+        if not removed_docs:
+            logger.warning(f"remove_by_doc_ids: 未找到匹配文档 {doc_ids}")
+            return
+        # 计算实际位置索引，复用已有 remove 逻辑
+        indices = [
+            i for i, d in enumerate(self.documents)
+            if d.get("meta", {}).get("doc_id") in id_set
+        ]
+        self.remove(indices)
+        logger.info(f"remove_by_doc_ids: {doc_ids} -> 移除 {len(removed_docs)} chunks")
+
     def clear(self):
         """清空索引"""
         self.documents = []

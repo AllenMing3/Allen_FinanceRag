@@ -335,22 +335,24 @@ async def api_kb_remove_source(source_name: str):
     """Remove all KB docs matching a given source name"""
     await asyncio.to_thread(_ensure_init)
     with _state_lock:
-        # Collect indices to remove
-        remove_indices = []
+        # Collect doc_ids to remove (不依赖位置索引，避免 chunker 切分后位置对不上)
+        remove_doc_ids = []
         keep_docs = []
-        for i, d in enumerate(_state["kb_docs"]):
+        for d in _state["kb_docs"]:
             if d.get("meta", {}).get("source", "unknown") == source_name:
-                remove_indices.append(i)
+                doc_id = d.get("meta", {}).get("doc_id")
+                if doc_id:
+                    remove_doc_ids.append(doc_id)
             else:
                 keep_docs.append(d)
-        removed = len(remove_indices)
+        removed = len(_state["kb_docs"]) - len(keep_docs)
         if removed > 0:
             _state["kb_docs"] = keep_docs
             _save_kb(_state["kb_docs"])
-            # Efficient remove: filter docs + embeddings, rebuild BM25 only
+            # 按 doc_id 删除（自动处理多 chunk 情况）
             if _state.get("kb_built") and _state["kb_docs"]:
                 try:
-                    _state["retriever"].remove(remove_indices)
+                    _state["retriever"].remove_by_doc_ids(remove_doc_ids)
                     _state["retriever"].save_index(_INDEX_PATH)
                     logger.info(f"[KB] 索引已更新 (删除 {source_name} 后, {len(_state['kb_docs'])} 篇)")
                 except Exception as e:
@@ -399,22 +401,24 @@ async def api_kb_remove_keyword(keyword: str):
     await asyncio.to_thread(_ensure_init)
     kw = keyword.lower()
     with _state_lock:
-        # Collect indices to remove
-        remove_indices = []
+        # Collect doc_ids to remove (不依赖位置索引，避免 chunker 切分后位置对不上)
+        remove_doc_ids = []
         keep_docs = []
-        for i, d in enumerate(_state["kb_docs"]):
+        for d in _state["kb_docs"]:
             if kw in d.get("text", "").lower() or kw in d.get("meta", {}).get("source", "").lower():
-                remove_indices.append(i)
+                doc_id = d.get("meta", {}).get("doc_id")
+                if doc_id:
+                    remove_doc_ids.append(doc_id)
             else:
                 keep_docs.append(d)
-        removed = len(remove_indices)
+        removed = len(_state["kb_docs"]) - len(keep_docs)
         if removed > 0:
             _state["kb_docs"] = keep_docs
             _save_kb(_state["kb_docs"])
-            # Efficient remove: filter docs + embeddings, rebuild BM25 only
+            # 按 doc_id 删除（自动处理多 chunk 情况）
             if _state.get("kb_built") and _state["kb_docs"]:
                 try:
-                    _state["retriever"].remove(remove_indices)
+                    _state["retriever"].remove_by_doc_ids(remove_doc_ids)
                     _state["retriever"].save_index(_INDEX_PATH)
                     logger.info(f"[KB] 索引已更新 (删除关键词 {keyword!r} 后, {len(_state['kb_docs'])} 篇)")
                 except Exception as e:
