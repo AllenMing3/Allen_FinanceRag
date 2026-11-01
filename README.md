@@ -1,221 +1,212 @@
-# FinRAG — Multi-Agent RAG for Chinese Financial / AI-Sector Queries
 
-Query → intent routing → agent chain → hybrid retrieval → grounded answer with a hallucination guard. Built for the AI sector of the Chinese market (stocks, news, research).
 
-> ### ⚠️ Honest status: V1.0, under active TDD hardening
+
+查询 → 意图路由 → Agent 链 → 混合检索 → 经防幻觉护栏校验的有据回答。专为中国市场的 AI 板块打造（股票、新闻、研报）。
+
+> ### ⚠️ 诚实声明：V1.0，正在积极进行 TDD 加固
 >
-> V1.0 is a **working but rough** product. It shipped a lot of surface area fast — multi-agent routing, hybrid retrieval, graph RAG, a web UI — but **quality was asserted in prose, not measured by tests**. The RAG pipeline had essentially *no* end-to-end verification.
+> V1.0 是一个**能用但粗糙**的产品。它快速铺开了很大的功能面——多 Agent 路由、混合检索、图谱 RAG、Web UI——但**质量是靠文字断言的，而非用测试度量的**。RAG 流水线基本*没有*端到端验证。
 >
-> **The current mission is TDD.** We are retro-fitting a test harness that walks the RAG pipeline **one step at a time**: derive each step's contract, verify real behavior against it, fix what breaks, and lock the fix as a permanent regression asset. No big-bang rewrites. This README reflects that reality instead of overselling.
+> **当前使命是 TDD。** 我们正在补建一套测试护栏，**一步一个脚印**地走完 RAG 流水线：推导每一步的契约、用真实行为去验证、修复暴露的问题、并把修复钉成永久的回归资产。不做大爆炸式重写。本 README 反映这一真实状态，而非过度包装。
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
-![Tests](https://img.shields.io/badge/tests-36%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-75%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
 ---
 
-## Current Mission — Harness-Driven Hardening
+## 当前使命 —— 护栏驱动的加固
 
-**The method (repeated for every RAG pipeline step):**
+**方法（对 RAG 流水线的每一步重复执行）：**
 
-1. **Derive "should-be"** from the code contract — the spec, not a guessed answer.
-2. **Probe "as-is"** with a throwaway script against the real components.
-3. **Reconcile.** Where should-be and as-is diverge → a real defect, not a hypothetical.
-4. **Fix in place**, then **crystallize the probe into a permanent test.**
+1. **从代码契约推导"应然"** —— 是规格，不是猜出来的答案。
+2. **用一次性探针脚本对真实组件观测"实然"**。
+3. **对照。** 应然与实然分歧之处 → 是真实缺陷，不是假想问题。
+4. **就地修复**，然后**把探针固化为永久测试。**
 
-**Four standards every test must meet:**
+**每条测试必须满足的四条标准：**
 
-| Standard | Meaning |
+| 标准 | 含义 |
 |----------|---------|
-| ① Prove effect | assert behavior/outcome, not just shape or "didn't crash" |
-| ② Observable | the thing under test emits a trace / assertable output |
-| ③ Consistent | same input → same output; deterministic and offline |
-| ④ Regression-locked | fixed bugs pinned so they can't silently return |
+| ① 证明效果 | 断言行为/结果，而不只是形状或"没崩" |
+| ② 可观测 | 被测对象会发出可追踪 / 可断言的输出 |
+| ③ 一致性 | 同输入 → 同输出；确定性且离线 |
+| ④ 回归锁定 | 已修复的 bug 被钉死，无法悄悄回退 |
 
-**Pipeline coverage so far:**
+**目前的流水线覆盖：**
 
-| # | RAG step | Status | Test asset |
+| # | RAG 步骤 | 状态 | 测试资产 |
 |---|----------|--------|-----------|
-| 1 | Ingest — chunk + index | ✅ verified | `tests/test_ingest_step1.py` (6) |
-| 2 | Query parsing | ✅ verified · 1 bug found & fixed | `tests/test_query_parser_step2.py` (21) |
-| 3 | Recall — BM25 + vector | ⬜ not started | — |
-| 4 | RRF fusion | ⬜ not started | — |
-| 5 | Rerank | ⬜ not started | — |
-| 6 | Filter / quality gate | ⬜ not started | — |
-| 7 | Generation grounding | ⬜ not started | — |
+| 1 | 入库 —— 切分 + 索引 | ✅ 已验证 · 发现并修复 1 个 bug | `tests/test_ingest_step1.py` (15) |
+| 2 | 查询解析 | ✅ 已验证 · 发现并修复 2 个 bug | `tests/test_query_parser_step2.py` (27) |
+| 3 | 召回 —— BM25 + 向量 | ✅ 已验证 · 发现并修复 1 个 bug | `tests/test_recall_step3.py` (24) |
+| 4 | RRF 融合 | ⬜ 未开始 | — |
+| 5 | Rerank 重排 | ⬜ 未开始 | — |
+| 6 | 过滤 / 质量门控 | ⬜ 未开始 | — |
+| 7 | 生成有据化 | ⬜ 未开始 | — |
 
-Plus the context-assembly layer: `tests/test_context_builder.py` (9).
+另有上下文组装层：`tests/test_context_builder.py` (9)。
 
-**Total: 36 passing — offline, no API key needed.** Tests force local retrieval (BM25 + Jaccard) via a `conftest` fixture, so they are deterministic and network-free. LLM/embedding stay real only where a test explicitly exercises them; external data APIs are mocked.
+**合计：75 通过 —— 离线运行，无需 API key。** 测试通过 `conftest` fixture 强制走本地检索（BM25 + Jaccard），因此确定性、无网络依赖。LLM/embedding 仅在测试显式调用时才保持真实；外部数据 API 一律 mock。
 
-**First real bug the harness caught (Step 2):**
+**护栏已抓到的真实 bug（每个都有回归测试钉死）：**
 
-> `_extract_stock`'s 6-digit regex grabbed the first 6 digits of an 8-digit date (`YYYYMMDD`), so `"20240601"` was misparsed as `stock_code="202406"`, polluting downstream filtering/routing. Fixed with digit boundaries `(?<!\d)(\d{6})(?!\d)`; locked by a regression test that turns red if the old behavior ever returns.
-
----
-
-## What's in the Box (V1.0 features — built; verification in progress)
-
-These exist in code. They are **not** yet all covered by the harness — closing that gap is the work in progress above.
-
-- **Intent routing.** `AgentRouter` classifies a query into an intent and assembles the matching agent chain (Ingestion / Analysis / Scoring). No manual pipeline selection.
-- **Thin agents, fat tools.** Agents only orchestrate via `self.call_tool()`; business logic lives in registered tools across 11 tool modules. Enforced by an architecture-guard rule.
-- **Hybrid retrieval.** BM25 + ChromaDB vector search + RRF fusion + rerank + metadata filtering + query expansion. *Retrieval quality is exactly what the harness is being built to measure — it is not yet verified.*
-- **Query planning.** `QueryPlanner` uses one LLM call to decompose complex queries into source/mode-aware sub-queries; simple queries skip it.
-- **Hallucination guard.** ScoringAgent runs a multi-layer guard (rule layers: source grounding, numerical fidelity, citation integrity, structure compliance; plus LLM critique/assist) before a result is returned.
-- **Observable context assembly.** A single `ContextBuilder` turns retrieved chunks into the grounding fed to both the LLM and the guard, and emits a fidelity trace (per-item kept/dropped with reasons). Covered by tests.
-- **Graph RAG.** LightRAG knowledge graph wired into ingestion; queried on demand via function-calling tools, routed by `QueryPlanner`'s `source: graph`.
-- **Multi-modal parsing.** PDF via PyMuPDF (local, no API), images via qwen-vl-plus.
-- **Web UI + CLI.** FastAPI dark-theme UI (drag-and-drop file upload, KB management, dual-mode query) and a CLI.
-- **Extensible dictionaries.** `DictionaryRegistry` merges external JSON from `data/dictionaries/` — coverage grows without a code change.
-- **Resilient LLM layer.** `LLMCaller` wraps every call with retry, JSON repair, and response caching.
+> - **Step 2 —— 日期被误判为股票代码。** `_extract_stock` 的 6 位数字正则抓取了 8 位日期（`YYYYMMDD`）的前 6 位，导致 `"20240601"` 被解析成 `stock_code="202406"`。已用数字边界 `(?<!\d)(\d{6})(?!\d)` 修复。
+> - **Step 3 —— BM25 chunk 碰撞。** 一篇文档切分后的所有 chunk 继承同一个 `meta.doc_id`，导致 FTS5 去重只悄悄保留最后一个 chunk（存活率 1/3）。已用复合 key `{doc_id}_c{chunk_id}` 修复。
+> - **Step 1 —— 删除索引错位。** `kb_router` 的删除端点把原始文档列表的位置索引传给 `retriever.remove()`，但检索器持有的是*切分后*的列表——一旦长文被切分，位置就会错位，删掉错误的 chunk。已用 `remove_by_doc_ids()` 修复。
+> - **Step 2 —— 核心词被静默丢弃。** 关键词抽取的兜底分词是"全有或全无"：只要命中任意一个词典词，未登录的意图/实体词（`融资`、`昇腾`、`投资`、`财报`）就永远不进分词，饿死 BM25。已改为始终补充残余（未覆盖）token——在 BM25 通道上可度量地把融资文档召回从 MISS 翻转为 HIT。
 
 ---
 
-## Architecture
+## 功能清单（V1.0 特性 —— 已构建；验证进行中）
+
+这些都已存在于代码中。它们**尚未**全部被护栏覆盖——补齐这一缺口正是上面进行中的工作。
+
+- **意图路由。** `AgentRouter` 把查询分类为某种意图，并组装匹配的 Agent 链（Ingestion / Analysis / Scoring）。无需手动选择流水线。
+- **瘦 Agent，胖工具。** Agent 只通过 `self.call_tool()` 编排；业务逻辑住在 11 个工具模块的已注册工具里。由架构守卫规则强制执行。
+- **混合检索。** BM25 + ChromaDB 向量检索 + RRF 融合 + rerank + metadata 过滤 + 查询扩展。*检索质量正是护栏要度量的目标——目前尚未验证完毕。*
+- **查询规划。** `QueryPlanner` 用一次 LLM 调用把复杂查询拆解为带 source/mode 的子查询；简单查询跳过它。
+- **防幻觉护栏。** ScoringAgent 在返回结果前运行多层护栏（规则层：来源有据、数值保真、引用完整、结构合规；外加 LLM 批判/辅助）。
+- **可观测的上下文组装。** 单一的 `ContextBuilder` 把检索到的 chunk 转成同时喂给 LLM 和护栏的 grounding，并发出保真轨迹（逐条 kept/dropped 及原因）。已被测试覆盖。
+- **图谱 RAG。** LightRAG 知识图谱接入入库流程；通过 function-calling 工具按需查询，由 `QueryPlanner` 的 `source: graph` 路由。
+- **多模态解析。** PDF 走 PyMuPDF（本地，无 API），图片走 qwen-vl-plus。
+- **Web UI + CLI。** FastAPI 暗色主题 UI（拖拽上传文件、知识库管理、双模式查询）以及一个 CLI。
+- **可扩展词典。** `DictionaryRegistry` 合并来自 `data/dictionaries/` 的外部 JSON——覆盖面无需改代码即可增长。
+- **弹性 LLM 层。** `LLMCaller` 为每次调用包裹重试、JSON 修复和响应缓存。
+
+---
+
+## 架构
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  User Layer — FastAPI web UI (dark theme) + CLI             │
-└────────────────────────────┬─────────────────────────────────┘
-                             │
-┌────────────────────────────▼─────────────────────────────────┐
-│  Scheduling — AgentRouter (intent → chain)                  │
-│               PipelineScheduler (5-phase execution)          │
-└────────────────────────────┬─────────────────────────────────┘
-                             │
-┌────────────────────────────▼─────────────────────────────────┐
-│  Query Planning — QueryPlanner (LLM decomposition)          │
-│   complex queries → sub-queries with source + mode           │
-└────────────────────────────┬─────────────────────────────────┘
-                             │
-┌────────────────────────────▼─────────────────────────────────┐
-│  Agents (3)                                                  │
-│  Ingestion    → fetches and indexes source documents         │
-│  Analysis     → routes to tools by intent, assembles result  │
-│  Scoring      → hallucination guard + quality evaluation     │
-└────────────────────────────┬─────────────────────────────────┘
-                             │
-┌──────────┬─────────────────┬─────────────────────────────────┐
-│ Retrieval│ Data APIs       │ LLM Layer                        │
-│ BM25+Chroma│ Tushare         │ LLMCaller (retry+cache+JSON)    │
-│ RRF+Rerank│ 10jqka/Eastmoney│ ModelRouter (4 tiers, Qwen)    │
-│ +Graph   │ LightRAG (integrated) │                                  │
-└──────────┴─────────────────┴─────────────────────────────────┘
+用户层 —— FastAPI Web UI（暗色主题）+ CLI
+   │
+调度层 —— AgentRouter（意图 → Agent 链） · PipelineScheduler（5 阶段执行）
+   │
+查询规划 —— QueryPlanner（LLM 拆解复杂查询 → 带 source + mode 的子查询）
+   │
+Agent 层（3 个）
+   ├─ Ingestion  抓取并索引源文档
+   ├─ Analysis   按意图路由到工具、组装结果
+   └─ Scoring    防幻觉护栏 + 质量评估
+   │
+   ├─ 检索        BM25 + Chroma · RRF + Rerank · +Graph
+   ├─ 数据 API    Tushare · 10jqka/东方财富 · LightRAG（已集成）
+   └─ LLM 层      LLMCaller（重试+缓存+JSON） · ModelRouter（4 档，Qwen）
 ```
 
 ---
 
-## How Routing Works
+## 路由如何工作
 
-The AgentRouter classifies each query into an intent, then the scheduler assembles the agent chain:
+AgentRouter 把每个查询分类为某种意图，然后调度器组装 Agent 链：
 
-| Intent | Example Query | Chain |
+| 意图 | 示例查询 | 链 |
 |--------|---------------|-------|
-| K-line analysis | "Show me the MACD for 600519" | Analysis → Scoring |
-| Event impact | "Is this acquisition good or bad?" | Analysis → Scoring |
-| Report synthesis | "Summarize Q4 earnings" | Ingestion → Analysis → Scoring |
-| News deep-dive | "What happened in AI this week?" | Analysis (deep) → Scoring |
-| Topic research | "Research the AI chip sector" | Analysis (deep_topic) → Scoring |
-| General | anything else | Ingestion → Analysis → Scoring |
+| K 线分析 | "看下 600519 的 MACD" | Analysis → Scoring |
+| 事件影响 | "这次收购是利好还是利空？" | Analysis → Scoring |
+| 研报综合 | "总结一下 Q4 财报" | Ingestion → Analysis → Scoring |
+| 新闻深读 | "这周 AI 圈发生了什么？" | Analysis (deep) → Scoring |
+| 话题调研 | "调研一下 AI 芯片赛道" | Analysis (deep_topic) → Scoring |
+| 通用 | 其他任意查询 | Ingestion → Analysis → Scoring |
 
-The user types a natural-language question; the system decides the rest.
+用户输入一个自然语言问题；剩下的由系统决定。
 
 ---
 
-## Tech Stack
+## 技术栈
 
-| Layer | Technology |
+| 层 | 技术 |
 |-------|-----------|
-| LLM | DashScope Qwen (turbo / plus / max / 235b) |
-| Embedding | text-embedding-v3 (1024-dim) |
-| Rerank | qwen3-rerank (fallback to RRF score) |
-| Backend | FastAPI + 4 async routers + python-multipart (file upload) |
-| Frontend | Vanilla JS ES Modules (9 modules) + 6 layered CSS + collapsible cards |
-| Data APIs | Tushare, 10jqka, Sina, EastMoney |
-| Retrieval | BM25 + ChromaDB (ANN) + RRF + TextChunker + QueryParser (synonym + concept dictionaries) |
-| Query Planning | QueryPlanner (LLM decomposition, source/mode-aware sub-queries) |
-| Document Parse | PyMuPDF (PDF, local) + qwen-vl-plus (image multimodal) |
-| Graph RAG | LightRAG (PDF/image → entity-relation extraction → graph query via function calling) |
-| Domain Dicts | DictionaryRegistry (JSON-extensible: `data/dictionaries/*.json`) |
-| Vector DB | ChromaDB (HNSW ANN, cosine distance, persistent storage) |
-| Testing | pytest — harness-driven, per-pipeline-step (36 passing, offline); CI gate temporarily manual-only during hardening |
+| LLM | DashScope Qwen（turbo / plus / max / 235b） |
+| Embedding | text-embedding-v3（1024 维） |
+| Rerank | qwen3-rerank（回退到 RRF 分数） |
+| 后端 | FastAPI + 4 个 async 路由 + python-multipart（文件上传） |
+| 前端 | 原生 JS ES Modules（9 个模块）+ 6 层 CSS + 可折叠卡片 |
+| 数据 API | Tushare、10jqka、Sina、EastMoney |
+| 检索 | BM25 + ChromaDB（ANN）+ RRF + TextChunker + QueryParser（同义词 + 概念词典） |
+| 查询规划 | QueryPlanner（LLM 拆解，带 source/mode 的子查询） |
+| 文档解析 | PyMuPDF（PDF，本地）+ qwen-vl-plus（图片多模态） |
+| 图谱 RAG | LightRAG（PDF/图片 → 实体关系抽取 → 通过 function calling 查询图谱） |
+| 领域词典 | DictionaryRegistry（JSON 可扩展：`data/dictionaries/*.json`） |
+| 向量库 | ChromaDB（HNSW ANN，余弦距离，持久化存储） |
+| 测试 | pytest —— 护栏驱动、按流水线步骤（75 通过，离线）；加固期 CI 门禁临时改为手动触发 |
 
 ---
 
-## Quick Start
+## 快速开始
 
 ```bash
-# 1. Clone and setup
+# 1. 克隆并配置
 git clone <your-fork-url>
 cd financial-rag
 
-# 2. Create virtual environment
+# 2. 创建虚拟环境
 python -m venv myenv
 
-# Activate
+# 激活
 # Windows (PowerShell):
 .\myenv\Scripts\Activate.ps1
 # macOS/Linux:
 source myenv/bin/activate
 
-# 3. Install dependencies
+# 3. 安装依赖
 pip install -r requirements.txt
 
-# 4. Configure API key
+# 4. 配置 API key
 cp .env.example .env
-# Edit .env and fill in DASHSCOPE_API_KEY
+# 编辑 .env 并填入 DASHSCOPE_API_KEY
 
-# 5. Launch web UI
+# 5. 启动 Web UI
 python -m financial_rag.main web
-# Opens at http://127.0.0.1:8000 — dark theme, sidebar navigation
-# Upload PDF/images via drag-and-drop in the Data Import panel
+# 打开 http://127.0.0.1:8000 —— 暗色主题，侧边栏导航
+# 在"数据导入"面板拖拽上传 PDF/图片
 
-# 6. Or use CLI
-python -m financial_rag.main pipeline "What happened in AI this week?"
-python -m financial_rag.main pipeline "Show me MACD for 600519" -v
-python -m financial_rag.main toolcall -l   # list all registered tools
+# 6. 或使用 CLI
+python -m financial_rag.main pipeline "这周 AI 圈发生了什么？"
+python -m financial_rag.main pipeline "看下 600519 的 MACD" -v
+python -m financial_rag.main toolcall -l   # 列出所有已注册工具
 ```
 
 ---
 
-## Testing
+## 测试
 
 ```bash
-python -m pytest tests/ -v    # 36 passing — offline, no API key needed
+python -m pytest tests/ -v    # 75 通过 —— 离线，无需 API key
 ```
 
-The suite **is** the harness described above: per-step, contract-derived, effect-proving tests with regression locks. It grows **one pipeline step at a time** — full RAG-chain coverage is intentionally incomplete (verify a step, then move to the next). The CI gate is temporarily manual-only (`workflow_dispatch`) during this hardening phase.
+这套测试**就是**上面描述的护栏：按步骤、从契约推导、证明效果、带回归锁。它**一次一个流水线步骤**地生长——完整 RAG 链覆盖是刻意保持未完成的（验证一步，再进下一步）。加固期内 CI 门禁临时改为手动触发（`workflow_dispatch`）。
 
-Tests mock only **data sources** (Tushare, news APIs). Retrieval is forced offline (BM25 + Jaccard) for determinism; LLM/embedding/rerank stay real only where a test explicitly exercises them.
-
----
-
-## Documentation
-
-- **[Architecture Docs (中文)](docs/ARCHITECTURE.md)** — the single source of truth: business paths, agent/tool inventory, backlog
+测试只 mock **数据源**（Tushare、新闻 API）。检索被强制离线（BM25 + Jaccard）以保证确定性；LLM/embedding/rerank 仅在测试显式调用时才保持真实。
 
 ---
 
-## UI (V1.0)
+## 文档
+
+- **[架构文档（中文）](docs/ARCHITECTURE.md)** —— 唯一权威基准：业务通路、Agent/工具清单、backlog
+
+---
+
+## 界面（V1.0）
 
 <p align="center">
   <img src="docs/screenshots/agent_architecture.png" alt="Agent Architecture" width="100%">
-  <em>3-agent chain: Ingestion → Analysis → Scoring, with AgentRouter intent-based routing</em>
+  <em>3-Agent 链：Ingestion → Analysis → Scoring，由 AgentRouter 做基于意图的路由</em>
 </p>
 
 <p align="center">
   <img src="docs/screenshots/analysis.png" alt="Smart Query" width="100%">
-  <em>Query panel: hybrid retrieval + K-line technical analysis</em>
+  <em>查询面板：混合检索 + K 线技术分析</em>
 </p>
 
 <p align="center">
   <img src="docs/screenshots/kb_management.png" alt="Data Management" width="100%">
-  <em>Knowledge base management: import files, build indexes (BM25 + embedding + RRF), search/delete</em>
+  <em>知识库管理：导入文件、构建索引（BM25 + embedding + RRF）、搜索/删除</em>
 </p>
 
 ---
 
-## License
+## 许可证
 
 MIT

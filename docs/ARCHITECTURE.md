@@ -291,16 +291,16 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
 16. 同步+线程池架构 → async 化；verbose print → logger。
 17. IngestionAgent EXPECTED_METADATA_FIELDS 与 DocMetadata schema 脱节（fiscal_period/currency 财报时代残留）。
 18. AgentRouter 关键词正则分类 → LLM/Planner 路由；公司名硬编码正则与 STOCK_MAP 双份维护。
-19. 测试套件对齐：迭代期暂停把全量 `pytest`（约 594 用例，多写于旧架构）当改动门禁——跑绿 ≠ 通路正确；待新架构定型后按 5 条通路统一重写/精简用例。
+19. 测试套件对齐：旧架构的约 594 用例全量套已废弃，替换为护栏驱动的按 RAG 流水线步骤测试（当前 75 用例，覆盖入库/查询解析/召回 + 上下文组装，详见 README）。仍待补齐 RRF 融合/rerank/质量门控/生成有据化等步骤，并按 5 条业务通路对齐；加固期 CI 门禁仍为手动触发。
 
 ## 9. 测试与运行
 
 ```cmd
 myenv\Scripts\activate.bat
 python -m financial_rag.main web        # Web UI: http://127.0.0.1:8000
-pytest tests -q                          # 594 用例, 全 mock 数据源, <10s
+pytest tests -q                          # 75 用例, 护栏驱动按流水线步骤, 离线 <2s
 ```
 
-Mock 约定：只 mock 数据源 API（Tushare/RSS），LLM/Embedding/Rerank 始终真实调用。
+Mock 约定：只 mock 数据源 API（Tushare/RSS）；conftest 的 autouse fixture `_force_local_retrieval` 删除 DASHSCOPE_API_KEY，强制检索走本地（BM25+Jaccard），保证确定性、离线、可复现。LLM/Embedding/Rerank 仅在测试显式调用时才真实。
 
 > 迭代期约定：暂停把全量 `pytest` 当改动门禁（见 §8 P2-19）；需要验证时只对当前正在改的通路做轻量探针（`python -c` 导入/冒烟）。
