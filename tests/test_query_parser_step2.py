@@ -116,6 +116,66 @@ class TestParseConsistency:
 
 
 # ===========================================================================
+# ⑤ 核心词保真（P0）：部分词典命中时，未登录核心词不得被静默丢弃
+#
+# Step 2 最重要的能力：解析必须无损保留用户的核心意图词/实体词，
+# 转成下游 BM25/vector 能用的信号。解析阶段丢词 = 下游再强也召不回。
+#
+# 暴露的生产缺陷：_extract_keywords 的 fallback 分词是 if not unique_keywords
+# 的全有或全无分支。只要命中一个词典词，未登录的核心词（融资/昇腾/投资/财报）
+# 就永远不进分词 → 静默丢弃 → 这是 Step 3 "大模型融资" MISS、"昇腾"问题的上游根因。
+# ===========================================================================
+@pytest.mark.regression
+class TestCoreWordFidelity:
+    @pytest.mark.parametrize("query,core_word", [
+        ("大模型融资", "融资"),      # 大模型命中词典，意图词"融资"不得丢
+        ("昇腾芯片进展", "昇腾"),      # 芯片命中词典，关键实体"昇腾"不得丢
+        ("AI算力投资", "投资"),        # 算力/AI 命中，意图词"投资"不得丢
+        ("宁德时代财报", "财报"),      # 股票命中，意图词"财报"不得丢
+    ])
+    def test_unlogged_core_word_not_dropped(self, parser, query, core_word):
+        """部分词典命中时，未登录的核心词仍须进入 keywords（喂给 BM25）。
+
+        修复前：fallback 分词仅在零命中时触发 → 核心词被静默丢弃 → 本用例红。
+        修复后：对残余文本（去掉已覆盖词典词）分词补充 → 核心词保留。
+        """
+        r = parser.parse(query)
+        terms = {t for t, _ in r.keywords}
+        assert core_word in terms, (
+            f"query={query!r} 的核心词 {core_word!r} 被静默丢弃，"
+            f"实际 keywords={r.keywords}"
+        )
+        # 核心词也必须进入喂给 BM25 的 weighted terms
+        assert core_word in r.get_weighted_terms(), (
+            f"{core_word!r} 未进入 get_weighted_terms()，BM25 拿不到该信号"
+        )
+
+    def test_dictionary_word_still_highest_weight(self, parser):
+        """修复不得本末倒置：词典命中词权重仍高于残余补充词(1.0)。"""
+        r = parser.parse("大模型融资")
+        kw = dict(r.keywords)
+        # "大模型"是 INDUSTRY_TERMS(1.5)，应 >= 残余补充的"融资"(1.0)
+        assert kw.get("大模型", 0) >= kw.get("融资", 0), (
+            f"词典词权重应不低于残余词: {kw}"
+        )
+
+    def test_residual_supplement_no_stopword_noise(self, parser):
+        """残余补充不得引入停用词或滑窗跨词垃圾。
+
+        注："走势"/"怎么样"是 ACTION_TERMS 合法动作词（现有设计就抽，权1.0），
+        不属于噪声。本用例只验证纯停用词（的/最近）和滑窗跨词垃圾（技的/的最）不泄漏。
+        """
+        r = parser.parse("商汤科技的最近走势怎么样")
+        terms = {t for t, _ in r.keywords}
+        # 纯停用词不得出现
+        for sw in ["的", "最近"]:
+            assert sw not in terms, f"停用词 {sw!r} 不应进入 keywords: {terms}"
+        # 滑窗跨词垃圾不得出现（残余文本未去停用词时会产生"技的""的最"）
+        for garbage in ["技的", "的最", "的最近"]:
+            assert garbage not in terms, f"滑窗跨词垃圾 {garbage!r} 不应进入 keywords: {terms}"
+
+
+# ===========================================================================
 # ④ 回归锁定：探针抓出并已修复的 bug，钉死防回退
 # ===========================================================================
 @pytest.mark.regression
