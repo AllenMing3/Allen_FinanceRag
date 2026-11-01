@@ -248,10 +248,19 @@ class BM25Engine:
 
     @staticmethod
     def doc_key(doc: Dict) -> str:
-        """生成文档唯一标识（优先用 meta.doc_id，否则 hash）"""
+        """生成文档唯一标识（优先用 meta.doc_id，否则 hash）
+
+        对于被 chunker 切分为多片的文档（chunk_count > 1），
+        生成复合 key "{doc_id}_c{chunk_id}" 避免同 doc_id 碰撞导致去重丢失 chunk。
+        """
         meta = doc.get("meta", {})
-        if meta.get("doc_id"):
-            return str(meta["doc_id"])
+        doc_id = meta.get("doc_id")
+        chunk_id = meta.get("chunk_id")
+        chunk_count = meta.get("chunk_count", 1)
+        if doc_id and chunk_id is not None and chunk_count > 1:
+            return f"{doc_id}_c{chunk_id}"
+        if doc_id:
+            return str(doc_id)
         text = doc.get("text", "")[:200]
         source = meta.get("source", "unknown")
         return hashlib.md5(f"{source}|{text}".encode("utf-8", errors="replace")).hexdigest()[:16]
