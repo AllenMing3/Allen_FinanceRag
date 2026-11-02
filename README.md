@@ -10,7 +10,7 @@
 > **当前使命是 TDD。** 我们正在补建一套测试护栏，**一步一个脚印**地走完 RAG 流水线：推导每一步的契约、用真实行为去验证、修复暴露的问题、并把修复钉成永久的回归资产。不做大爆炸式重写。本 README 反映这一真实状态，而非过度包装。
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
-![Tests](https://img.shields.io/badge/tests-75%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-123%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
 ---
@@ -47,7 +47,15 @@
 
 另有上下文组装层：`tests/test_context_builder.py` (9)。
 
-**合计：75 通过 —— 离线运行，无需 API key。** 测试通过 `conftest` fixture 强制走本地检索（BM25 + Jaccard），因此确定性、无网络依赖。LLM/embedding 仅在测试显式调用时才保持真实；外部数据 API 一律 mock。
+**新增 L1 检索评估层 —— 离线 IR 指标 + 分通道对比 + 基线回归锁：**
+
+| 测试资产 | 数量 | 作用 |
+|-----------|------|------|
+| `tests/test_eval_metrics.py` | 26 | IR 指标实现对照手算（recall / precision / MRR / NDCG / MAP） |
+| `tests/test_eval_golden.py` | 13 | golden qrels 语料结构（分级相关性、显式负例、场景标签） |
+| `tests/test_eval_retrieval.py` | 9 | 评估闭环：离线确定性、分通道可见、融合核心指标无回归 |
+
+**合计：123 通过 —— 离线运行，无需 API key。** 测试通过 `conftest` fixture 强制走本地检索（BM25 + Jaccard），因此确定性、无网络依赖。LLM/embedding 仅在测试显式调用时才保持真实；外部数据 API 一律 mock。
 
 **护栏已抓到的真实 bug（每个都有回归测试钉死）：**
 
@@ -65,6 +73,7 @@
 - **意图路由。** `AgentRouter` 把查询分类为某种意图，并组装匹配的 Agent 链（Ingestion / Analysis / Scoring）。无需手动选择流水线。
 - **瘦 Agent，胖工具。** Agent 只通过 `self.call_tool()` 编排；业务逻辑住在 11 个工具模块的已注册工具里。由架构守卫规则强制执行。
 - **混合检索。** BM25 + ChromaDB 向量检索 + RRF 融合 + rerank + metadata 过滤 + 查询扩展。*检索质量正是护栏要度量的目标——目前尚未验证完毕。*
+- **离线检索评估。** `financial_rag/eval/` 是一套离线、确定的检索质量 harness：golden qrels（分级相关性 0-3）+ 标准 IR 指标（recall / precision / MRR / NDCG / MAP）+ bm25 / vector / fusion 分通道对比 + `baseline.json` 回归锁。已用它量化定位到融合阶段的检索弱点（单通道满分、RRF 融合后归零）。
 - **查询规划。** `QueryPlanner` 用一次 LLM 调用把复杂查询拆解为带 source/mode 的子查询；简单查询跳过它。
 - **防幻觉护栏。** ScoringAgent 在返回结果前运行多层护栏（规则层：来源有据、数值保真、引用完整、结构合规；外加 LLM 批判/辅助）。
 - **可观测的上下文组装。** 单一的 `ContextBuilder` 把检索到的 chunk 转成同时喂给 LLM 和护栏的 grounding，并发出保真轨迹（逐条 kept/dropped 及原因）。已被测试覆盖。
@@ -125,12 +134,13 @@ AgentRouter 把每个查询分类为某种意图，然后调度器组装 Agent �
 | 前端 | 原生 JS ES Modules（9 个模块）+ 6 层 CSS + 可折叠卡片 |
 | 数据 API | Tushare、10jqka、Sina、EastMoney |
 | 检索 | BM25 + ChromaDB（ANN）+ RRF + TextChunker + QueryParser（同义词 + 概念词典） |
+| 检索评估 | 离线 IR 指标 harness（golden qrels + recall/MRR/NDCG/MAP + bm25/vector/fusion 分通道 + 基线回归锁） |
 | 查询规划 | QueryPlanner（LLM 拆解，带 source/mode 的子查询） |
 | 文档解析 | PyMuPDF（PDF，本地）+ qwen-vl-plus（图片多模态） |
 | 图谱 RAG | LightRAG（PDF/图片 → 实体关系抽取 → 通过 function calling 查询图谱） |
 | 领域词典 | DictionaryRegistry（JSON 可扩展：`data/dictionaries/*.json`） |
 | 向量库 | ChromaDB（HNSW ANN，余弦距离，持久化存储） |
-| 测试 | pytest —— 护栏驱动、按流水线步骤（75 通过，离线）；加固期 CI 门禁临时改为手动触发 |
+| 测试 | pytest —— 护栏驱动、按流水线步骤（123 通过，离线）；加固期 CI 门禁临时改为手动触发 |
 
 ---
 
@@ -173,7 +183,11 @@ python -m financial_rag.main toolcall -l   # 列出所有已注册工具
 ## 测试
 
 ```bash
-python -m pytest tests/ -v    # 75 通过 —— 离线，无需 API key
+python -m pytest tests/ -v    # 123 通过 —— 离线，无需 API key
+
+# L1 检索评估 —— 分通道 IR 指标 + 基线回归锁（离线，无需 API key）
+python -m financial_rag.eval.runner                    # 对比 baseline，融合核心指标回归即非零退出
+python -m financial_rag.eval.runner --update-baseline  # 用本次结果刷新基线
 ```
 
 这套测试**就是**上面描述的护栏：按步骤、从契约推导、证明效果、带回归锁。它**一次一个流水线步骤**地生长——完整 RAG 链覆盖是刻意保持未完成的（验证一步，再进下一步）。加固期内 CI 门禁临时改为手动触发（`workflow_dispatch`）。
