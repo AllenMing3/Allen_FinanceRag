@@ -13,6 +13,7 @@ from datetime import datetime
 import pytest
 
 from financial_rag.retrievers.query_parser import QueryParser
+from financial_rag.retrievers.dictionaries import CONCEPT_MAP
 
 # 注入受控 stock_map → 确定性验证"词典命中"路径，不依赖真实 STOCK_MAP 内容
 _CTRL_MAP = {"茅台": ("600519.SH", "贵州茅台")}
@@ -173,6 +174,38 @@ class TestCoreWordFidelity:
         # 滑窗跨词垃圾不得出现（残余文本未去停用词时会产生"技的""的最"）
         for garbage in ["技的", "的最", "的最近"]:
             assert garbage not in terms, f"滑窗跨词垃圾 {garbage!r} 不应进入 keywords: {terms}"
+
+
+# ===========================================================================
+# ⑥ 概念扩展意图感知门控（Step4 根因#2 修复）
+#
+# _expand_query 的概念关联扩展(CONCEPT_MAP, weight=0.6)是泛化关联：主语"大模型"
+# 会注入 GPT/LLM/算力/训练/推理/微调/Token。当 query 带明确判别意图(未登录核心词，
+# 如"大模型融资"的"融资")时，这些泛化词淹没意图 → 下游 vector 通道被稀释 →
+# fusion recall 坍塌(两单通道满分、融合掉档)。修复：仅在"纯概念探索"时扩展概念。
+# 同义词扩展(精确等价)不稀释意图，始终不受门控影响。
+# ===========================================================================
+@pytest.mark.unit
+class TestConceptExpansionGating:
+    def test_concept_suppressed_when_specific_intent(self, parser):
+        # "大模型融资"：融资 是未登录核心意图词 -> 抑制"大模型"的概念扩展
+        r = parser.parse("大模型融资")
+        leaked = set(CONCEPT_MAP["大模型"]) & set(r.expanded_terms)
+        assert not leaked, f"有判别意图'融资'时概念词仍被注入，会稀释意图: {leaked}"
+        assert "融资" in {t for t, _ in r.keywords}, "意图词'融资'必须保留"
+
+    def test_concept_kept_for_pure_exploration(self, parser):
+        # 纯概念探索"大模型"(无残余意图词) -> 概念扩展照常补召回，不得因修复而一刀切关掉
+        r = parser.parse("大模型")
+        assert set(CONCEPT_MAP["大模型"]) & set(r.expanded_terms), (
+            f"纯概念探索应保留概念扩展，实测 expanded_terms={r.expanded_terms}")
+
+    def test_synonym_unaffected_by_intent_gating(self, parser):
+        # 同义词(华为->Huawei)精确等价、不稀释意图；即便 query 带残余意图词触发门控，
+        # 同义词扩展仍照常，不被概念门控误伤。
+        r = parser.parse("华为昇腾国产替代")
+        assert "Huawei" in set(r.expanded_terms), (
+            f"同义词扩展不应被意图门控抑制，实测 {r.expanded_terms}")
 
 
 # ===========================================================================
