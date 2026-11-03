@@ -274,15 +274,20 @@ class QueryParser:
                             existing_terms.add(syn)
                             result.keywords.append((syn, self._SYNONYM_WEIGHT))
 
-        # --- 概念关联扩展 ---
-        for concept, related_terms in CONCEPT_MAP.items():
-            if concept.lower() in query_lower:
-                for related in related_terms:
-                    if related not in existing_terms and related.lower() not in existing_terms:
-                        if len(expanded) < self._MAX_EXPAND_TERMS:
-                            expanded.append(related)
-                            existing_terms.add(related)
-                            result.keywords.append((related, self._CONCEPT_WEIGHT))
+        # --- 概念关联扩展（意图感知门控）---
+        # 概念词(_CONCEPT_WEIGHT=0.6)是泛化关联(大模型→GPT/LLM/算力…)。当 query 已含明确
+        # 判别意图(未登录核心词, 如"大模型融资"的"融资")时, 概念词会淹没意图、把两路满分
+        # 召回的 query 压到 fusion recall 掉档(Step4 根因#2)。仅"纯概念探索"(query 全是词典
+        # 主题词、无残余核心意图词)才注入概念关联, 避免稀释。
+        if not self._has_specific_intent(result):
+            for concept, related_terms in CONCEPT_MAP.items():
+                if concept.lower() in query_lower:
+                    for related in related_terms:
+                        if related not in existing_terms and related.lower() not in existing_terms:
+                            if len(expanded) < self._MAX_EXPAND_TERMS:
+                                expanded.append(related)
+                                existing_terms.add(related)
+                                result.keywords.append((related, self._CONCEPT_WEIGHT))
 
         # --- 构建 expanded_query (给 ChromaDB embedding 用) ---
         result.expanded_terms = expanded
@@ -290,6 +295,23 @@ class QueryParser:
             result.expanded_query = query + " " + " ".join(expanded)
         else:
             result.expanded_query = query
+
+    def _has_specific_intent(self, result: QueryResult) -> bool:
+        """query 是否携带明确判别意图(未登录核心词)。
+
+        词典覆盖的主题/实体/动作词(股票/金融/行业/ACTION)是"概念探索"的触发器,
+        不算判别意图; 只有 _extract_keywords 残余分词补充的未登录核心词(如"大模型
+        融资"的"融资"、"昇腾芯片进展"的"昇腾")才代表用户的具体意图。有此类词时,
+        概念扩展(泛化关联词)会稀释它 → 应抑制。须在概念扩展前调用(此时 keywords
+        仅含 _extract_keywords 产物, 无同义/概念词)。
+        """
+        _dict_terms = FINANCIAL_TERMS | INDUSTRY_TERMS | ACTION_TERMS
+        _stock_keys = set(self.stock_map.keys())
+        for term, _ in result.keywords:
+            if (term not in _dict_terms and term.lower() not in _dict_terms
+                    and term not in _stock_keys):
+                return True
+        return False
 
     def _classify_type(self, query: str, result: QueryResult):
         """基于关键词判断查询类型"""

@@ -60,8 +60,10 @@ class HybridRetriever:
     ):
         cfg = config or {}
         self.rrf_k = cfg.get("rrf_k", 60)
-        self.bm25_weight = cfg.get("bm25_weight", 0.3)
-        self.vector_weight = cfg.get("vector_weight", 0.7)
+        # bm25 是 L1 eval 上更强的通道(ndcg 0.974 > vector 0.915)，权重不得倒挂压制它。
+        # 旧默认 0.3/0.7 把强通道 bm25 压到最低，是 fusion 劣于单通道的原因之一(Step4 根因#3)。
+        self.bm25_weight = cfg.get("bm25_weight", 0.5)
+        self.vector_weight = cfg.get("vector_weight", 0.5)
 
         self.embedder = embedder
         self.reranker = reranker
@@ -260,11 +262,15 @@ class HybridRetriever:
                 f"{' expand=' + str(parsed.expanded_terms[:6]) if parsed.expanded_terms else ''}"
             )
 
-        # 1. 分词
+        # 1. bm25 分词 —— 必须与建索引同源(jieba)，否则词表错位静默拖累召回(Step4 根因#1)。
+        #    不用 parsed.get_weighted_terms()：它掺入 QueryParser 的双字滑窗 bigram + 同义/概念
+        #    扩展词，与 jieba 索引对不上。改为 jieba(query) 打底，仅叠加高置信词典实体词
+        #    (weight>=2.0：股票 3.0 / 金融术语 2.0)兜底强调，排除 bigram 残余与扩展词污染。
+        query_tokens = self._bm25.tokenize(query)
         if parsed and parsed.keywords:
-            query_tokens = parsed.get_weighted_terms()
-        else:
-            query_tokens = self._bm25.tokenize(query)
+            seen = set(query_tokens)
+            query_tokens += [t for t, w in parsed.keywords
+                             if w >= 2.0 and t not in seen]
 
         if scorecard:
             avg_len = sum(len(t) for t in query_tokens) / max(len(query_tokens), 1)
@@ -278,6 +284,9 @@ class HybridRetriever:
             )
 
         # 2+3. BM25 + Vector 并发检索
+        # vec_query 用 expanded_query(同义词扩展)给语义通道补召回。概念扩展的稀释已在
+        #   QueryParser._expand_query 源头按意图抑制(Step4 根因#2)，此处不再模式感知地丢弃
+        #   扩展词——同义词扩展对 jaccard/embedding 两种模式都安全有益(保 long_doc 互补性)。
         vec_query = (parsed.expanded_query
                      if parsed and parsed.expanded_query else query)
 
