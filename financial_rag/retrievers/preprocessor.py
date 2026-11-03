@@ -33,14 +33,21 @@ from .dictionaries import (
 # ===================== 清洗规则 (预编译) =====================
 
 _HTML_TAG = re.compile(r'<[^>]+>')
-_URL = re.compile(r'https?://\S+|www\.\S+')
+# URL 只匹配 RFC3986 合法字符集，遇中文/中文标点/空白自动停止。
+# 旧版 \S+ 会贪婪吞掉 URL 后紧跟的正文（中文无空格时连标点带正文一起删）。
+_URL_CHARS = r"A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%"
+_URL = re.compile(rf'https?://[{_URL_CHARS}]+|www\.[{_URL_CHARS}]+')
 _EMAIL = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 _MULTI_NEWLINE = re.compile(r'\n{3,}')
 _MULTI_SPACE = re.compile(r'[ \t]{2,}')
-_MULTI_CJK_SPACE = re.compile(r'([，。！？；：])\s+')
+# 只吃中文标点后的行内空格/制表符，不吃换行。
+# 旧版 \s+ 会把段落分隔 \n\n 一并删掉，导致后续 dedup_paragraphs 无法分段。
+_MULTI_CJK_SPACE = re.compile(r'([，。！？；：])[ \t]+')
 _CONTROL_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 _ZERO_WIDTH = re.compile(r'[\u200b\u200c\u200d\u2060\ufeff]')
-_REPEATED_CHARS = re.compile(r'(.)\1{4,}')
+# 折叠连续≥5 个相同的"非数字"字符（刷屏去噪），排除数字。
+# 旧版 (.) 会把大额金额里的连续 0 折叠（100000→1000），造成金融数字失真。
+_REPEATED_CHARS = re.compile(r'([^\d])\1{4,}')
 _CHINESE_CHAR = re.compile(r'[\u4e00-\u9fff]')
 
 # 样板行模式: 短行 (< 20字) + 常见样板词
