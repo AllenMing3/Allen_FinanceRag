@@ -20,3 +20,25 @@
 {"doc_id": "d_vanke_debt", "title": "万科债务展期与流动性压力", "doc_type": "news", "source": "eval_kb", "text": "万科集团多笔境内债券启动展期，涉及金额超200亿元。公司2024年全年销售额同比下降35%，回款压力加大。管理层表示正通过处置非核心资产、压缩投资等方式维持现金流。评级机构下调万科信用评级至AA-，展望负面。"}
 {"doc_id": "d_hengrui_drug", "title": "恒瑞医药创新药出海进展", "doc_type": "research", "source": "eval_kb", "text": "恒瑞医药创新药管线进展。PD-1抑制剂卡瑞利珠单抗海外III期临床达到主要终点，计划向FDA提交上市申请。公司2024年研发投入62亿元，占营收比例28%。创新药收入占比首次超过仿制药，达55%。在研管线覆盖肿瘤、自免、代谢三大领域。"}
 {"doc_id": "d_nongfu_sales", "title": "农夫山泉2024年中期业绩", "doc_type": "financial_report", "source": "eval_kb", "text": "农夫山泉发布2024年中期业绩。上半年营收222亿元，同比增长8.4%。包装饮用水业务收入110亿元，茶饮料业务收入增长59%成为第二增长曲线。毛利率维持在60%以上高位。公司全国布局12个生产基地，渠道覆盖超200万个终端网点。"}
+{"doc_id": "d_minimax_funding", "title": "MiniMax完成新一轮融资", "doc_type": "news", "source": "eval_kb", "text": "MiniMax完成新一轮融资，金额约6亿美元，投后估值超25亿美元，由腾讯、高瓴等联合投资。旗下海螺AI与星野应用用户快速增长，公司主打多模态与陪伴式AI，是国内大模型六小虎之一。"}
+{"doc_id": "d_baichuan_funding", "title": "百川智能A3轮融资聚焦医疗", "doc_type": "news", "source": "eval_kb", "text": "百川智能完成A3轮融资，融资金额50亿元人民币，投后估值超140亿元，由阿里、腾讯、小米等联合投资。百川聚焦医疗大模型赛道，发布Baichuan-M1医疗开源模型，推进AI加医疗落地。"}
+{"doc_id": "d_stepfun_funding", "title": "阶跃星辰B轮融资多模态", "doc_type": "news", "source": "eval_kb", "text": "阶跃星辰完成超10亿美元B轮融资，投后估值超20亿美元，由上海国资、腾讯等投资。阶跃星辰主打多模态大模型Step系列，在语音识别与图像生成能力上处于第一梯队。"}
+{"doc_id": "d_alibaba_qwen", "title": "阿里通义千问Qwen全面开源", "doc_type": "news", "source": "eval_kb", "text": "阿里巴巴通义千问Qwen系列模型全面开源，Qwen2.5参数覆盖0.5B到72B多个规格。开源权重支持商用，代码与数学能力对标Llama，通义已深度接入钉钉、淘宝等阿里生态应用。"}
+{"doc_id": "d_bytedance_doubao", "title": "字节豆包大模型调用量", "doc_type": "news", "source": "eval_kb", "text": "字节跳动豆包大模型日均调用量突破30万亿token，火山引擎发布豆包视频生成模型。豆包主打低推理成本与多模态能力，已接入抖音、剪映、飞书等字节系产品矩阵。"}
+{"doc_id": "d_deepseek", "title": "DeepSeek开源MoE模型", "doc_type": "news", "source": "eval_kb", "text": "DeepSeek发布开源大模型DeepSeek-V3，采用MoE混合专家架构，总参数6710亿、激活参数370亿。DeepSeek-R1推理模型对标OpenAI o1，训练成本大幅降低，API定价极具竞争力。"}
+{"doc_id": "d_cambricon", "title": "寒武纪思元国产AI芯片", "doc_type": "news", "source": "eval_kb", "text": "寒武纪思元590国产AI芯片加速落地，算力对标英伟达A100，配套Neuware软件栈。寒武纪云端训练芯片在国内智算中心批量部署，是国产算力替代主力，2024年营收显著增长。"}
+{"doc_id": "d_hygon", "title": "海光DCU国产算力信创", "doc_type": "news", "source": "eval_kb", "text": "海光信息DCU深算系列国产算力芯片出货，兼容CUDA生态，适配大模型训练与推理。海光CPU与DCU组合进入政务、金融信创市场，是国产替代与算力自主可控的重要力量。"}
+{"doc_id": "d_amd_mi300", "title": "AMD MI300X加速卡", "doc_type": "news", "source": "eval_kb", "text": "AMD发布MI300X加速卡，单卡显存192GB HBM3，AI推理性能对标英伟达H100。MI300获微软、Meta等大客户采购，AMD数据中心GPU营收大幅增长，挑战英伟达算力垄断地位。"}
+{"doc_id": "d_tsmc_cowos", "title": "台积电CoWoS封装产能", "doc_type": "research", "source": "eval_kb", "text": "台积电先进制程与CoWoS封装产能持续扩张，2024年资本开支超280亿美元。CoWoS是AI芯片关键先进封装技术，产能长期供不应求，直接制约英伟达、AMD算力芯片的交付节奏。"}
+{"doc_id": "d_hbm_memory", "title": "HBM高带宽内存算力瓶颈", "doc_type": "research", "source": "eval_kb", "text": "HBM高带宽内存成为AI算力的关键瓶颈，SK海力士、三星、美光激烈争夺HBM3E订单。HBM通过堆叠DRAM提供超高带宽，是GPU训练大模型的核心部件，2024年市场供不应求价格飙升。"}
+{"doc_id": "d_transformer", "title": "Transformer自注意力架构", "doc_type": "concept", "source": "eval_kb", "text": "Transformer架构是现代大模型的基础，核心是自注意力机制Self-Attention。相比RNN，Transformer支持并行训练与长程依赖建模，编码器解码器结构与KV缓存是推理优化的关键。"}
+{"doc_id": "d_rlhf", "title": "RLHF人类反馈强化学习", "doc_type": "concept", "source": "eval_kb", "text": "RLHF人类反馈强化学习用于大模型对齐，流程包括监督微调SFT、训练奖励模型RM、PPO强化学习三个阶段。RLHF让模型输出更符合人类偏好，DPO是其简化的替代方案。"}
+{"doc_id": "d_agent_concept", "title": "AI Agent智能体", "doc_type": "concept", "source": "eval_kb", "text": "AI Agent智能体是大模型的重要应用范式，具备规划、记忆、工具调用能力。Agent通过ReAct等框架分解任务、调用API、反思纠错，被视为通往AGI的关键路径，多智能体协作成为热点。"}
+{"doc_id": "d_multimodal_concept", "title": "多模态大模型视觉编码", "doc_type": "concept", "source": "eval_kb", "text": "多模态大模型统一处理文本、图像、音频与视频，视觉编码器与大语言模型对齐是核心，CLIP、Q-Former是常见桥接方案。多模态模型支持图文理解与生成，GPT-4V、Gemini是代表。"}
+{"doc_id": "d_eu_ai_act", "title": "欧盟AI法案生效", "doc_type": "policy", "source": "eval_kb", "text": "欧盟人工智能法案AI Act正式生效，是全球首部综合性AI监管法律。法案按风险分级监管，禁止社会评分等不可接受风险AI，对通用大模型GPAI提出透明度与版权要求，违规最高罚全球营收7%。"}
+{"doc_id": "d_data_security_law", "title": "数据安全法与数据要素", "doc_type": "policy", "source": "eval_kb", "text": "数据安全法与个人信息保护法构成数据合规基础，数据要素市场化配置改革推进，公共数据授权运营试点展开。企业需落实数据分类分级、跨境安全评估，数据成为新型生产要素。"}
+{"doc_id": "d_compute_network_policy", "title": "东数西算一体化算力网络", "doc_type": "policy", "source": "eval_kb", "text": "全国一体化算力网络东数西算工程推进，八大枢纽节点建设智算中心。政策鼓励国产算力自主可控，绿电与液冷降低PUE能耗，算力基础设施成为AI产业发展的国家级支撑。"}
+{"doc_id": "d_catl_battery", "title": "宁德时代动力电池业绩", "doc_type": "financial_report", "source": "eval_kb", "text": "宁德时代2024年动力电池装机量全球第一，麒麟电池与神行超充电池量产。公司营收超3600亿元，海外产能持续扩张，储能业务成为第二增长曲线，动力电池市占率维持35%以上。"}
+{"doc_id": "d_byd_sales", "title": "比亚迪新能源车销量", "doc_type": "news", "source": "eval_kb", "text": "比亚迪2024年新能源汽车销量超420万辆，同比增长41%，蝉联全球新能源车销冠。纯电与插混并举，出海欧洲与东南亚市场，垂直整合电池与半导体，单车利润持续改善。"}
+{"doc_id": "d_cmb_retail", "title": "招商银行零售金融", "doc_type": "financial_report", "source": "eval_kb", "text": "招商银行2024年零售金融业务稳健，管理客户资产AUM超14万亿元。招行App月活过亿，财富管理手续费收入领先同业，零售贷款占比高，被市场视为银行零售标杆。"}
+{"doc_id": "d_cosco_shipping", "title": "中远海控航运运价", "doc_type": "news", "source": "eval_kb", "text": "中远海控2024年集装箱航运运价波动，SCFI指数受红海局势影响上行。公司营收与净利润随运价周期变化，船队扩张与绿色甲醇船舶订成为长期布局，航运景气度是业绩关键变量。"}

@@ -197,9 +197,11 @@ class TestCrossChannelConsistency:
         """同一文档从 BM25 和 Jaccard 返回后，RRF 融合为 1 条（不是 2 条）。"""
         bm25_engine.build(golden_docs)
         query = "商汤科技营收"
-        bm25_res = bm25_engine.search(golden_docs, query, top_k=3)
+        # 通道深度取 5（对齐生产 search 的 top_k*2 候选深度）：golden 扩容到 45 篇后
+        # top3 内两通道不再重叠（Jaccard 被新增文档稀释），consensus 在 top5 出现
+        bm25_res = bm25_engine.search(golden_docs, query, top_k=5)
         jaccard_res = vector_engine.search_jaccard(
-            golden_docs, query, top_k=3, tokenize_fn=tokenizer,
+            golden_docs, query, top_k=5, tokenize_fn=tokenizer,
         )
         fused, stats = rrf_fusion(
             [(bm25_res, 0.3, "bm25"), (jaccard_res, 0.7, "vector")],

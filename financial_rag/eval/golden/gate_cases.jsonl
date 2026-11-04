@@ -1,0 +1,9 @@
+{"case_id": "g01", "kind": "pass_in_domain", "query": "贵州茅台2024年年报营收", "expected": "pass", "desc": "库内主题查询：不得误拦（false block 守护）"}
+{"case_id": "g02", "kind": "pass_in_domain", "query": "RAG检索增强生成", "expected": "pass", "desc": "库内概念查询：不得误拦"}
+{"case_id": "g03", "kind": "block_no_result", "query": "哈利波特魔法学院招生", "expected": "block", "expected_stage": "retrieval", "known_limitation": true, "desc": "已知局限：零重叠库外查询 BM25/Jaccard 仍返回微小分数候选填满 top_k，零结果门控离线永不触发；分数门控依赖 rerank 离线不可达 → 待链路支持分数下限/无重叠判空后棘轮纳入强制锁"}
+{"case_id": "g04", "kind": "block_no_result", "query": "红烧肉的做法和火候", "expected": "block", "expected_stage": "retrieval", "known_limitation": true, "desc": "已知局限：同 g03，零重叠库外查询当前拦不住"}
+{"case_id": "g05", "kind": "block_no_result", "query": "世界杯足球赛程安排", "expected": "block", "expected_stage": "retrieval", "known_limitation": true, "desc": "已知局限：同 g03，零重叠库外查询当前拦不住"}
+{"case_id": "g06", "kind": "score_case", "items": [{"text": "完全不相关的低分文本", "rerank_score": 0.02}], "expected": "block", "expected_stage": "quality_gate", "desc": "合成 rerank 分数低于阈值 0.15：decide_quality_gate 必须拦截"}
+{"case_id": "g07", "kind": "score_case", "items": [{"text": "高度相关的高分文本", "rerank_score": 0.62}], "expected": "pass", "desc": "合成 rerank 分数高于阈值：必须放行（false block 守护）"}
+{"case_id": "g08", "kind": "score_case", "items": [{"text": "边界分数文本", "rerank_score": 0.15}], "expected": "pass", "desc": "分数恰等于阈值：契约为 top_score < threshold 才拦，等于必须放行"}
+{"case_id": "g09", "kind": "score_case", "items": [{"text": "临界偏低分数文本", "rerank_score": 0.1499}], "expected": "block", "expected_stage": "quality_gate", "desc": "分数临界低于阈值：必须拦截"}
