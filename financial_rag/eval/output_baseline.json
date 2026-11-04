@@ -1,0 +1,94 @@
+{
+  "bad_count": 6,
+  "case_count": 11,
+  "good_count": 5,
+  "macro": {
+    "field_completeness": 0.961038961038961,
+    "numerical_fidelity": 0.9285714285714287,
+    "output_quality": 0.946103896103896,
+    "source_grounding": 0.9545454545454546
+  },
+  "per_tag": {
+    "api": {
+      "field_completeness": 1.0,
+      "numerical_fidelity": 1.0,
+      "output_quality": 1.0,
+      "source_grounding": 1.0
+    },
+    "auto_driving": {
+      "field_completeness": 1.0,
+      "numerical_fidelity": 1.0,
+      "output_quality": 1.0,
+      "source_grounding": 1.0
+    },
+    "compute": {
+      "field_completeness": 1.0,
+      "numerical_fidelity": 1.0,
+      "output_quality": 1.0,
+      "source_grounding": 1.0
+    },
+    "fabricated_number": {
+      "field_completeness": 1.0,
+      "numerical_fidelity": 0.75,
+      "output_quality": 0.9,
+      "source_grounding": 1.0
+    },
+    "financial_news": {
+      "field_completeness": 0.961038961038961,
+      "numerical_fidelity": 0.9285714285714287,
+      "output_quality": 0.946103896103896,
+      "source_grounding": 0.9545454545454546
+    },
+    "genai": {
+      "field_completeness": 1.0,
+      "numerical_fidelity": 1.0,
+      "output_quality": 1.0,
+      "source_grounding": 1.0
+    },
+    "missing_field": {
+      "field_completeness": 0.7857142857142857,
+      "numerical_fidelity": 1.0,
+      "output_quality": 0.9107142857142857,
+      "source_grounding": 0.9166666666666667
+    },
+    "negative": {
+      "field_completeness": 0.9285714285714285,
+      "numerical_fidelity": 0.869047619047619,
+      "output_quality": 0.9011904761904761,
+      "source_grounding": 0.9166666666666666
+    },
+    "positive": {
+      "field_completeness": 1.0,
+      "numerical_fidelity": 1.0,
+      "output_quality": 1.0,
+      "source_grounding": 1.0
+    },
+    "revenue": {
+      "field_completeness": 1.0,
+      "numerical_fidelity": 1.0,
+      "output_quality": 1.0,
+      "source_grounding": 1.0
+    },
+    "ungrounded_claim": {
+      "field_completeness": 1.0,
+      "numerical_fidelity": 0.8571428571428571,
+      "output_quality": 0.8928571428571428,
+      "source_grounding": 0.8333333333333334
+    }
+  },
+  "per_tier": {
+    "bad": {
+      "field_completeness": 0.9285714285714285,
+      "numerical_fidelity": 0.869047619047619,
+      "output_quality": 0.9011904761904761,
+      "source_grounding": 0.9166666666666666
+    },
+    "good": {
+      "field_completeness": 1.0,
+      "numerical_fidelity": 1.0,
+      "output_quality": 1.0,
+      "source_grounding": 1.0
+    }
+  },
+  "separation_gap": 0.0988095238095239
+}
