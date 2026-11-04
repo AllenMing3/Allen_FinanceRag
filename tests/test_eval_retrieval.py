@@ -168,10 +168,12 @@ class TestFilterEval:
 class TestGateEval:
     """Step 5 质量门控评估回归锁（golden/gate_cases.jsonl）。
 
-    强制 case（无 known_limitation 标记）：库内查询不误拦、分数门控
-    （decide_quality_gate 喂合成分数，含阈值边界）决策正确、拦截诊断字段完整。
-    已知局限 case（g03-g05 零重叠库外查询拦不住）：不纳入指标，但棘轮断言 ——
-    一旦修复翻绿，必须摘标纳入强制锁（防“锁空转”：局限标签不是永久豁免）。
+    强制 case（无 known_limitation 标记）：库内查询不误拦、零重叠/停用词污染
+    库外查询零结果拦截（g03-g05）、分数门控（decide_quality_gate 喂合成分数，
+    含阈值边界）决策正确、拦截诊断字段完整。
+    g03-g05 原为 known_limitation（零重叠库外查询拦不住），经 Jaccard 零重叠跳过
+    + 停用词过滤修复后已正确拦截，摘标纳入强制锁。棘轮断言保留为通用机制：
+    任何 known_limitation case 一旦修复翻绿，必须摘标纳入强制锁（防“锁空转”）。
     """
 
     def test_gate_cases_exist(self):

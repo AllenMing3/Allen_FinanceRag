@@ -374,6 +374,10 @@ class VectorEngine:
             if not dw:
                 continue
             intersection = q_words & dw
+            # 零词重叠 → 无相关信号，跳过。否则 length_penalty*0.3 会给完全
+            # 不相关的文档幻影正分（如库外查询），填满 top_k 使零结果门控失效。
+            if not intersection:
+                continue
             union = q_words | dw
             jaccard = len(intersection) / len(union) if union else 0
             length_penalty = min(1.0, 200 / max(len(dw), 1))

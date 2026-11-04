@@ -9,9 +9,9 @@ Test Step 5 过滤 / 质量门控 — 检索交付前的控制层质量验证（
 按项目四条测试标准组织：① 证明效果 ② 可观测 ③ 一致性 ④ 回归锁定
 
 核心发现（探针 _probe_step5.py 实然证据）：
-  - 🔴 BUG(待修): 相对日期过滤静默失效 —— query_parser 产出无 `$` 前缀的
-    {"gte":...,"lte":...}，apply_filters 只认 $gte/$lte → 未知操作符忽略 → 放行全部。
-    用 @xfail(strict=True) 钉死，修复后 XPASS 强制摘标记翻绿。
+  - ✅ BUG(已修复): 相对日期过滤曾静默失效 —— query_parser 产出无 `$` 前缀的
+    {"gte":...,"lte":...}，旧 apply_filters 只认 $gte/$lte → 未知操作符忽略 → 放行全部。
+    现已令 _match_value 规范化 op 键（无 $ 时补 $），对应用例转常绿回归锁。
   - ⚠️ 已知局限: $ne/$nin 对缺失字段判拒（偏离 Mongo 语义）—— 特征化锁定
   - ⚠️ 已知局限: 门控分数分支依赖 reranker，离线(reranker=None)永不触发 —— 特征化锁定
   - ✅ 零结果门控离线可触发（空 KB → stage=retrieval 拦截 + 诊断完整）
@@ -19,8 +19,6 @@ Test Step 5 过滤 / 质量门控 — 检索交付前的控制层质量验证（
 注：门控「分数分支」的决策测试（低分拦/高分放）需先抽出 decide_quality_gate 纯函数，
     属 L1 扩展 Dim2 工作，本文件先覆盖离线可达的零结果分支 + 放行行为 + 诊断结构。
 """
-import pytest
-
 from financial_rag.retrievers.filters import apply_filters, get_last_stats, FilterStats
 from financial_rag.retrievers.hybrid_engine import HybridRetriever
 
@@ -142,27 +140,31 @@ class TestFilterConsistency:
 
 
 # ======================================================================
-#  ④ 回归锁定：日期过滤 no-op BUG（xfail 钉死，修复后强制翻绿）
+#  ④ 回归锁定：日期过滤 no-op BUG（已修复，无 $ 前缀范围过滤转常绿锁）
 # ======================================================================
 
-class TestDateRangeFilterBug:
-    """BUG: query_parser 产出的无 `$` 范围过滤键被静默忽略。
+class TestDateRangeFilterRegression:
+    """回归锁：query_parser 产出的无 `$` 范围过滤键必须生效（曾为 no-op BUG）。
 
-    query_parser.py:171 → date_range = {"gte": start, "lte": end}（无 $ 前缀）
-    filters.py:_match_value 只认 $gte/$lte；无 $ 的 gte/lte 落入「未知操作符忽略」
-    → return True → 放行全部文档。filters.py:7 文档字符串自身即写无 $ 形状，
-    实现违反了自己的文档契约。后果：所有相对日期 query 的过滤是空操作。
+    query_parser.py:171 → date_range = {"gte": start, "lte": end}（无 $ 前缀），
+    经 get_filters() → filters["publish_date"]。旧 _match_value 只认 $gte/$lte，
+    无 $ 的 gte/lte 落入「未知操作符忽略」→ return True → 放行全部文档，
+    使所有相对日期 query 的过滤成为空操作（违反 filters.py:7 自身文档契约）。
 
-    修复方向：_match_value 接受无 $ 的 gte/lte/gt/lt（对齐文档）。
-    修复后本用例 XPASS，strict=True 强制摘标记转常绿回归锁。
+    修复：_match_value 规范化 op 键（无 $ 时补 $），令 gte/lte/gt/lt 无 $ 形态生效。
+    本用例锁定修复后行为，防止回退。
     """
 
-    @pytest.mark.xfail(strict=True, reason="无 $ 前缀的范围过滤键被忽略 → 日期过滤 no-op")
     def test_daterange_no_dollar_prefix_filters(self):
         f = {"publish_date": {"gte": "2024-01-01", "lte": "2024-12-31"}}
-        # 期望：只留 2024 年文档（d1/d3/d4），d2(2023) 被过滤
-        # 实然(bug)：无 $ 前缀 → 过滤 no-op → d2 也留下
+        # 无 $ 前缀的范围过滤须与 $gte/$lte 等价：只留 2024 年文档（d1/d3/d4），d2(2023) 被过滤
         assert _ids(apply_filters(_cands(), f)) == ["d1", "d3", "d4"]
+
+    def test_daterange_no_dollar_matches_dollar_form(self):
+        """一致性：无 $ 与有 $ 的范围过滤结果完全等价。"""
+        no_dollar = {"publish_date": {"gte": "2024-01-01", "lte": "2024-12-31"}}
+        dollar = {"publish_date": {"$gte": "2024-01-01", "$lte": "2024-12-31"}}
+        assert _ids(apply_filters(_cands(), no_dollar)) == _ids(apply_filters(_cands(), dollar))
 
 
 # ======================================================================

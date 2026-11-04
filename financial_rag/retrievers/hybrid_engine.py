@@ -636,12 +636,16 @@ def jieba_tokenizer() -> callable:
     from financial_rag.retrievers.dictionary_registry import get_registry
     reg = get_registry()
     reg.set_jieba(jieba)  # 注入全部 jieba_words（内置 + 外部 JSON）
+    # 停用词过滤：的/和/是 等几乎命中每篇文档、零区分度，会污染
+    # BM25/Jaccard 召回（库外查询仅靠停用词也能凑出候选）。与 query_parser 对齐。
+    stop_words = reg.get("stop_words") or set()
 
     def _tokenize(text: str) -> List[str]:
         if not text:
             return []
         words = jieba.lcut(text.lower())
         return [w.strip() for w in words
-                if w.strip() and not all(c in '，。！？、；：“”‘’（）…—·《》' for c in w)]
+                if w.strip() and w.strip() not in stop_words
+                and not all(c in '，。！？、；：“”‘’（）…—·《》' for c in w)]
 
     return _tokenize

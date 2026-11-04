@@ -143,8 +143,9 @@ def _match_value(value, condition, is_soft: bool) -> bool:
         return value in condition
 
     elif isinstance(condition, dict):
-        # 操作符字典
+        # 操作符字典（$ 前缀可选：query_parser 产出无 $ 的 gte/lte，对齐本模块顶部文档契约）
         for op, operand in condition.items():
+            op = op if op.startswith("$") else "$" + op
             if op == "$regex":
                 if not _re.search(operand, str(value)):
                     return False
