@@ -82,6 +82,28 @@ class MockConfig:
 
 
 @dataclass
+class ObservabilityConfig:
+    """可观测性配置 — Arize Phoenix 全链路可视化（OpenInference/OTel）
+
+    默认关闭：PHOENIX_ENABLED!=true 时埋点走 no-op，零副作用、不联网，
+    保证离线测试与 MOCK_MODE 不受影响。重依赖（arize-phoenix）为可选，
+    见 requirements-observability.txt。
+    """
+    # 总开关: PHOENIX_ENABLED=true 时进程内拉起 Phoenix 并推送 trace
+    enable: bool = field(
+        default_factory=lambda: os.getenv("PHOENIX_ENABLED", "false").lower() == "true"
+    )
+    # Phoenix collector/UI 端点（进程内 launch_app 默认 6006）
+    endpoint: str = field(
+        default_factory=lambda: os.getenv("PHOENIX_ENDPOINT", "http://localhost:6006")
+    )
+    # trace 归属的项目名
+    project_name: str = field(
+        default_factory=lambda: os.getenv("PHOENIX_PROJECT", "financial-rag")
+    )
+
+
+@dataclass
 class TushareConfig:
     """Tushare API 配置"""
     token: str = field(default_factory=lambda: os.getenv("TUSHARE_TOKEN", ""))
@@ -111,6 +133,7 @@ class AppConfig:
     tushare: TushareConfig = field(default_factory=TushareConfig)
     lightrag: LightRAGConfig = field(default_factory=LightRAGConfig)
     mock: MockConfig = field(default_factory=MockConfig)
+    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
 
     def __post_init__(self):
         for d in [self.data_dir, self.kb_dir, self.output_dir]:
@@ -124,3 +147,8 @@ config = AppConfig()
 def is_mock_enabled() -> bool:
     """快捷判断是否启用 mock 模式"""
     return config.mock.enable
+
+
+def is_observability_enabled() -> bool:
+    """快捷判断是否启用 Phoenix 可观测性（默认 False）"""
+    return config.observability.enable

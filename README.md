@@ -10,7 +10,7 @@
 > **当前使命是 TDD。** 我们正在补建一套测试护栏，**一步一个脚印**地走完 RAG 流水线：推导每一步的契约、用真实行为去验证、修复暴露的问题、并把修复钉成永久的回归资产。不做大爆炸式重写。本 README 反映这一真实状态，而非过度包装。
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
-![Tests](https://img.shields.io/badge/tests-259%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-273%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
 ---
@@ -45,7 +45,7 @@
 | 5 | 过滤 / 质量门控 | ✅ 已验证 · 发现并修复 1 个 bug | `tests/test_filter_gate_step5.py` (20) |
 | 6 | 生成有据化 | ✅ 已验证 · 发现并修复 2 个 bug | `tests/test_grounded_generation_step7.py` (22) |
 
-**流水线 Step 0-7 已全部闭环。** 另有上下文组装层 `tests/test_context_builder.py` (9)，输出层评估 `tests/test_output_metrics.py` (13) + `tests/test_output_eval_golden.py` (20)。
+**流水线 Step 0-7 已全部闭环。** 另有上下文组装层 `tests/test_context_builder.py` (9)，输出层评估 `tests/test_output_metrics.py` (13) + `tests/test_output_eval_golden.py` (20)，可观测性层 `tests/test_observability_tracing.py` (14)。
 
 **新增 L1 检索评估层 —— 离线 IR 指标 + 分通道对比 + 基线回归锁：**
 
@@ -55,7 +55,7 @@
 | `tests/test_eval_golden.py` | 13 | golden qrels 语料结构（分级相关性、显式负例、场景标签） |
 | `tests/test_eval_retrieval.py` | 9 | 评估闭环：离线确定性、分通道可见、融合核心指标无回归 |
 
-**合计：259 通过 —— 离线运行，无需 API key。** 测试通过 `conftest` fixture 强制走本地检索（BM25 + Jaccard），因此确定性、无网络依赖。LLM/embedding 仅在测试显式调用时才保持真实；外部数据 API 一律 mock。
+**合计：273 通过 —— 离线运行，无需 API key。** 测试通过 `conftest` fixture 强制走本地检索（BM25 + Jaccard），因此确定性、无网络依赖。LLM/embedding 仅在测试显式调用时才保持真实；外部数据 API 一律 mock。
 
 **护栏已抓到的真实 bug（每个都有回归测试钉死）：**
 
@@ -143,7 +143,30 @@ AgentRouter 把每个查询分类为某种意图，然后调度器组装 Agent �
 | 图谱 RAG | LightRAG（PDF/图片 → 实体关系抽取 → 通过 function calling 查询图谱） |
 | 领域词典 | DictionaryRegistry（JSON 可扩展：`data/dictionaries/*.json`） |
 | 向量库 | ChromaDB（HNSW ANN，余弦距离，持久化存储） |
-| 测试 | pytest —— 护栏驱动、按流水线步骤（259 通过，离线）；加固期 CI 门禁临时改为手动触发 |
+| 测试 | pytest —— 护栏驱动、按流水线步骤（273 通过，离线）；加固期 CI 门禁临时改为手动触发 |
+| 可观测性 | Arize Phoenix（OpenInference/OTel，进程内 `launch_app`，默认关闭；埋点收口 `financial_rag/observability/`） |
+
+---
+
+## 可观测性（Phoenix）
+
+第一期已落地：**核心 RAG 链路**（LLM 调用 / 检索 / embedding / rerank）以 OpenInference span 推送到 Arize Phoenix，可视化 prompt·response·token·latency 与检索命中。
+
+- **默认关闭**：`PHOENIX_ENABLED=false` 时埋点走 no-op，零副作用、不联网，不影响 273 个离线测试与 MOCK_MODE。
+- **横切收口**：埋点集中在 `financial_rag/observability/tracing.py`（`observe_span` 上下文管理器），业务代码仅用 `with observe_span(...)` 包裹，未启用时透传 `yield None`。
+- **懒加载**：重依赖（arize-phoenix / OTLP）仅在启用时导入；未安装也不报错，主流程照常。
+- **版本要求**：Python 3.11 需 `arize-phoenix>=21.0.0`——19.x/20.x 的 `trace/dsl/filter.py` 用 `MappingProxyType` 作 dataclass 默认值，py3.11 判定 unhashable、import 即崩（21.0.0 改用 `field(default_factory=...)` 修复）；已在 `requirements-observability.txt` 钉 `>=21.0.0`。
+
+启用（本地可视化）：
+
+```bash
+pip install -r requirements-observability.txt
+export PHOENIX_ENABLED=true          # Windows PowerShell: $env:PHOENIX_ENABLED="true"
+python -m financial_rag.main pipeline "商汤2024营收" -v
+# 打开 http://localhost:6006 查看 LLM / RETRIEVER / EMBEDDING / RERANKER span
+```
+
+第二期（Agent 链 / Pipeline 5 阶段 / 工具调用 / 护栏）尚未埋点。
 
 ---
 

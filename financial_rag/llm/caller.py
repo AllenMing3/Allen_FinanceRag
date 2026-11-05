@@ -27,6 +27,19 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from .dashscope_client import DashScopeLLM, LLMResponse
 
+# 可观测性埋点（横切关注点，默认关闭时 observe_span 透传 yield None，零副作用）
+from financial_rag.observability import observe_span, set_attrs
+from financial_rag.observability.tracing import (
+    INPUT_MIME_TYPE,
+    INPUT_VALUE,
+    KIND_LLM,
+    LLM_MODEL_NAME,
+    LLM_TOKEN_COUNT_COMPLETION,
+    LLM_TOKEN_COUNT_PROMPT,
+    LLM_TOKEN_COUNT_TOTAL,
+    OUTPUT_VALUE,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,6 +52,36 @@ DEFAULT_SYSTEM_CONSTRAINTS = (
 )
 
 JSON_OUTPUT_HINT = "\n\n重要：只输出合法的 JSON，不要添加任何额外文字、解释或 Markdown 标记。"
+
+# span input/output 截断长度，避免超大 prompt/response 撞爆 trace
+_SPAN_TEXT_LIMIT = 4000
+
+
+def _record_llm_response(span, resp: Optional["LLMResponse"], cache_hit: bool = False) -> None:
+    """把 LLMResponse 的 output/model/token/finish_reason 写入 span（span=None 时 no-op）。
+
+    usage 来自 DashScope resp.usage.__dict__，兼容 input_tokens/output_tokens
+    与 openai 风格 prompt_tokens/completion_tokens 两种键名。
+    """
+    if span is None or resp is None:
+        return
+    usage = getattr(resp, "usage", None) or {}
+    attrs = {
+        OUTPUT_VALUE: (getattr(resp, "content", "") or "")[:_SPAN_TEXT_LIMIT],
+        LLM_MODEL_NAME: getattr(resp, "model", "") or "",
+        "llm.finish_reason": getattr(resp, "finish_reason", "") or "",
+        "cache_hit": cache_hit,
+    }
+    prompt = usage.get("input_tokens", usage.get("prompt_tokens"))
+    completion = usage.get("output_tokens", usage.get("completion_tokens"))
+    total = usage.get("total_tokens")
+    if prompt is not None:
+        attrs[LLM_TOKEN_COUNT_PROMPT] = prompt
+    if completion is not None:
+        attrs[LLM_TOKEN_COUNT_COMPLETION] = completion
+    if total is not None:
+        attrs[LLM_TOKEN_COUNT_TOTAL] = total
+    set_attrs(span, attrs)
 
 
 # ===================== JSON 解析工具 =====================
@@ -204,22 +247,28 @@ class LLMCaller:
         # 2. 输入长度校验
         self._check_input_length(full_messages)
 
-        # 3. 缓存查询
-        if use_cache and self.cache_ttl > 0:
-            cache_key = self._hash(full_messages, kwargs)
-            cached = self._get_cached(cache_key)
-            if cached is not None:
-                logger.debug("[LLMCaller] 缓存命中")
-                return cached
+        with observe_span("llm.call", KIND_LLM, {
+            INPUT_VALUE: json.dumps(full_messages, ensure_ascii=False)[:_SPAN_TEXT_LIMIT],
+            INPUT_MIME_TYPE: "application/json",
+        }) as span:
+            # 3. 缓存查询
+            if use_cache and self.cache_ttl > 0:
+                cache_key = self._hash(full_messages, kwargs)
+                cached = self._get_cached(cache_key)
+                if cached is not None:
+                    logger.debug("[LLMCaller] 缓存命中")
+                    _record_llm_response(span, cached, cache_hit=True)
+                    return cached
 
-        # 4. 带重试的 API 调用（始终传 effective_system）
-        resp = self._call_with_retry(messages, effective_system, **kwargs)
+            # 4. 带重试的 API 调用（始终传 effective_system）
+            resp = self._call_with_retry(messages, effective_system, **kwargs)
 
-        # 5. 写入缓存
-        if use_cache and self.cache_ttl > 0:
-            self._set_cached(cache_key, resp)
+            # 5. 写入缓存
+            if use_cache and self.cache_ttl > 0:
+                self._set_cached(cache_key, resp)
 
-        return resp
+            _record_llm_response(span, resp, cache_hit=False)
+            return resp
 
     # ---------- 结构化 JSON 调用 ----------
 
@@ -307,18 +356,31 @@ class LLMCaller:
         # 长度校验
         self._check_input_length(messages)
 
-        if use_cache and self.cache_ttl > 0:
-            cache_key = self._hash(messages, {"tools": tools, **kwargs})
-            cached = self._get_cached(cache_key)
-            if cached is not None:
-                return cached
+        with observe_span("llm.call_with_tools", KIND_LLM, {
+            INPUT_VALUE: json.dumps(messages, ensure_ascii=False)[:_SPAN_TEXT_LIMIT],
+            INPUT_MIME_TYPE: "application/json",
+            "llm.tools_count": len(tools or []),
+            "llm.tool_choice": tool_choice,
+        }) as span:
+            if use_cache and self.cache_ttl > 0:
+                cache_key = self._hash(messages, {"tools": tools, **kwargs})
+                cached = self._get_cached(cache_key)
+                if cached is not None:
+                    _record_llm_response(span, cached, cache_hit=True)
+                    return cached
 
-        resp = self._call_tools_with_retry(messages, tools, tool_choice, **kwargs)
+            resp = self._call_tools_with_retry(messages, tools, tool_choice, **kwargs)
 
-        if use_cache and self.cache_ttl > 0:
-            self._set_cached(cache_key, resp)
+            if use_cache and self.cache_ttl > 0:
+                self._set_cached(cache_key, resp)
 
-        return resp
+            _record_llm_response(span, resp, cache_hit=False)
+            if span is not None and getattr(resp, "tool_calls", None):
+                set_attrs(span, {
+                    "llm.tool_calls": json.dumps(
+                        resp.tool_calls, ensure_ascii=False)[:2000]
+                })
+            return resp
 
     # ---------- 内部方法 ----------
 

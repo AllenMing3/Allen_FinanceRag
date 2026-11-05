@@ -1,6 +1,12 @@
 """
 Shared test fixtures — AI sector sample data + tool registry setup
 """
+import os
+
+# 双保险：确保测试永不启用 Phoenix 埋点（必须在导入 financial_rag 前设置，
+# 因为 config 在导入期即读 env 实例化单例）。生产默认亦为 false。
+os.environ.setdefault("PHOENIX_ENABLED", "false")
+
 import pytest
 
 from financial_rag.tools.core import FunctionRegistry, ToolExecutor, create_financial_registry

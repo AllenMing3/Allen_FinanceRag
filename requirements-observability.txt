@@ -1,0 +1,22 @@
+# ==================== Observability (Arize Phoenix) ====================
+# Optional heavy deps for LOCAL full-link trace visualization ONLY.
+# CI and offline tests do NOT need these; without them observe_span is a no-op.
+#   pip install -r requirements-observability.txt
+# Enable: set PHOENIX_ENABLED=true, run pipeline/web, open http://localhost:6006.
+#
+# PYTHON 3.11 COMPAT: arize-phoenix 19.x/20.x define a dataclass field with a
+#   MappingProxyType default (trace/dsl/filter.py), which Python 3.11 rejects as an
+#   unhashable default and crashes on import. Fixed in 21.0.0 via
+#   field(default_factory=...). Pin >=21.0.0 when running on Python 3.11.
+# ASCII-ONLY COMMENTS ON PURPOSE: pip decodes requirements files with the locale
+#   codec (gbk on Chinese Windows); non-ASCII comments raise UnicodeDecodeError.
+
+# Phoenix UI + in-process collector (px.launch_app)
+arize-phoenix>=21.0.0
+
+# OTLP exporter: push spans to the Phoenix collector
+opentelemetry-exporter-otlp>=1.20.0
+
+# OpenInference semantic conventions (span kind / attribute names).
+# tracing.py falls back to equivalent string literals if this package is absent.
+openinference-semantic-conventions>=0.1.0

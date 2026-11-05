@@ -9,10 +9,22 @@
 文档: https://help.aliyun.com/document_detail/2712195.html
 """
 import os
+import json
 import logging
 from typing import List, Dict, Optional, Union
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
+
+# 可观测性埋点（默认关闭时 observe_span 透传，零副作用）
+from financial_rag.observability import observe_span, set_attrs
+from financial_rag.observability.tracing import (
+    INPUT_VALUE,
+    OUTPUT_VALUE,
+    KIND_EMBEDDING,
+    KIND_RERANKER,
+    LLM_MODEL_NAME,
+    LLM_TOKEN_COUNT_TOTAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +345,25 @@ class DashScopeEmbedding:
             )
 
     def embed(self, texts: Union[str, List[str]]) -> EmbeddingResponse:
-        """文本转向量 — 自动分批 + 并发执行
+        """文本转向量（可观测性包装：真实逻辑在 _embed_impl）"""
+        _preview = texts if isinstance(texts, str) else " | ".join(
+            str(t) for t in (texts or []))
+        with observe_span("embedding.embed", KIND_EMBEDDING, {
+            INPUT_VALUE: _preview[:2000],
+            "embedding.text_count": 1 if isinstance(texts, str) else len(texts or []),
+        }) as span:
+            resp = self._embed_impl(texts)
+            if span is not None:
+                usage = getattr(resp, "usage", None) or {}
+                set_attrs(span, {
+                    LLM_MODEL_NAME: getattr(resp, "model", "") or "",
+                    "embedding.vector_count": len(getattr(resp, "embeddings", []) or []),
+                    LLM_TOKEN_COUNT_TOTAL: usage.get("total_tokens", 0),
+                })
+            return resp
+
+    def _embed_impl(self, texts: Union[str, List[str]]) -> EmbeddingResponse:
+        """文本转向量 — 自动分批 + 并发执行（由 embed 包装埋点）
 
         单批(≤10条)直接调用；多批时 ThreadPoolExecutor 并发，
         200 条文本: 20 批 × 5 并发 = 4 轮，耗时从 ~20s 降至 ~4s。
@@ -419,8 +449,31 @@ class DashScopeReranker:
         documents: List[str],
         top_n: Optional[int] = None,
     ) -> List[RerankResult]:
+        """对文档列表按与 query 的相关度重排序（可观测性包装：真实逻辑在 _rerank_impl）"""
+        with observe_span("reranker.rerank", KIND_RERANKER, {
+            INPUT_VALUE: query,
+            "reranker.document_count": len(documents or []),
+            "reranker.top_n": top_n or self.top_n,
+        }) as span:
+            results = self._rerank_impl(query, documents, top_n)
+            if span is not None:
+                set_attrs(span, {
+                    OUTPUT_VALUE: json.dumps(
+                        [{"index": r.index, "score": r.score,
+                          "level": r.relevance_level} for r in results],
+                        ensure_ascii=False)[:2000],
+                    "reranker.result_count": len(results),
+                })
+            return results
+
+    def _rerank_impl(
+        self,
+        query: str,
+        documents: List[str],
+        top_n: Optional[int] = None,
+    ) -> List[RerankResult]:
         """
-        对文档列表按与 query 的相关度重排序
+        对文档列表按与 query 的相关度重排序（由 rerank 包装埋点）
 
         Args:
             query: 查询文本

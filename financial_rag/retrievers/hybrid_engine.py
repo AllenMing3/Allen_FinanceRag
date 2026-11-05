@@ -28,6 +28,10 @@ from financial_rag.retrievers.embedding_cache import EmbeddingCache
 from financial_rag.retrievers import persistence
 from financial_rag.core.ingestion_scorer import IngestionScoreCard
 
+# 可观测性埋点（默认关闭时 observe_span 透传，零副作用）
+from financial_rag.observability import observe_span, set_attrs, retrieval_doc_attrs
+from financial_rag.observability.tracing import INPUT_VALUE, KIND_RETRIEVER
+
 logger = logging.getLogger(__name__)
 
 
@@ -301,7 +305,30 @@ class HybridRetriever:
     def search(self, query: str, top_k: int = 10,
                use_rerank: bool = True, scorecard=None,
                filters: Optional[Dict] = None) -> List[Dict]:
-        """混合检索入口"""
+        """混合检索入口（可观测性包装：真实检索逻辑在 _search_impl）
+
+        埋点为横切关注点：默认关闭时 observe_span 透传，返回值与原逻辑完全一致；
+        启用时开 RETRIEVER span，记录 query / 命中文档数 / 每条 content+score / 耗时。
+        """
+        t0 = time.time()
+        with observe_span("retriever.search", KIND_RETRIEVER, {
+            INPUT_VALUE: query,
+            "retriever.top_k": top_k,
+            "retriever.use_rerank": use_rerank,
+        }) as span:
+            results = self._search_impl(query, top_k, use_rerank, scorecard, filters)
+            if span is not None:
+                set_attrs(span, {
+                    "retriever.document_count": len(results),
+                    "retriever.elapsed_ms": round((time.time() - t0) * 1000, 2),
+                })
+                set_attrs(span, retrieval_doc_attrs(results))
+            return results
+
+    def _search_impl(self, query: str, top_k: int = 10,
+               use_rerank: bool = True, scorecard=None,
+               filters: Optional[Dict] = None) -> List[Dict]:
+        """混合检索真实逻辑（由 search 包装埋点）"""
         t0 = time.time()
         soft_filter_keys = set()
 

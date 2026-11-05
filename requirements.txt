@@ -34,3 +34,6 @@ python-multipart>=0.0.30
 
 # ==================== Testing ====================
 pytest>=8.0.0
+# 可观测性埋点轻量 SDK（供 observe_span no-op + 离线 span 断言；不含 Phoenix UI/web 服务）
+# 重依赖（arize-phoenix 等）见 requirements-observability.txt，仅本地可视化时按需安装
+opentelemetry-sdk>=1.20.0

@@ -81,4 +81,13 @@ def setup_environment() -> bool:
         logger.warning("未设置 DASHSCOPE_API_KEY，使用纯本地模式")
     else:
         logger.debug(f"DashScope API 已配置，模型: {_cfg.llm.model}")
+
+    # 可观测性：PHOENIX_ENABLED=true 时进程内拉起 Phoenix（懒加载，失败不阻断主流程）
+    if _cfg.observability.enable:
+        try:
+            from financial_rag.observability import init_phoenix
+            init_phoenix()
+        except Exception as exc:  # pragma: no cover - 埋点初始化绝不阻断启动
+            logger.warning(f"[observability] 初始化异常，已忽略: {exc}")
+
     return has_key

@@ -184,6 +184,10 @@ AnalysisAgent 内部工具链分发（`_run_kline_chain` / `_run_event_chain` /
   `scoring_source_items` / `scoring_mode`("rag"|"analysis") / `scoring_text` 三字段即可接入评分。
 - **防幻觉**：guard/reflector.HallucinationGuard，6 层（4 规则层 + LLM critique + LLM assist），
   RAG 模式查 `[N]` 引用，analysis 模式查 `【】` 结构。
+- **可观测性**：observability/tracing.observe_span —— Phoenix/OpenInference 埋点收口（横切关注点，
+  默认关闭走 no-op、未装重依赖不报错）。第一期覆盖核心 RAG 链路：LLM(`llm/caller`)、
+  检索(`retrievers/hybrid_engine.search`)、embedding/rerank(`llm/dashscope_client`)；
+  启动挂载在 `core/factory.setup_environment`（PHOENIX_ENABLED=true 时进程内 `px.launch_app`）。
 
 ## 5. Agent 清单（3 个，agents/）
 
@@ -292,14 +296,15 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
 16. 同步+线程池架构 → async 化；verbose print → logger。
 17. IngestionAgent EXPECTED_METADATA_FIELDS 与 DocMetadata schema 脱节（fiscal_period/currency 财报时代残留）。
 18. AgentRouter 关键词正则分类 → LLM/Planner 路由；公司名硬编码正则与 STOCK_MAP 双份维护。
-19. 测试套件对齐：旧架构的约 594 用例全量套已废弃，替换为护栏驱动的按 RAG 流水线步骤测试（当前 259 用例，覆盖预处理/入库/查询解析/召回/RRF 融合/过滤门控/生成有据化 + 上下文组装 + L1 检索评估 + L2 输出评估，详见 README）。RAG 流水线 Step 0-7 已全部闭环；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁仍为手动触发。
+19. 测试套件对齐：旧架构的约 594 用例全量套已废弃，替换为护栏驱动的按 RAG 流水线步骤测试（当前 273 用例，覆盖预处理/入库/查询解析/召回/RRF 融合/过滤门控/生成有据化 + 上下文组装 + L1 检索评估 + L2 输出评估 + 可观测性埋点，详见 README）。RAG 流水线 Step 0-7 已全部闭环；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁仍为手动触发。
+20. 可观测性：RAG 可观测性工具选型已定 Phoenix（OpenInference/OTel，进程内 launch_app，默认关闭）；第一期核心 RAG 链路（LLM/检索/embedding/rerank）已落地，第二期（Agent 链/Pipeline 5 阶段/工具调用/护栏）尚未埋点。
 
 ## 9. 测试与运行
 
 ```cmd
 myenv\Scripts\activate.bat
 python -m financial_rag.main web        # Web UI: http://127.0.0.1:8000
-pytest tests -q                          # 259 用例, 护栏驱动按流水线步骤, 离线 <7s
+pytest tests -q                          # 273 用例, 护栏驱动按流水线步骤, 离线 <7s
 ```
 
 Mock 约定：只 mock 数据源 API（Tushare/RSS）；conftest 的 autouse fixture `_force_local_retrieval` 删除 DASHSCOPE_API_KEY，强制检索走本地（BM25+Jaccard），保证确定性、离线、可复现。LLM/Embedding/Rerank 仅在测试显式调用时才真实。
