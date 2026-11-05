@@ -15,7 +15,10 @@ logger = logging.getLogger(__name__)
 
 # ===================== 共享工具 =====================
 
-GROUNDING_THRESHOLD = 0.15  # 来源锚定阈值：句子 token 与某 source 重叠 >= 此值视为"锚定"
+# 来源锚定阈值：句子 token 与某 source 重叠 >= 此值视为"锚定"
+# 0.30 取自实测分离间隙：编造句 overlap ≤0.25 < 0.30 ≤ 合法改写句最低 0.50
+# （旧值 0.15 过宽，编造句凭领域共享词即锚定成功，见 test_grounded_generation_step7.py）
+GROUNDING_THRESHOLD = 0.30
 
 
 _jieba_loaded = False
@@ -46,6 +49,9 @@ _STOP_WORDS = frozenset(
     "为 于 把 向 让 给 用 过 能 可 应 将 所 如 果 因 此 等 且 已 又 再 更 最".split()
 )
 
+# 引用标记 [N]（提取数字前先剥离，避免被当成裸数字污染 L2）
+_CITATION_RE = re.compile(r'\[\d+\]')
+
 # 数字+单位 正则（匹配 "50.3亿元"、"20%"、"2024年" 等）
 _NUM_UNIT_RE = re.compile(
     r'(\d+(?:\.\d+)?)\s*([%％万亿元亿万美元美元美刀港元港币人民币块个台套条家万人人次份月年日季])?',
@@ -54,8 +60,12 @@ _NUM_UNIT_RE = re.compile(
 
 
 def extract_numbers(text: str) -> List[str]:
-    """提取数字（含单位），返回标准化字符串列表"""
-    matches = _NUM_UNIT_RE.findall(text)
+    """提取数字（含单位），返回标准化字符串列表
+
+    先剥离 [N] 引用标记：否则 L3 要求的规范引用会被当成裸数字，
+    在 source 无对应数字时污染 L2（unmatched=['1','3'] 误报）。
+    """
+    matches = _NUM_UNIT_RE.findall(_CITATION_RE.sub(' ', text))
     results = []
     for num_str, unit in matches:
         try:

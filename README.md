@@ -10,7 +10,7 @@
 > **当前使命是 TDD。** 我们正在补建一套测试护栏，**一步一个脚印**地走完 RAG 流水线：推导每一步的契约、用真实行为去验证、修复暴露的问题、并把修复钉成永久的回归资产。不做大爆炸式重写。本 README 反映这一真实状态，而非过度包装。
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
-![Tests](https://img.shields.io/badge/tests-123%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-259%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
 ---
@@ -37,15 +37,15 @@
 
 | # | RAG 步骤 | 状态 | 测试资产 |
 |---|----------|--------|-----------|
+| 0 | 输入清洗 —— 预处理 | ✅ 已验证 | `tests/test_preprocess_step0.py` (39) |
 | 1 | 入库 —— 切分 + 索引 | ✅ 已验证 · 发现并修复 1 个 bug | `tests/test_ingest_step1.py` (15) |
-| 2 | 查询解析 | ✅ 已验证 · 发现并修复 2 个 bug | `tests/test_query_parser_step2.py` (27) |
+| 2 | 查询解析 | ✅ 已验证 · 发现并修复 2 个 bug | `tests/test_query_parser_step2.py` (30) |
 | 3 | 召回 —— BM25 + 向量 | ✅ 已验证 · 发现并修复 1 个 bug | `tests/test_recall_step3.py` (24) |
-| 4 | RRF 融合 | ⬜ 未开始 | — |
-| 5 | Rerank 重排 | ⬜ 未开始 | — |
-| 6 | 过滤 / 质量门控 | ⬜ 未开始 | — |
-| 7 | 生成有据化 | ⬜ 未开始 | — |
+| 4 | RRF 融合 | ✅ 已验证 · 扭负增值为正（3 处根因修复） | `tests/test_fusion_step4.py` (9) |
+| 5 | 过滤 / 质量门控 | ✅ 已验证 · 发现并修复 1 个 bug | `tests/test_filter_gate_step5.py` (20) |
+| 6 | 生成有据化 | ✅ 已验证 · 发现并修复 2 个 bug | `tests/test_grounded_generation_step7.py` (22) |
 
-另有上下文组装层：`tests/test_context_builder.py` (9)。
+**流水线 Step 0-7 已全部闭环。** 另有上下文组装层 `tests/test_context_builder.py` (9)，输出层评估 `tests/test_output_metrics.py` (13) + `tests/test_output_eval_golden.py` (20)。
 
 **新增 L1 检索评估层 —— 离线 IR 指标 + 分通道对比 + 基线回归锁：**
 
@@ -55,7 +55,7 @@
 | `tests/test_eval_golden.py` | 13 | golden qrels 语料结构（分级相关性、显式负例、场景标签） |
 | `tests/test_eval_retrieval.py` | 9 | 评估闭环：离线确定性、分通道可见、融合核心指标无回归 |
 
-**合计：123 通过 —— 离线运行，无需 API key。** 测试通过 `conftest` fixture 强制走本地检索（BM25 + Jaccard），因此确定性、无网络依赖。LLM/embedding 仅在测试显式调用时才保持真实；外部数据 API 一律 mock。
+**合计：259 通过 —— 离线运行，无需 API key。** 测试通过 `conftest` fixture 强制走本地检索（BM25 + Jaccard），因此确定性、无网络依赖。LLM/embedding 仅在测试显式调用时才保持真实；外部数据 API 一律 mock。
 
 **护栏已抓到的真实 bug（每个都有回归测试钉死）：**
 
@@ -63,6 +63,9 @@
 > - **Step 3 —— BM25 chunk 碰撞。** 一篇文档切分后的所有 chunk 继承同一个 `meta.doc_id`，导致 FTS5 去重只悄悄保留最后一个 chunk（存活率 1/3）。已用复合 key `{doc_id}_c{chunk_id}` 修复。
 > - **Step 1 —— 删除索引错位。** `kb_router` 的删除端点把原始文档列表的位置索引传给 `retriever.remove()`，但检索器持有的是*切分后*的列表——一旦长文被切分，位置就会错位，删掉错误的 chunk。已用 `remove_by_doc_ids()` 修复。
 > - **Step 2 —— 核心词被静默丢弃。** 关键词抽取的兜底分词是"全有或全无"：只要命中任意一个词典词，未登录的意图/实体词（`融资`、`昇腾`、`投资`、`财报`）就永远不进分词，饿死 BM25。已改为始终补充残余（未覆盖）token——在 BM25 通道上可度量地把融资文档召回从 MISS 翻转为 HIT。
+> - **Step 5 —— 日期过滤静默失效。** `query_parser` 产出无 `$` 前缀的 `{"gte":...}`，而 `apply_filters` 只认 `$gte`/`$lte`，未知操作符被忽略 → 放行全部文档。已用 op 键规范化修复。
+> - **生成有据化 —— L1 锚定阈值过宽，编造事实 0.964 分/risk=low 放行。** 编造句仅凭领域共享词（公司/收购/交易/2024）overlap 0.182 ≥ 旧阈值 0.15 即"锚定成功"。分离度实测（编造 ≤0.25 < 合法改写 ≥0.50）后阈值提到 0.30，干净分离且不误杀合法改写。
+> - **生成有据化 —— 引用标记 `[N]` 被 L2 当成裸数字。** `extract_numbers` 把 `[1]`/`[3]` 提取为数字，L3 要求的规范引用反而污染 L2（满分回答被扣到 0.85）。已在提取前剥离 `[N]`。
 
 ---
 
@@ -140,7 +143,7 @@ AgentRouter 把每个查询分类为某种意图，然后调度器组装 Agent �
 | 图谱 RAG | LightRAG（PDF/图片 → 实体关系抽取 → 通过 function calling 查询图谱） |
 | 领域词典 | DictionaryRegistry（JSON 可扩展：`data/dictionaries/*.json`） |
 | 向量库 | ChromaDB（HNSW ANN，余弦距离，持久化存储） |
-| 测试 | pytest —— 护栏驱动、按流水线步骤（123 通过，离线）；加固期 CI 门禁临时改为手动触发 |
+| 测试 | pytest —— 护栏驱动、按流水线步骤（259 通过，离线）；加固期 CI 门禁临时改为手动触发 |
 
 ---
 
@@ -183,7 +186,7 @@ python -m financial_rag.main toolcall -l   # 列出所有已注册工具
 ## 测试
 
 ```bash
-python -m pytest tests/ -v    # 123 通过 —— 离线，无需 API key
+python -m pytest tests/ -v    # 259 通过 —— 离线，无需 API key
 
 # L1 检索评估 —— 分通道 IR 指标 + 基线回归锁（离线，无需 API key）
 python -m financial_rag.eval.runner                    # 对比 baseline，融合核心指标回归即非零退出

@@ -49,6 +49,12 @@ _TITLE_PATTERN = re.compile(r"^##\s*📰\s*(.+?)\s*$", re.MULTILINE)
 _PLACEHOLDER_PATTERN = re.compile(r"（.*暂缺）")
 _TOTAL_FIELDS = 7  # event_title + 上述 6 字段
 
+# 模板脚手架（标签词/标题前缀）：非声明内容，喂 Guard 前剥离。
+# 否则 Guard L1 阈值收紧到 0.30 后，"**时间**: ... | **影响**: ..." 这类标签行
+# 会因标签词与 source 零重叠被误判 unanchored（标签属模板，不属生成内容）。
+_TEMPLATE_NOISE_RE = re.compile(
+    r"\*\*(?:时间|影响|涉及|行业|市场|展望)\*\*\s*[:：]|^##\s*📰\s*|[|｜]", re.MULTILINE)
+
 
 def _is_filled(value: str) -> bool:
     """字段值是否为有效填充：非空、非「（xx暂缺）」占位符。"""
@@ -91,6 +97,11 @@ def field_completeness(brief_output: str) -> Dict:
     }
 
 
+def _strip_template_scaffolding(brief_output: str) -> str:
+    """剥离 NEWS_BRIEF 模板脚手架（字段标签/标题前缀/分隔符），仅留声明内容。"""
+    return _TEMPLATE_NOISE_RE.sub(" ", brief_output or "")
+
+
 def evaluate_case(brief_output: str, source_docs: List[Dict]) -> Dict:
     """对单条输出样本跑全套质量指标（离线确定）。
 
@@ -100,8 +111,8 @@ def evaluate_case(brief_output: str, source_docs: List[Dict]) -> Dict:
         unanchored:        无法锚定到任何 source 的句子
         missing_fields:    未有效填充的 NEWS_BRIEF 字段 key
     """
-    l2 = l2_numerical_fidelity(brief_output, source_docs)
-    l1 = l1_source_grounding(brief_output, source_docs)
+    l2 = l2_numerical_fidelity(_strip_template_scaffolding(brief_output), source_docs)
+    l1 = l1_source_grounding(_strip_template_scaffolding(brief_output), source_docs)
     fc = field_completeness(brief_output)
 
     nf = l2["score"]

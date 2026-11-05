@@ -56,8 +56,8 @@ class HallucinationGuard:
         "L6_llm_assist": 0.20,
     }
 
-    # 来源锚定阈值：句子 token 与某 source 重叠 >= 此值视为"锚定"
-    GROUNDING_THRESHOLD = 0.15
+    # 来源锚定阈值：与 rule_layers.GROUNDING_THRESHOLD 保持一致（0.30，实测分离间隙）
+    GROUNDING_THRESHOLD = 0.30
 
     # LLM 层触发阈值：规则层总分低于此值时触发 L5+L6
     LLM_TRIGGER_THRESHOLD = 0.85

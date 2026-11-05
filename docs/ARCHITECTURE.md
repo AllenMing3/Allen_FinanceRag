@@ -258,9 +258,10 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
    （scoring_tools.py L63/70/79，"有数据即高分"）、`_phase_evolve` 硬编码 0.9/0.85/0.8
    → pipeline_grade 系统性虚高，应换真实质量信号（RAGAS 基线已建）。
    **另：L5/L6 触发条件自我掩盖** —— LLM 纠错层仅在 `rule_score < 0.85` 触发，而 L1
-   来源锚定阈值极低（token 重叠 ≥0.15 即算锚定，reflector.py L60），语义反转（"下降15%"
+   来源锚定阈值偏低（token 重叠 ≥0.30 即算锚定，rule_layers.py GROUNDING_THRESHOLD；Step 7
+   加固已从 0.15 提到 0.30，钉死编造句漏抓），但**语义反转仍未解**（"下降15%"
    vs"增长15%"）因 token 高度重叠被误判已锚定 → rule_score 被假阳性顶高 → 越需要 LLM
-   纠错的语义幻觉越不触发 LLM 层。
+   纠错的语义幻觉越不触发 LLM 层（需词级极性/方向校验，非单纯提阈能解）。
 7. 重试机制失效：BaseAgent.run 吞掉所有异常，orchestrator 的 max_retries 永不触发。
 8. 三条 AnalysisAgent 入口（链 / _run_analysis_via_agent_chain / api_kline 直连）收敛为一条。
 9. **数据存储迁移到 PostgreSQL**（用户 2026-10 拍板，方向已定·待开工）：根治内存单例整表重写+无锁并发导致的丢数据（news_metadata 曾 -1361 行）与四份真相计数校验。范围核心先行——kb_docs/news_meta/stats/version 入 PG 做唯一真相，Chroma/LightRAG/bm25 降为可重建派生索引；`persistence.py` 换实现留签名（~18 处调用点零改动）；前置需 PG 实例 + 驱动 + Alembic + config/.env。
@@ -291,14 +292,14 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
 16. 同步+线程池架构 → async 化；verbose print → logger。
 17. IngestionAgent EXPECTED_METADATA_FIELDS 与 DocMetadata schema 脱节（fiscal_period/currency 财报时代残留）。
 18. AgentRouter 关键词正则分类 → LLM/Planner 路由；公司名硬编码正则与 STOCK_MAP 双份维护。
-19. 测试套件对齐：旧架构的约 594 用例全量套已废弃，替换为护栏驱动的按 RAG 流水线步骤测试（当前 75 用例，覆盖入库/查询解析/召回 + 上下文组装，详见 README）。仍待补齐 RRF 融合/rerank/质量门控/生成有据化等步骤，并按 5 条业务通路对齐；加固期 CI 门禁仍为手动触发。
+19. 测试套件对齐：旧架构的约 594 用例全量套已废弃，替换为护栏驱动的按 RAG 流水线步骤测试（当前 259 用例，覆盖预处理/入库/查询解析/召回/RRF 融合/过滤门控/生成有据化 + 上下文组装 + L1 检索评估 + L2 输出评估，详见 README）。RAG 流水线 Step 0-7 已全部闭环；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁仍为手动触发。
 
 ## 9. 测试与运行
 
 ```cmd
 myenv\Scripts\activate.bat
 python -m financial_rag.main web        # Web UI: http://127.0.0.1:8000
-pytest tests -q                          # 75 用例, 护栏驱动按流水线步骤, 离线 <2s
+pytest tests -q                          # 259 用例, 护栏驱动按流水线步骤, 离线 <7s
 ```
 
 Mock 约定：只 mock 数据源 API（Tushare/RSS）；conftest 的 autouse fixture `_force_local_retrieval` 删除 DASHSCOPE_API_KEY，强制检索走本地（BM25+Jaccard），保证确定性、离线、可复现。LLM/Embedding/Rerank 仅在测试显式调用时才真实。

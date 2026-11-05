@@ -84,6 +84,17 @@ class TestSourceGrounding:
         r = evaluate_case(GOOD_BRIEF, SOURCE)
         assert r["source_grounding"] == 1.0
 
+    @pytest.mark.regression
+    def test_template_labels_not_counted_as_claims(self):
+        """模板脚手架（**时间**: 等标签词）不是声明，不得被 L1 计入 unanchored。
+
+        Guard L1 阈值收紧到 0.30 后曾误判标签行（overlap 0.2）—— evaluate_case
+        现在喂 Guard 前剥离脚手架，退回直传 brief_output 的旧实现即红。
+        """
+        r = evaluate_case(GOOD_BRIEF, SOURCE)
+        assert all("**时间**" not in u for u in r["unanchored"])
+        assert r["source_grounding"] == 1.0
+
     def test_ungrounded_claim_detected(self):
         brief = GOOD_BRIEF.replace("力争三年内盈亏平衡", "预计明年股价涨至500港元")
         r = evaluate_case(brief, SOURCE)
