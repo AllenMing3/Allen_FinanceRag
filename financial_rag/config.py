@@ -63,8 +63,15 @@ class ReflectionConfig:
 
 @dataclass
 class LightRAGConfig:
-    """LightRAG 知识图谱配置 — 仅 PDF/图片解析内容走图谱"""
-    enable: bool = True
+    """LightRAG 知识图谱配置 — 仅 PDF/图片解析内容走图谱
+
+    默认关闭：lightrag 是实验性可选方案，未纳入依赖锁定（PyPI 仅 beta，需源码安装）。
+    未安装却开启会在启动时触发 `No module named 'lightrag'` 告警，故默认 off。
+    确需启用（已源码安装 lightrag）时设 LIGHTRAG_ENABLE=true。
+    """
+    enable: bool = field(
+        default_factory=lambda: os.getenv("LIGHTRAG_ENABLE", "false").lower() == "true"
+    )
     working_dir: str = "./data/knowledge_base/lightrag"
     query_mode: str = "hybrid"          # local / global / hybrid / mix
     chunk_token_size: int = 300

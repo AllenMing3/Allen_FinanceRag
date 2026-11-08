@@ -84,8 +84,16 @@ class HallucinationGuard:
         rule_score = self._compute_rule_score(checks)
         if self._llm is not None and rule_score < self.LLM_TRIGGER_THRESHOLD:
             logger.info(f"[Guard] L5/L6 触发 (rule_score={rule_score:.2f} < {self.LLM_TRIGGER_THRESHOLD})")
-            checks["L5_llm_critique"] = llm_critique(answer, sources, checks, self._llm)
-            checks["L6_llm_assist"] = llm_assist(answer, sources, self._llm)
+            # L5 与 L6 相互独立（L6 不消费 L5 输出），并发执行把 LLM 层墙钟耗时从
+            # 「L5+L6 串行」降为「max(L5, L6)」，是新闻解读防幻觉慢的直接优化点。
+            # 安全性：两层各自 new LLMCaller 且 use_cache=False（不触碰共享 _cache）；
+            # checks 仅在两 future 完成后由主线程写入，提交时 llm_critique 读到的仍是 L1-L4。
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=2) as _ex:
+                _f_l5 = _ex.submit(llm_critique, answer, sources, checks, self._llm)
+                _f_l6 = _ex.submit(llm_assist, answer, sources, self._llm)
+                checks["L5_llm_critique"] = _f_l5.result()
+                checks["L6_llm_assist"] = _f_l6.result()
             logger.info(f"[Guard] L5={checks['L5_llm_critique'].get('score', 0):.2f}, L6={checks['L6_llm_assist'].get('score', 0):.2f}")
         else:
             if self._llm is None:
