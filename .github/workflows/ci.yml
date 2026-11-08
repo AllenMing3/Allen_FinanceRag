@@ -1,5 +1,5 @@
 # Financial RAG — CI Gate
-# ⚠️ CI 门禁已临时关闭（快速迭代期）：不再在 push/PR 时自动运行与阻断。
+ 
 # 需要恢复门禁时，把下面的 workflow_dispatch 换回 push/pull_request 触发即可：
 #   on:
 #     push:
@@ -22,21 +22,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.11"
+          enable-cache: true
 
       - name: 安装依赖
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq libmagic1
-          pip install -q -r requirements.txt
+          # --frozen 严格按 uv.lock 安装、不重解析；dev extra 提供 pytest 等。
+          # 注：uv.lock 的下载源为清华镜像（开发机在国内），GitHub runner 可访问，
+          #     配合 setup-uv 缓存，首次拉取后命中缓存。
+          uv sync --frozen --extra dev
 
       - name: 核心模块导入检查
         run: |
-          python -c "from financial_rag.core.pipeline import PipelineScheduler; print('core OK')"
-          python -c "from financial_rag.guard.reflector import HallucinationGuard; print('guard OK')"
-          python -c "from financial_rag.tools.core import create_financial_registry; print('tools OK')"
-          python -c "from financial_rag.api.analysis_router import router; print('api OK')"
+          uv run python -c "from financial_rag.core.pipeline import PipelineScheduler; print('core OK')"
+          uv run python -c "from financial_rag.guard.reflector import HallucinationGuard; print('guard OK')"
+          uv run python -c "from financial_rag.tools.core import create_financial_registry; print('tools OK')"
+          uv run python -c "from financial_rag.api.analysis_router import router; print('api OK')"
 
   # ────────────────── Job 2: 单元测试 + 覆盖率门禁 ──────────────────
   test:
@@ -54,20 +58,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.11"
-          cache: "pip"
+          enable-cache: true
 
       - name: 安装依赖
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq libmagic1
-          pip install -q -r requirements.txt
-          pip install -q pytest-cov
+          # dev extra 已含 pytest / pytest-cov，无需再单独 pip install
+          uv sync --frozen --extra dev
 
       - name: 运行测试 + 覆盖率
         run: |
-          pytest tests/ \
+          uv run pytest tests/ \
             --cov=financial_rag \
             --cov-report=term-missing \
             --cov-fail-under=${{ env.COVERAGE_THRESHOLD }} \

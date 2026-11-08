@@ -144,7 +144,7 @@ AgentRouter 把每个查询分类为某种意图，然后调度器组装 Agent �
 | 领域词典 | DictionaryRegistry（JSON 可扩展：`data/dictionaries/*.json`） |
 | 向量库 | ChromaDB（HNSW ANN，余弦距离，持久化存储） |
 | 测试 | pytest —— 护栏驱动、按流水线步骤（273 通过，离线）；加固期 CI 门禁临时改为手动触发 |
-| 可观测性 | Arize Phoenix（OpenInference/OTel，进程内 `launch_app`，默认关闭；埋点收口 `financial_rag/observability/`） |
+| 可观测性 | Arize Phoenix（OpenInference/OTel，独立 `.venv-obs` 起服务 + 主应用 OTLP 外推，默认关闭；埋点收口 `financial_rag/observability/`） |
 
 ---
 
@@ -154,13 +154,18 @@ AgentRouter 把每个查询分类为某种意图，然后调度器组装 Agent �
 
 - **默认关闭**：`PHOENIX_ENABLED=false` 时埋点走 no-op，零副作用、不联网，不影响 273 个离线测试与 MOCK_MODE。
 - **横切收口**：埋点集中在 `financial_rag/observability/tracing.py`（`observe_span` 上下文管理器），业务代码仅用 `with observe_span(...)` 包裹，未启用时透传 `yield None`。
-- **懒加载**：重依赖（arize-phoenix / OTLP）仅在启用时导入；未安装也不报错，主流程照常。
+- **环境隔离**：Phoenix 服务与主应用彻底分离——`arize-phoenix` 与主运行时存在硬性版本冲突，装进独立 `.venv-obs`（绝不进主环境）；主应用只需 `opentelemetry-sdk`（core）+ `opentelemetry-exporter-otlp-proto-http`（`observability` extra），经 OTLP/HTTP 把 span 推到外部 Phoenix 的 `/v1/traces`。
+- **懒加载**：未装 `observability` extra（缺 OTLP 导出器）时，`init_phoenix` 优雅降级返回 False、不报错，主流程照常。
 - **版本要求**：Python 3.11 需 `arize-phoenix>=21.0.0`——19.x/20.x 的 `trace/dsl/filter.py` 用 `MappingProxyType` 作 dataclass 默认值，py3.11 判定 unhashable、import 即崩（21.0.0 改用 `field(default_factory=...)` 修复）；已在 `requirements-observability.txt` 钉 `>=21.0.0`。
 
 启用（本地可视化）：
 
 ```bash
-pip install -r requirements-observability.txt
+# 1) 独立环境起 Phoenix 服务（首次建 .venv-obs，详见 requirements-observability.txt 注释）
+scripts/start_phoenix.ps1            # Windows  |  scripts/start_phoenix.sh (Linux/macOS)
+# 2) 主环境装 OTLP 导出器
+uv sync --extra observability
+# 3) 打开埋点开关并跑链路
 export PHOENIX_ENABLED=true          # Windows PowerShell: $env:PHOENIX_ENABLED="true"
 python -m financial_rag.main pipeline "商汤2024营收" -v
 # 打开 http://localhost:6006 查看 LLM / RETRIEVER / EMBEDDING / RERANKER span
@@ -177,17 +182,17 @@ python -m financial_rag.main pipeline "商汤2024营收" -v
 git clone <your-fork-url>
 cd financial-rag
 
-# 2. 创建虚拟环境
-python -m venv myenv
+# 2. 安装依赖（推荐 uv：自动建 .venv、按 uv.lock 精确复现）
+uv sync --extra dev
 
-# 激活
+# 激活 .venv
 # Windows (PowerShell):
-.\myenv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 # macOS/Linux:
-source myenv/bin/activate
+source .venv/bin/activate
 
-# 3. 安装依赖
-pip install -r requirements.txt
+# 3.（无 uv 时的兼容旧流程）
+# python -m venv myenv && 激活 && pip install -r requirements.txt
 
 # 4. 配置 API key
 cp .env.example .env
@@ -203,6 +208,26 @@ python -m financial_rag.main pipeline "这周 AI 圈发生了什么？"
 python -m financial_rag.main pipeline "看下 600519 的 MACD" -v
 python -m financial_rag.main toolcall -l   # 列出所有已注册工具
 ```
+
+---
+
+## 依赖管理（uv）
+
+本项目用 [uv](https://docs.astral.sh/uv/) 做依赖与环境管理，`pyproject.toml` 是**单一真相源**，`uv.lock` 锁定全量版本保证可复现。四层治理：
+
+- **拆分**：移除全项目 0 引用的 `llama-index` 冗余（自研 RAG 栈不依赖它），它曾拖进 `openai<3` 生态并与 Phoenix 冲突。
+- **分组**：`core`（运行时 `dependencies`）+ `dev`（pytest/pytest-cov/pre-commit）+ `observability`（OTLP 导出器）三个 extras，按需安装。
+- **隔离**：重依赖 `arize-phoenix` 与主运行时硬性冲突，装进独立 `.venv-obs`，绝不进主环境（见"可观测性"小节）。
+- **可复现**：`uv.lock` 入库；`requirements.txt` 是 `uv export` 生成的锁定产物，供非 uv / 旧 pip 流程兼容，勿手改。
+
+```bash
+uv sync --extra dev              # 建 .venv 并装 core+dev（按 uv.lock 精确复现）
+uv sync --extra observability    # 追加 OTLP 导出器（启用 Phoenix 埋点时需要）
+uv run pytest tests/             # 在项目环境里跑测试
+uv lock                          # 改了 pyproject 依赖后重新锁定
+```
+
+> 国内网络：uv **不读** pip 的镜像配置，需另配 `%APPDATA%\uv\uv.toml`（Linux/macOS：`~/.config/uv/uv.toml`）把默认索引设为清华镜像，否则直连 pypi.org 解析大依赖树会长时间卡住。
 
 ---
 

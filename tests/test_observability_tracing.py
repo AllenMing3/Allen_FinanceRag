@@ -11,13 +11,11 @@ Test 可观测性层 — Phoenix/OpenTelemetry 埋点收口质量验证。
   - no-op 安全：未启用时 observe_span 透传 yield None，被包裹逻辑返回值不变、不抛异常、不产生 span。
   - 离线可观测：用 InMemorySpanExporter 临时配 SDK provider，手动启用后跑埋点，
     断言 span 名/kind/input.value/output.value/token 属性正确 —— 不依赖真实 Phoenix、不联网。
-  - 懒加载回退：未装 phoenix 时 init_phoenix() 返回 False 且不抛异常。
+  - 懒加载回退：未装 OTLP/HTTP 导出器时 init_phoenix() 返回 False 且不抛异常。
 
 离线约束：conftest 已 setdefault PHOENIX_ENABLED=false；启用路径由 enable_tracing
 fixture 临时改 config 并刷新缓存，用例结束恢复，绝不污染其他模块。
 """
-import importlib
-
 import pytest
 
 from financial_rag.config import config
@@ -202,19 +200,21 @@ class TestConsistency:
 # ===================== ④ 懒加载回退 + retrieval_doc_attrs 契约 =====================
 
 class TestLazyLoadFallback:
-    def test_init_phoenix_false_when_not_installed(self, monkeypatch):
-        """回归锁定：模拟未装 phoenix（import 失败），init_phoenix 返回 False 且不抛异常。"""
+    def test_init_phoenix_false_when_exporter_missing(self, monkeypatch):
+        """回归锁定：模拟未装 OTLP/HTTP 导出器，init_phoenix 返回 False 且不抛异常。"""
+        import sys
+
         monkeypatch.setattr(tracing, "_phoenix_initialized", False)
-        real_import = importlib.import_module
-
-        def fake_import(name, *args, **kwargs):
-            if name in ("phoenix", "arize_phoenix"):
-                raise ImportError(f"No module named '{name}'")
-            return real_import(name, *args, **kwargs)
-
-        monkeypatch.setattr(tracing.importlib, "import_module", fake_import)
-        # 不应抛异常，返回 False
+        # sys.modules[name]=None 会让 `from name import ...` 抛 ImportError，
+        # 以此模拟主环境未装 opentelemetry-exporter-otlp-proto-http（未 --extra observability）
+        monkeypatch.setitem(
+            sys.modules,
+            "opentelemetry.exporter.otlp.proto.http.trace_exporter",
+            None,
+        )
+        # 不应抛异常，返回 False，且不置初始化标记
         assert tracing.init_phoenix() is False
+        assert tracing._phoenix_initialized is False
 
     def test_init_phoenix_idempotent_when_initialized(self, monkeypatch):
         """一致性：已初始化标记为 True 时，init_phoenix 幂等直接返回 True，不重复拉起。"""

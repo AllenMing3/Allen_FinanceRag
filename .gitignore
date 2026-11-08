@@ -16,6 +16,7 @@ myenv/
 venv/
 env/
 .venv/
+.venv-obs/
 ENV/
 
 # 编译缓存
@@ -119,3 +120,24 @@ case1
 tmp/
 temp/
 *.tmp
+
+# ===================== 运行时产物 & 一次性脚本（保持 git status 清爽）=====================
+# KB 运行时状态：每次运行都变，本地保留即可，不入库
+data/knowledge_base/chroma/
+data/knowledge_base/conversations/
+data/knowledge_base/learning/
+data/knowledge_base/kb_index.json
+data/knowledge_base/stats.json
+data/knowledge_base/.kb_version
+data/knowledge_base/*.bak
+data/knowledge_base/*.bak_pre_clean
+
+# 实验/评估产物（脚本生成，可复现）
+experiments/lightrag_demo/
+experiments/ragas_results.json
+
+# 根目录一次性脚本 & 临时转储（下划线前缀 = 临时约定；不影响已 track 的文件）
+/_*.py
+/_*.txt
+/tmp.txt
+/review_diff.txt

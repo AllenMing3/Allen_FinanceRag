@@ -3,12 +3,11 @@ financial_rag.observability.tracing — Phoenix / OpenTelemetry 埋点收口
 
 横切关注点，绝不侵入业务逻辑。三条设计铁律：
 - 默认关闭：is_enabled()==False 时 observe_span 透传 yield None，零开销、零副作用、不改返回值。
-- 懒加载：phoenix / openinference / opentelemetry 重依赖仅在启用时才 import；未装也不报错。
+- 懒加载：openinference 属性名与 opentelemetry OTLP 导出器仅在启用时才 import；未装也不报错。
 - 不阻断：init_phoenix 任何异常仅 logger.warning 并返回 False，绝不影响主流程与测试。
 
 只装轻量 opentelemetry-sdk 也能埋点（属性名用字符串常量兜底，不强依赖 openinference 包）。
 """
-import importlib
 import logging
 from contextlib import contextmanager
 from typing import Any, Dict, Optional
@@ -87,64 +86,66 @@ def _reset_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phoenix 初始化（进程内 launch_app + OTLP register）
+# OTLP 导出初始化（推送到外部独立运行的 Phoenix collector）
 # ---------------------------------------------------------------------------
 _phoenix_initialized = False
 
 
 def init_phoenix() -> bool:
-    """进程内拉起 Phoenix UI/collector 并注册全局 tracer provider
+    """配置 OTLP/HTTP 导出器，把 span 推送到外部独立运行的 Phoenix collector
 
-    懒加载重依赖；任何 ImportError / 异常仅告警并返回 False，绝不阻断主流程。
-    成功返回 True（幂等：重复调用直接返回已初始化状态）。
+    主环境不依赖 phoenix 包（Phoenix 隔离在独立 .venv-obs）；仅需 opentelemetry-sdk
+    与 opentelemetry-exporter-otlp-proto-http（见 pyproject.toml 的 observability extra）。
+    懒加载 exporter：未装则告警并返回 False，绝不阻断主流程。成功返回 True（幂等）。
     """
     global _phoenix_initialized
     if _phoenix_initialized:
         return True
 
-    # 1) 懒加载 phoenix（兼容 phoenix / arize_phoenix 两种包名）
-    px = None
-    for mod_name in ("phoenix", "arize_phoenix"):
-        try:
-            px = importlib.import_module(mod_name)
-            break
-        except ImportError:
-            continue
-    if px is None:
+    # 1) 懒加载 OTLP/HTTP 导出器（未装 observability extra 时优雅降级）
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    except ImportError:
         logger.warning(
-            "[observability] 未安装 Phoenix，跳过可视化初始化"
-            "（如需启用：pip install -r requirements-observability.txt）"
+            "[observability] 缺少 OTLP/HTTP 导出器，跳过可视化初始化"
+            "（如需启用：uv sync --extra observability，并运行 scripts/start_phoenix.*）"
         )
         return False
 
-    # 2) 懒加载 register（兼容 phoenix.otel / arize_phoenix.otel）
-    register = None
-    for mod_name in ("phoenix.otel", "arize_phoenix.otel"):
-        try:
-            register = importlib.import_module(mod_name).register
-            break
-        except Exception:
-            continue
-
+    # 2) 配置 provider + BatchSpanProcessor，把 span 推到外部 Phoenix 的 /v1/traces
     try:
         from financial_rag.config import config
 
         obs = config.observability
-        px.launch_app()
-        if register is not None:
-            register(
-                project_name=obs.project_name,
-                endpoint=f"{obs.endpoint}/v1/traces",
-                set_global_tracer_provider=True,
+        endpoint = obs.endpoint.rstrip("/")
+        if not endpoint.endswith("/v1/traces"):
+            endpoint = f"{endpoint}/v1/traces"
+
+        # 复用已存在的全局 provider（如测试注入的 InMemorySpanExporter），否则新建
+        provider = trace.get_tracer_provider()
+        if not isinstance(provider, TracerProvider):
+            provider = TracerProvider(
+                resource=Resource.create({"service.name": obs.project_name})
             )
+            trace.set_tracer_provider(provider)
+
+        exporter = OTLPSpanExporter(
+            endpoint=endpoint,
+            headers={"x-phoenix-project-name": obs.project_name},
+        )
+        provider.add_span_processor(BatchSpanProcessor(exporter))
         _phoenix_initialized = True
         logger.info(
-            f"[observability] Phoenix 已启动: project={obs.project_name}, "
-            f"endpoint={obs.endpoint}"
+            f"[observability] OTLP 导出已配置: project={obs.project_name}, "
+            f"endpoint={endpoint}"
         )
         return True
     except Exception as exc:
-        logger.warning(f"[observability] Phoenix 初始化失败，主流程不受影响: {exc}")
+        logger.warning(f"[observability] OTLP 导出配置失败，主流程不受影响: {exc}")
         return False
 
 

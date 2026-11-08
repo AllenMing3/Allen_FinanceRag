@@ -1,22 +1,27 @@
-# ==================== Observability (Arize Phoenix) ====================
-# Optional heavy deps for LOCAL full-link trace visualization ONLY.
-# CI and offline tests do NOT need these; without them observe_span is a no-op.
-#   pip install -r requirements-observability.txt
-# Enable: set PHOENIX_ENABLED=true, run pipeline/web, open http://localhost:6006.
+# ============ Observability: Phoenix ISOLATED environment (.venv-obs) ============
+# This file is for the ISOLATED phoenix environment ONLY. Do NOT install arize-phoenix
+# into the main .venv -- it hard-conflicts with the main runtime deps
+# (openai<3 ecosystem pulled by nothing now, protobuf pinned by chromadb, etc.).
 #
-# PYTHON 3.11 COMPAT: arize-phoenix 19.x/20.x define a dataclass field with a
-#   MappingProxyType default (trace/dsl/filter.py), which Python 3.11 rejects as an
-#   unhashable default and crashes on import. Fixed in 21.0.0 via
-#   field(default_factory=...). Pin >=21.0.0 when running on Python 3.11.
-# ASCII-ONLY COMMENTS ON PURPOSE: pip decodes requirements files with the locale
-#   codec (gbk on Chinese Windows); non-ASCII comments raise UnicodeDecodeError.
+# Setup (from project root):
+#   uv venv .venv-obs
+#   uv pip install --python .venv-obs -r requirements-observability.txt --index https://pypi.org/simple
+#   scripts/start_phoenix.ps1   (Windows)  |  scripts/start_phoenix.sh  (Linux/macOS)
+#
+# WHY --index: if your uv default index is a China mirror (e.g. Tsinghua), it may lack
+#   arize-phoenix-sqlean (a new 21.0.0 dependency; mirror sync lags behind PyPI). Adding
+#   --index https://pypi.org/simple lets uv fall back to PyPI for the missing package.
+#   -> Phoenix UI + OTLP collector on http://localhost:6006
+#
+# The MAIN app pushes spans to this collector over OTLP/HTTP. That exporter lives in the
+# main env's 'observability' extra (pyproject.toml: opentelemetry-exporter-otlp-proto-http),
+# NOT here. This env only needs the phoenix server itself.
+#
+# PYTHON 3.11 COMPAT: arize-phoenix 19.x/20.x crash on import under Python 3.11
+#   (MappingProxyType dataclass default in trace/dsl/filter.py); fixed in 21.0.0 via
+#   field(default_factory=...). Pin >=21.0.0.
+# ASCII-ONLY COMMENTS ON PURPOSE: pip/uv may decode this file with the locale codec
+#   (gbk on Chinese Windows); non-ASCII comments raise UnicodeDecodeError.
 
-# Phoenix UI + in-process collector (px.launch_app)
+# Phoenix UI + OTLP collector (receives spans pushed from the main app)
 arize-phoenix>=21.0.0
-
-# OTLP exporter: push spans to the Phoenix collector
-opentelemetry-exporter-otlp>=1.20.0
-
-# OpenInference semantic conventions (span kind / attribute names).
-# tracing.py falls back to equivalent string literals if this package is absent.
-openinference-semantic-conventions>=0.1.0
