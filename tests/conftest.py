@@ -9,8 +9,17 @@ os.environ.setdefault("PHOENIX_ENABLED", "false")
 
 import pytest
 
+from financial_rag.config import config as _config
+from financial_rag.observability import tracing as _tracing
 from financial_rag.tools.core import FunctionRegistry, ToolExecutor, create_financial_registry
 from financial_rag.mock_data import MOCK_LONG_ARTICLES
+
+# setdefault 会被 config 导入期的 load_dotenv(override=True) 用 .env 的值覆盖：
+# 若本地 .env 设了 PHOENIX_ENABLED=true，测试会误启用埋点。故导入后强制关闭并
+# 复位缓存，让“测试永不启用 Phoenix”这一契约与本地 .env 开关彻底解耦
+# （与下方 _force_local_retrieval 对抗 DASHSCOPE_API_KEY 同理）。仅测试层生效。
+_config.observability.enable = False
+_tracing._reset_cache()
 
 
 # ===================== AI Sector Sample Texts =====================

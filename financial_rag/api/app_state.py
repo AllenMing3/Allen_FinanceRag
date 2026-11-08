@@ -80,6 +80,17 @@ def _ensure_init():
         _state["has_key"] = bool(_cfg.llm.api_key)
         _state["llm"] = get_llm(api_key=_cfg.llm.api_key, model=_cfg.llm.model) if _state["has_key"] else None
 
+        # 可观测性：PHOENIX_ENABLED=true 时配置 OTLP 导出器（幂等、失败不阻断）。
+        # 放在最前面，确保后续 KB 索引的 embedding 调用也能被采集。
+        # 与 factory.setup_environment() 的 CLI 路径对齐，让 `python -m financial_rag.web`
+        # 直连入口也能推送 span（否则只有 `main.py web` 会初始化）。
+        if _cfg.observability.enable:
+            try:
+                from financial_rag.observability import init_phoenix
+                init_phoenix()
+            except Exception as exc:  # pragma: no cover - 埋点初始化绝不阻断启动
+                logger.warning(f"[observability] 初始化异常，已忽略: {exc}")
+
         _state["retriever"] = create_hybrid_retriever()
         _state["registry"] = create_financial_registry(retriever=_state["retriever"], llm=_state["llm"])
         _state["executor"] = ToolExecutor(_state["registry"])

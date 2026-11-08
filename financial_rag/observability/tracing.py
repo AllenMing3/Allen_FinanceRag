@@ -129,7 +129,12 @@ def init_phoenix() -> bool:
         provider = trace.get_tracer_provider()
         if not isinstance(provider, TracerProvider):
             provider = TracerProvider(
-                resource=Resource.create({"service.name": obs.project_name})
+                resource=Resource.create({
+                    "service.name": obs.project_name,
+                    # Phoenix v21+ 用 resource 属性归属项目，不再认 x-phoenix-project-name
+                    # header；缺这行所有 span 都会落进 default 项目（已实测验证）。
+                    "openinference.project.name": obs.project_name,
+                })
             )
             trace.set_tracer_provider(provider)
 
