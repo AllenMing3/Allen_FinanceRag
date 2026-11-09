@@ -746,9 +746,7 @@ def create_financial_registry(retriever=None, llm=None, lightrag_adapter=None) -
         registry.add(tool_def)
 
     # ---- 评分工具 (供 ScoringAgent 调用) ----
-    from financial_rag.tools.scoring_tools import SCORING_TOOLS, inject_scoring_llm
-    if llm:
-        inject_scoring_llm(llm)
+    from financial_rag.tools.scoring_tools import SCORING_TOOLS
     for tool_def in SCORING_TOOLS:
         registry.add(tool_def)
 

@@ -1,27 +1,22 @@
 """
-架构三: HallucinationGuard — 六层防幻觉校验
+架构三: HallucinationGuard — L1-L4 规则层防幻觉校验
 
 核心设计:
-1. 六层递进式防幻觉: 规则层(L1-L4) + LLM层(L5-L6)
+1. 四层确定性规则校验: 零 LLM 依赖、零成本、毫秒级，供运行时每请求使用
 2. 与业务脱钩: 只定义评分维度和检查层级，不绑定领域
 3. 透明评分: 每层得分 + 理由嵌入最终输出
 
 各层实现已拆分到独立模块:
 - L1-L4 (规则层): guard/rule_layers.py
-- L5 (LLM质疑): guard/llm_critique.py
-- L6 (LLM协助): guard/llm_assist.py
+
+深度语义评判（LLM-as-judge）不在运行时路径，由离线 RAGAS faithfulness
+评估承担: financial_rag/eval/ragas_judge.py（旧 L5/L6 LLM 层已淘汰删除）。
 """
 from typing import List, Dict
-import logging
 
-logger = logging.getLogger(__name__)
-
-
-# ===================== 六层防幻觉中间件 =====================
+# ===================== 规则层防幻觉中间件 =====================
 # 各层实现已拆分到独立模块:
 # - L1-L4 (规则层): guard/rule_layers.py
-# - L5 (LLM质疑): guard/llm_critique.py
-# - L6 (LLM协助): guard/llm_assist.py
 
 from .rule_layers import (
     l1_source_grounding,
@@ -29,47 +24,38 @@ from .rule_layers import (
     l3_citation_integrity,
     l4_structure_compliance,
 )
-from .llm_critique import llm_critique
-from .llm_assist import llm_assist
 
 
 class HallucinationGuard:
     """
-    六层防幻觉校验 — 规则层(L1-L4) + LLM层(L5-L6)，分数透明
+    L1-L4 规则层防幻觉校验 — 确定性、零 LLM 依赖，分数透明
 
     L1: 来源锚定 — jieba 分词 + token 重叠率，逐句追溯到检索源
     L2: 数值一致 — 提取 answer 中的「数字+单位」对，交叉比对 source
     L3: 引用完整 — [N] 标记存在且 N 对应有效来源
     L4: 结构规范 — 输出是否包含预期段落（摘要/要点/风险等）
-    L5: LLM质疑 — LLM 审查规则层结果，找出规则盲区（假阳性/假阴性）
-    L6: LLM协助 — LLM 独立逐句扫描，发现规则抓不到的幻觉
 
     接口向后兼容: check() / precheck() / format_report()
     """
 
+    # 权重 = 原六层权重中 L1-L4 部分按原比例归一（L5/L6 已淘汰）
     LAYER_WEIGHTS = {
-        "L1_source_grounding": 0.25,
-        "L2_numerical_fidelity": 0.15,
-        "L3_citation_integrity": 0.10,
-        "L4_structure_compliance": 0.10,
-        "L5_llm_critique": 0.20,
-        "L6_llm_assist": 0.20,
+        "L1_source_grounding": 0.417,
+        "L2_numerical_fidelity": 0.25,
+        "L3_citation_integrity": 0.167,
+        "L4_structure_compliance": 0.167,
     }
 
     # 来源锚定阈值：与 rule_layers.GROUNDING_THRESHOLD 保持一致（0.30，实测分离间隙）
     GROUNDING_THRESHOLD = 0.30
 
-    # LLM 层触发阈值：规则层总分低于此值时触发 L5+L6
-    LLM_TRIGGER_THRESHOLD = 0.85
-
-    def __init__(self, threshold: float = 0.6, llm=None):
+    def __init__(self, threshold: float = 0.6):
         self.threshold = threshold
-        self._llm = llm
 
     # ================== 公共接口 ==================
 
     def check(self, answer: str, sources: List[Dict], mode: str = "rag") -> Dict:
-        """执行六层全量检查（L1-L4 规则层 + L5-L6 LLM层）
+        """执行 L1-L4 规则层全量检查（确定性，无 LLM 调用）
 
         Args:
             mode: "rag" (RAG 查询) 或 "analysis" (深度分析，宽松引用+结构)
@@ -79,31 +65,6 @@ class HallucinationGuard:
         checks["L2_numerical_fidelity"] = l2_numerical_fidelity(answer, sources)
         checks["L3_citation_integrity"] = l3_citation_integrity(answer, sources, mode=mode)
         checks["L4_structure_compliance"] = l4_structure_compliance(answer, mode=mode)
-
-        # L5+L6: LLM 层 — 条件触发，跳过时写入显式标记（禁止静默省略）
-        rule_score = self._compute_rule_score(checks)
-        if self._llm is not None and rule_score < self.LLM_TRIGGER_THRESHOLD:
-            logger.info(f"[Guard] L5/L6 触发 (rule_score={rule_score:.2f} < {self.LLM_TRIGGER_THRESHOLD})")
-            # L5 与 L6 相互独立（L6 不消费 L5 输出），并发执行把 LLM 层墙钟耗时从
-            # 「L5+L6 串行」降为「max(L5, L6)」，是新闻解读防幻觉慢的直接优化点。
-            # 安全性：两层各自 new LLMCaller 且 use_cache=False（不触碰共享 _cache）；
-            # checks 仅在两 future 完成后由主线程写入，提交时 llm_critique 读到的仍是 L1-L4。
-            from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=2) as _ex:
-                _f_l5 = _ex.submit(llm_critique, answer, sources, checks, self._llm)
-                _f_l6 = _ex.submit(llm_assist, answer, sources, self._llm)
-                checks["L5_llm_critique"] = _f_l5.result()
-                checks["L6_llm_assist"] = _f_l6.result()
-            logger.info(f"[Guard] L5={checks['L5_llm_critique'].get('score', 0):.2f}, L6={checks['L6_llm_assist'].get('score', 0):.2f}")
-        else:
-            if self._llm is None:
-                reason = "LLM 未注入，LLM 层无法执行"
-                logger.debug("L5/L6 skipped: no LLM injected")
-            else:
-                reason = f"规则层得分 {rule_score:.0%} ≥ {self.LLM_TRIGGER_THRESHOLD:.0%}，LLM 层未触发"
-                logger.debug(f"L5/L6 skipped: rule score {rule_score:.2f} >= {self.LLM_TRIGGER_THRESHOLD}")
-            checks["L5_llm_critique"] = {"score": 0.0, "skipped": True, "skip_reason": reason}
-            checks["L6_llm_assist"] = {"score": 0.0, "skipped": True, "skip_reason": reason}
 
         checks["overall"] = self._compute_overall(checks)
 
@@ -116,22 +77,7 @@ class HallucinationGuard:
             "checks": checks,
             "unverified": checks.get("L1_source_grounding", {}).get("unanchored", []),
             "report": self.format_report(overall_score, checks),
-            "llm_layers_active": not checks.get("L5_llm_critique", {}).get("skipped", True),
         }
-
-    def _compute_rule_score(self, checks: Dict) -> float:
-        """仅计算 L1-L4 规则层的加权总分（用于 LLM 层触发判断）"""
-        rule_weights = {
-            "L1_source_grounding": 0.35,
-            "L2_numerical_fidelity": 0.25,
-            "L3_citation_integrity": 0.20,
-            "L4_structure_compliance": 0.20,
-        }
-        total = 0.0
-        for layer, w in rule_weights.items():
-            if layer in checks:
-                total += checks[layer].get("score", 0) * w
-        return total
 
     def precheck(self, answer: str, sources: List[Dict]) -> Dict:
         """快速预检（仅 L1 + L2）"""
@@ -232,35 +178,5 @@ class HallucinationGuard:
             lines.append("\n⚠️ **警告**:")
             for w in warnings:
                 lines.append(f"  - {w}")
-
-        # L5 LLM质疑
-        l5 = checks.get("L5_llm_critique")
-        if l5:
-            if l5.get("skipped"):
-                lines.append(f"├ LLM质疑: 未执行 — {l5.get('skip_reason', '未知原因')}")
-            else:
-                l5_score = l5.get("score", 0)
-                fp = l5.get("false_positives", [])
-                fn = l5.get("false_negatives", [])
-                lines.append(f"├ LLM质疑: {l5_score:.0%} — 发现 {len(fp)} 条假阳性, {len(fn)} 条假阴性")
-                for item in (fp + fn)[:3]:
-                    lines.append(f"  - {item}")
-
-        # L6 LLM协助
-        l6 = checks.get("L6_llm_assist")
-        if l6:
-            if l6.get("skipped"):
-                lines.append(f"└ LLM协助: 未执行 — {l6.get('skip_reason', '未知原因')}")
-            else:
-                l6_score = l6.get("score", 0)
-                unsupported = l6.get("unsupported_claims", [])
-                fabricated = l6.get("fabricated_claims", [])
-                total_claims = l6.get("total_claims", 0)
-                supported = l6.get("supported_claims", 0)
-                lines.append(f"└ LLM协助: {l6_score:.0%} — {supported}/{total_claims} 句有语义支撑")
-                for item in fabricated[:3]:
-                    lines.append(f"  - 编造: \"{item}\"")
-                for item in unsupported[:3]:
-                    lines.append(f"  - 无据: \"{item}\"")
 
         return "\n".join(lines)

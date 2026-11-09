@@ -107,8 +107,8 @@ def _build_full_analysis_text(result: dict) -> str:
     return "\n".join(parts) if parts else analysis_text
 
 
-def _run_hallucination_check(result: dict, llm=None, extra_sources: list = None):
-    """Run HallucinationGuard on analysis result and inject 'hallucination' key.
+def _run_hallucination_check(result: dict, extra_sources: list = None):
+    """Run HallucinationGuard (L1-L4 rule layers) on analysis result and inject 'hallucination' key.
 
     Uses kb_sources + extra_sources (news text / topic text) as grounding material.
     Builds comprehensive text from structured output so Guard checks match what user sees.
@@ -133,7 +133,7 @@ def _run_hallucination_check(result: dict, llm=None, extra_sources: list = None)
         return
 
     try:
-        guard = HallucinationGuard(llm=llm)
+        guard = HallucinationGuard()
         guard_result = guard.check(full_text, guard_sources, mode="analysis")
         result["hallucination"] = serialize_guard_result(guard_result)
     except Exception as e:
@@ -276,8 +276,7 @@ async def api_analyze_news(req: AnalyzeNewsRequest):
             retriever=_state.get("retriever"),
             kb_built=_state.get("kb_built", False),
         )
-        _run_hallucination_check(result, llm=_state.get("llm") if _state.get("has_key") else None,
-                                   extra_sources=[{"text": text}])
+        _run_hallucination_check(result, extra_sources=[{"text": text}])
         logger.info(f"[API] /analyze/news [fallback]: assessment={result.get('assessment')}")
 
     # --- Post-processing: session + KB save ---
@@ -352,7 +351,7 @@ async def api_analyze_topic(req: AnalyzeTopicRequest):
             f"{n.get('title', '')} — {n.get('content', '')}"
             for n in result.get("news", [])[:5]
         )
-        _run_hallucination_check(result, llm=_state.get("llm") if _state.get("has_key") else None,
+        _run_hallucination_check(result,
                                    extra_sources=[{"text": topic_news_text}] if topic_news_text else [])
         logger.info(f"[API] /analyze/topic [fallback]: assessment={result.get('assessment')}")
 

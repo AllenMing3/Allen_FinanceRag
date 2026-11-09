@@ -2,10 +2,10 @@
 financial_rag.guard — 防幻觉层
 
 独立模块，与 core/ 平级，职责清晰：
-- HallucinationGuard: 六层递进式防幻觉校验 (编排器)
+- HallucinationGuard: L1-L4 规则层防幻觉校验 (编排器，确定性、零 LLM 依赖)
 - rule_layers: L1-L4 规则层实现
-- llm_critique: L5 LLM质疑层
-- llm_assist: L6 LLM协助层
+
+深度语义评判（LLM-as-judge）已迁至离线 eval: financial_rag/eval/ragas_judge.py
 
 用法:
     from financial_rag.guard import HallucinationGuard

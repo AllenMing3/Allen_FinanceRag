@@ -191,17 +191,18 @@ async def api_kb_query(req: QueryRequest):
             elapsed_ms=fill_elapsed,
         )
 
-    # Hallucination guard: L1-L4 rule layers (L5-L6 only if LLM available + rule score low)
+    # Hallucination guard: L1-L4 rule layers (确定性规则层，无 LLM 调用；
+    # 深度语义评判由离线 RAGAS faithfulness 承担: eval/ragas_judge.py)
     hallucination = None
     if answer and retrieval:
         try:
-            guard_llm = _state.get("llm") if _state.get("has_key") else None
-            guard = HallucinationGuard(llm=guard_llm)
+            guard = HallucinationGuard()
             guard_sources = [{"text": it["text"]} for it in retrieval]
             guard_result = guard.check(answer, guard_sources)
             card.record_hallucination(
                 overall_score=guard_result["overall_score"],
-                layer_scores={k: v.get("score", 0) for k, v in guard_result.get("checks", {}).items()},
+                layer_scores={k: v.get("score", 0) for k, v in guard_result.get("checks", {}).items()
+                              if k != "overall" and isinstance(v, dict)},
                 risk=guard_result["risk"],
             )
             hallucination = serialize_guard_result(guard_result)

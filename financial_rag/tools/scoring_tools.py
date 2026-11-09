@@ -13,14 +13,6 @@ from financial_rag.tools.core import FunctionDef
 
 logger = logging.getLogger(__name__)
 
-# LLM 注入引用，供 HallucinationGuard L5+L6 使用
-_scoring_llm_ref = {"llm": None}
-
-
-def inject_scoring_llm(llm):
-    """注入 LLM 实例供防幻觉 L5/L6 层使用"""
-    _scoring_llm_ref["llm"] = llm
-
 
 # ===================== 工具实现 =====================
 
@@ -118,8 +110,7 @@ def check_hallucination(output_text: str, source_items: List = None, mode: str =
     """
     from financial_rag.guard.reflector import HallucinationGuard
 
-    llm = _scoring_llm_ref["llm"]
-    guard = HallucinationGuard(llm=llm)
+    guard = HallucinationGuard()
     sources = source_items or []
     result = guard.check(output_text, sources, mode=mode)
 

@@ -1,0 +1,130 @@
+{
+  "timestamp": "2026-11-09 23:48:30",
+  "judge_model": "qwen-plus",
+  "metric": "faithfulness",
+  "good_mean": 0.7933,
+  "defect_mean": 0.75,
+  "bad_mean": 0.8333,
+  "missfield_mean": 1.0,
+  "gap": 0.0433,
+  "gap_threshold": 0.15,
+  "detection_rate": 1.0,
+  "gap_ok": false,
+  "detection_ok": true,
+  "fabnum_ok": true,
+  "per_case": [
+    {
+      "case_id": "nb_pos_sensetime_revenue_01",
+      "tier": "good",
+      "tags": [
+        "positive",
+        "financial_news",
+        "revenue"
+      ],
+      "faithfulness": 1.0
+    },
+    {
+      "case_id": "nb_pos_sensetime_genai_02",
+      "tier": "good",
+      "tags": [
+        "positive",
+        "financial_news",
+        "genai"
+      ],
+      "faithfulness": 0.8
+    },
+    {
+      "case_id": "nb_pos_sensetime_compute_03",
+      "tier": "good",
+      "tags": [
+        "positive",
+        "financial_news",
+        "compute"
+      ],
+      "faithfulness": 1.0
+    },
+    {
+      "case_id": "nb_pos_sensetime_auto_04",
+      "tier": "good",
+      "tags": [
+        "positive",
+        "financial_news",
+        "auto_driving"
+      ],
+      "faithfulness": 0.5
+    },
+    {
+      "case_id": "nb_pos_sensetime_api_05",
+      "tier": "good",
+      "tags": [
+        "positive",
+        "financial_news",
+        "api"
+      ],
+      "faithfulness": 0.6667
+    },
+    {
+      "case_id": "nb_bad_fabnum_01",
+      "tier": "bad",
+      "tags": [
+        "negative",
+        "fabricated_number",
+        "financial_news"
+      ],
+      "faithfulness": 0.8
+    },
+    {
+      "case_id": "nb_bad_fabnum_02",
+      "tier": "bad",
+      "tags": [
+        "negative",
+        "fabricated_number",
+        "financial_news"
+      ],
+      "faithfulness": 0.6
+    },
+    {
+      "case_id": "nb_bad_missfield_01",
+      "tier": "bad",
+      "tags": [
+        "negative",
+        "missing_field",
+        "financial_news"
+      ],
+      "faithfulness": 1.0
+    },
+    {
+      "case_id": "nb_bad_missfield_02",
+      "tier": "bad",
+      "tags": [
+        "negative",
+        "missing_field",
+        "financial_news"
+      ],
+      "faithfulness": 1.0
+    },
+    {
+      "case_id": "nb_bad_ungrounded_01",
+      "tier": "bad",
+      "tags": [
+        "negative",
+        "ungrounded_claim",
+        "financial_news"
+      ],
+      "faithfulness": 0.8
+    },
+    {
+      "case_id": "nb_bad_ungrounded_02",
+      "tier": "bad",
+      "tags": [
+        "negative",
+        "ungrounded_claim",
+        "financial_news"
+      ],
+      "faithfulness": 0.8
+    }
+  ],
+  "violations": [
+    "方向性不足: good−defect gap=0.0433 < 阈值 0.15"
+  ]
+}

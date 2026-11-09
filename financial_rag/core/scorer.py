@@ -401,7 +401,7 @@ class PipelineScoreCard:
             if s < 0.5:
                 warns.append(f"{layer} 评分过低 ({s:.2f})")
         return self.record(
-            "hallucination_check", "六层防幻觉校验", overall_score,
+            "hallucination_check", "规则层防幻觉校验(L1-L4)", overall_score,
             elapsed_ms=elapsed_ms,
             details={"layer_scores": layer_scores, "risk": risk},
             diagnosis=diag, warnings=warns, suggestions=sug,
@@ -411,9 +411,8 @@ class PipelineScoreCard:
                                     elapsed_ms: float = 0.0):
         """逐层记录防幻觉分数（可选细粒度）"""
         layer_names = {
-            "L1": "L1 来源验证", "L2": "L2 一致性检查",
-            "L3": "L3 事实核查", "L4": "L4 完整性检查",
-            "L5": "L5 引用准确性", "L6": "L6 综合评分",
+            "L1": "L1 来源锚定", "L2": "L2 数值一致",
+            "L3": "L3 引用完整", "L4": "L4 结构规范",
         }
         for key, display in layer_names.items():
             if key in layer_scores:

@@ -576,10 +576,9 @@ class PipelineScheduler:
                     details={"template": result.fill_stats.template_name},
                 )
 
-            # 防幻觉校验
+            # 防幻觉校验（L1-L4 规则层，确定性）
             if result.final_output:
-                from financial_rag.tools.scoring_tools import _scoring_llm_ref
-                guard = HallucinationGuard(llm=_scoring_llm_ref.get("llm"))
+                guard = HallucinationGuard()
                 raw_items = result.retrieved_items or []
                 check = guard.check(result.final_output, raw_items)
                 result.hallucination_check = check
