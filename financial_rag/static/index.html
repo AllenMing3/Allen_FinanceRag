@@ -55,7 +55,7 @@
     <div class="sidebar-footer">
       <div style="font-size:10px;color:var(--text3);line-height:1.6">
         BM25 + ChromaDB Hybrid<br>
-        6-Layer Hallucination Guard<br>
+        4-Layer Rule Guard<br>
         Multi-Agent Pipeline
       </div>
     </div>
@@ -144,16 +144,14 @@
       </div>
 
       <div class="ov-section">
-        <h3 class="ov-title">6-Layer Hallucination Guard</h3>
+        <h3 class="ov-title">4-Layer Rule-Based Hallucination Guard</h3>
         <div class="guard-layers">
-          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:100%;background:var(--accent)"></div></div><div class="gl-info"><span class="gl-name">L1 来源锚定</span><span class="gl-weight">25%</span><span class="gl-desc">jieba 分词 → 逐句 token 重叠率 ≥ 15% 视为有来源支撑</span></div></div>
-          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:60%;background:var(--accent2)"></div></div><div class="gl-info"><span class="gl-name">L2 数值一致</span><span class="gl-weight">15%</span><span class="gl-desc">提取「数字+单位」对，交叉比对检索源，防止编造数据</span></div></div>
-          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--ok)"></div></div><div class="gl-info"><span class="gl-name">L3 引用完整</span><span class="gl-weight">10%</span><span class="gl-desc">[N] 标记存在且 N 对应有效来源，防止伪引用</span></div></div>
-          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--warn)"></div></div><div class="gl-info"><span class="gl-name">L4 结构规范</span><span class="gl-weight">10%</span><span class="gl-desc">检测摘要/要点/分析/风险等预期段落是否存在</span></div></div>
-          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:80%;background:var(--danger)"></div></div><div class="gl-info"><span class="gl-name">L5 LLM 质疑</span><span class="gl-weight">20%</span><span class="gl-desc">LLM 审查规则层结果，找出假阳性/假阴性</span></div></div>
-          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:80%;background:#b388ff"></div></div><div class="gl-info"><span class="gl-name">L6 LLM 协助</span><span class="gl-weight">20%</span><span class="gl-desc">LLM 独立逐句扫描，发现规则抓不到的幻觉</span></div></div>
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:100%;background:var(--accent)"></div></div><div class="gl-info"><span class="gl-name">L1 来源锚定</span><span class="gl-weight">42%</span><span class="gl-desc">jieba 分词 → 逐句 token 重叠率 ≥ 30% 视为有来源支撑</span></div></div>
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:60%;background:var(--accent2)"></div></div><div class="gl-info"><span class="gl-name">L2 数值一致</span><span class="gl-weight">25%</span><span class="gl-desc">提取「数字+单位」对，交叉比对检索源，防止编造数据</span></div></div>
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--ok)"></div></div><div class="gl-info"><span class="gl-name">L3 引用完整</span><span class="gl-weight">17%</span><span class="gl-desc">[N] 标记存在且 N 对应有效来源，防止伪引用</span></div></div>
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--warn)"></div></div><div class="gl-info"><span class="gl-name">L4 结构规范</span><span class="gl-weight">17%</span><span class="gl-desc">检测摘要/要点/分析/风险等预期段落是否存在</span></div></div>
         </div>
-        <p style="font-size:10px;color:var(--text3);margin-top:8px">规则层(L1-L4) 总分低于 85% 时自动触发 LLM 层(L5-L6) · 每层得分透明嵌入最终输出</p>
+        <p style="font-size:10px;color:var(--text3);margin-top:8px">L1-L4 确定性规则层（零 LLM、毫秒级）每层得分透明嵌入最终输出 · 深度语义评判由离线 RAGAS faithfulness 评估承担</p>
       </div>
 
       <div class="ov-section">

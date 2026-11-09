@@ -37,7 +37,7 @@
 └──────────────────────────┬───────────────────────────────────┘
 ┌─ 基础设施 ───────────────▼───────────────────────────────────┐
 │  retrievers/ 混合检索(BM25 FTS5+Chroma+RRF+Rerank+扩词)      │
-│  llm/ DashScope客户端+ModelRouter   guard/ 6层防幻觉          │
+│  llm/ DashScope客户端+ModelRouter   guard/ L1-L4防幻觉        │
 │  services/ 分析·会话·持久化          slot_filler+templates    │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -73,7 +73,7 @@ graph TD
     subgraph INFRA["④ 基础设施"]
         RETR["HybridRetriever<br/>BM25+向量+RRF+Rerank"]
         LLM["DashScope Qwen"]
-        GUARD["HallucinationGuard 6 层"]
+        GUARD["HallucinationGuard L1-L4"]
         KB[("KB · ChromaDB")]
     end
 
@@ -182,8 +182,9 @@ AnalysisAgent 内部工具链分发（`_run_kline_chain` / `_run_event_chain` /
   dict 字段 merge、list 字段 extend、标量覆盖；未知 key 落入 metadata。
 - **ScoringAgent 通用接口**：上游经 metadata 传
   `scoring_source_items` / `scoring_mode`("rag"|"analysis") / `scoring_text` 三字段即可接入评分。
-- **防幻觉**：guard/reflector.HallucinationGuard，6 层（4 规则层 + LLM critique + LLM assist），
-  RAG 模式查 `[N]` 引用，analysis 模式查 `【】` 结构。
+- **防幻觉**：guard/reflector.HallucinationGuard，运行时 L1-L4 确定性规则层（零 LLM、四层恒跑），
+  RAG 模式查 `[N]` 引用，analysis 模式查 `【】` 结构；深度语义评判（LLM-as-judge）已前移到
+  离线 eval/ragas_judge.py（RAGAS faithfulness），旧 L5/L6 LLM 层已淘汰删除。
 - **可观测性**：observability/tracing.observe_span —— Phoenix/OpenInference 埋点收口（横切关注点，
   默认关闭走 no-op、未装 OTLP 导出器不报错）。第一期覆盖核心 RAG 链路：LLM(`llm/caller`)、
   检索(`retrievers/hybrid_engine.search`)、embedding/rerank(`llm/dashscope_client`)；
@@ -264,11 +265,11 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
 6. 假分数：`evaluate_pipeline_quality` 硬编码 fetch=0.9/index=0.85/process=0.8
    （scoring_tools.py L63/70/79，"有数据即高分"）、`_phase_evolve` 硬编码 0.9/0.85/0.8
    → pipeline_grade 系统性虚高，应换真实质量信号（RAGAS 基线已建）。
-   **另：L5/L6 触发条件自我掩盖** —— LLM 纠错层仅在 `rule_score < 0.85` 触发，而 L1
-   来源锚定阈值偏低（token 重叠 ≥0.30 即算锚定，rule_layers.py GROUNDING_THRESHOLD；Step 7
-   加固已从 0.15 提到 0.30，钉死编造句漏抓），但**语义反转仍未解**（"下降15%"
-   vs"增长15%"）因 token 高度重叠被误判已锚定 → rule_score 被假阳性顶高 → 越需要 LLM
-   纠错的语义幻觉越不触发 LLM 层（需词级极性/方向校验，非单纯提阈能解）。
+   **另：L1 语义反转盲点**（旧 L5/L6 LLM 纠错层已淘汰删除，运行时无 LLM 兜底）
+   —— L1 来源锚定阈值 token 重叠 ≥0.30 即算锚定（rule_layers.py GROUNDING_THRESHOLD；
+   Step 7 加固已从 0.15 提到 0.30，钉死编造句漏抓），但**语义反转仍未解**（"下降15%"
+   vs"增长15%"）因 token 高度重叠被误判已锚定；离线 RAGAS faithfulness 对这类
+   改写/极性也不敏感。方向：词级极性/方向校验，非单纯提阈能解。
 7. 重试机制失效：BaseAgent.run 吞掉所有异常，orchestrator 的 max_retries 永不触发。
 8. 三条 AnalysisAgent 入口（链 / _run_analysis_via_agent_chain / api_kline 直连）收敛为一条。
 9. **数据存储迁移到 PostgreSQL**（用户 2026-10 拍板，方向已定·待开工）：根治内存单例整表重写+无锁并发导致的丢数据（news_metadata 曾 -1361 行）与四份真相计数校验。范围核心先行——kb_docs/news_meta/stats/version 入 PG 做唯一真相，Chroma/LightRAG/bm25 降为可重建派生索引；`persistence.py` 换实现留签名（~18 处调用点零改动）；前置需 PG 实例 + 驱动 + Alembic + config/.env。
@@ -299,9 +300,10 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
 16. 同步+线程池架构 → async 化；verbose print → logger。
 17. IngestionAgent EXPECTED_METADATA_FIELDS 与 DocMetadata schema 脱节（fiscal_period/currency 财报时代残留）。
 18. AgentRouter 关键词正则分类 → LLM/Planner 路由；公司名硬编码正则与 STOCK_MAP 双份维护。
-19. 测试套件对齐：旧架构的约 594 用例全量套已废弃，替换为护栏驱动的按 RAG 流水线步骤测试（当前 273 用例，覆盖预处理/入库/查询解析/召回/RRF 融合/过滤门控/生成有据化 + 上下文组装 + L1 检索评估 + L2 输出评估 + 可观测性埋点，详见 README）。RAG 流水线 Step 0-7 已全部闭环；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁仍为手动触发。
+19. 测试套件对齐：旧架构的约 594 用例全量套已废弃，替换为护栏驱动的按 RAG 流水线步骤测试（当前 295 用例，覆盖预处理/入库/查询解析/召回/RRF 融合/过滤门控/生成有据化 + 上下文组装 + L1 检索评估 + L2 输出评估 + L3 LLM-as-judge(RAGAS，离线映射部分) + 可观测性埋点，详见 README）。RAG 流水线 Step 0-7 已全部闭环；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁仍为手动触发。
 20. 可观测性：RAG 可观测性工具选型已定 Phoenix（OpenInference/OTel，独立 `.venv-obs` 起服务 + 主应用 OTLP/HTTP 外推，默认关闭）；第一期核心 RAG 链路（LLM/检索/embedding/rerank）已落地，第二期（Agent 链/Pipeline 5 阶段/工具调用/护栏）尚未埋点。
 21. 依赖治理：迁移到 uv + PEP 621 `pyproject.toml`（单一真相源）+ `uv.lock`（可复现）。移除全项目 0 引用的 `llama-index` 冗余（曾拖进 openai<3 生态、与 Phoenix 冲突）；分 core/dev/observability 三组 extras；`arize-phoenix` 隔离到独立 `.venv-obs`；`requirements.txt` 改为 `uv export` 锁定产物。主环境 `.venv` 由 `uv sync --extra dev` 建；CI 改用 setup-uv + `uv sync --frozen`。
+22. **RAGAS LLM-as-judge 精度薄 + eval golden 单一**（六层防护退役后新增，用户 2026-11 拍板降级为辅助观测·后期强化）：① **judge 区分度弱**——qwen-plus 对中文改写声明判定噪声大（good 档被误扣到 0.5-0.6），good−defect mean-gap 实测仅 0.04-0.06（远低于理想 0.15）；qwen-max 对 RAGAS instructor schema 返回残缺 JSON、校验失败不可用。故 `eval/ragas_judge.py` 现定位为辅助观测（跑通即 exit 0，区分度仅报告不阻断），质量门禁实际仍靠 L1/L2 规则尺子 + step7。② **golden 集单一**——`output_news_brief.jsonl` 11 case 全部共用 1 篇源文档 `d_sensetime_long`（9 个不同 query），L2/L3 尺子判别力与泛化性受限于单文档、有过拟合风险。③ `extract_brief_claims` 只适配 NEWS_BRIEF 模板（写死 市场/展望 字段解析），deep_analysis/quick_qa 走不通。④ RAGAS 需 API key+重依赖，不进 CI，在线评判无回归保护。方向：扩 golden 到多源文档/多模板 + 试更强 judge 或专用 NLI + few-shot 提示改善区分度。
 
 ## 9. 测试与运行
 
@@ -309,7 +311,7 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
 uv sync --extra dev                       # 建 .venv，按 uv.lock 精确复现
 .venv\Scripts\activate.bat
 python -m financial_rag.main web        # Web UI: http://127.0.0.1:8000
-pytest tests -q                          # 273 用例, 护栏驱动按流水线步骤, 离线 <7s
+pytest tests -q                          # 295 用例, 护栏驱动按流水线步骤, 离线 <7s
 ```
 
 Mock 约定：只 mock 数据源 API（Tushare/RSS）；conftest 的 autouse fixture `_force_local_retrieval` 删除 DASHSCOPE_API_KEY，强制检索走本地（BM25+Jaccard），保证确定性、离线、可复现。LLM/Embedding/Rerank 仅在测试显式调用时才真实。

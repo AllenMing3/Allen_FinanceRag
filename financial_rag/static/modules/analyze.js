@@ -118,7 +118,6 @@ function renderHallucinationCard(hal) {
   const layerNames = {
     L1_source_grounding: '来源锚定', L2_numerical_fidelity: '数值一致',
     L3_citation_integrity: '引用完整', L4_structure_compliance: '结构规范',
-    L5_llm_critique: 'LLM质疑', L6_llm_assist: 'LLM协助',
   };
   let h = '<div class="quality-scorecard" style="margin-bottom:14px">';
   h += `<div class="qs-top" style="grid-template-columns:1fr 1fr">

@@ -98,13 +98,12 @@ CAPABILITY_MAP = {
     "防幻觉校验": {
         "tools": ["check_hallucination"],
         "入口": "financial_rag/tools/scoring_tools.py",
-        "实现": "financial_rag/guard/reflector.py  ← 6层校验逻辑在这",
+        "实现": "financial_rag/guard/reflector.py  ← L1-L4 规则层编排在这",
         "子模块": {
             "L1-L4规则层": "guard/rule_layers.py",
-            "L5 LLM Critique": "guard/llm_critique.py",
-            "L6 LLM Assist": "guard/llm_assist.py",
+            "LLM评判(离线)": "eval/ragas_judge.py  ← RAGAS faithfulness，非运行时",
         },
-        "说明": "改校验规则 → rule_layers.py; 改LLM审计 → llm_critique.py",
+        "说明": "改校验规则 → rule_layers.py; 运行时零 LLM(L1-L4恒跑); 深度语义评判 → 离线 eval/ragas_judge.py",
     },
     "评分系统（冻结）": {
         "tools": ["evaluate_pipeline_quality", "generate_score_report"],

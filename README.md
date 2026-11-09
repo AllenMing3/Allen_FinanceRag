@@ -10,7 +10,7 @@
 > **当前使命是 TDD。** 我们正在补建一套测试护栏，**一步一个脚印**地走完 RAG 流水线：推导每一步的契约、用真实行为去验证、修复暴露的问题、并把修复钉成永久的回归资产。不做大爆炸式重写。本 README 反映这一真实状态，而非过度包装。
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
-![Tests](https://img.shields.io/badge/tests-273%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-295%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
 ---
@@ -55,7 +55,7 @@
 | `tests/test_eval_golden.py` | 13 | golden qrels 语料结构（分级相关性、显式负例、场景标签） |
 | `tests/test_eval_retrieval.py` | 9 | 评估闭环：离线确定性、分通道可见、融合核心指标无回归 |
 
-**合计：273 通过 —— 离线运行，无需 API key。** 测试通过 `conftest` fixture 强制走本地检索（BM25 + Jaccard），因此确定性、无网络依赖。LLM/embedding 仅在测试显式调用时才保持真实；外部数据 API 一律 mock。
+**合计：295 通过 —— 离线运行，无需 API key。** 测试通过 `conftest` fixture 强制走本地检索（BM25 + Jaccard），因此确定性、无网络依赖。LLM/embedding 仅在测试显式调用时才保持真实；外部数据 API 一律 mock。
 
 **护栏已抓到的真实 bug（每个都有回归测试钉死）：**
 
@@ -78,9 +78,9 @@
 - **混合检索。** BM25 + ChromaDB 向量检索 + RRF 融合 + rerank + metadata 过滤 + 查询扩展。*检索质量正是护栏要度量的目标——目前尚未验证完毕。*
 - **离线检索评估。** `financial_rag/eval/` 是一套离线、确定的检索质量 harness：golden qrels（分级相关性 0-3）+ 标准 IR 指标（recall / precision / MRR / NDCG / MAP）+ bm25 / vector / fusion 分通道对比 + `baseline.json` 回归锁。已用它量化定位到融合阶段的检索弱点（单通道满分、RRF 融合后归零）。
 - **查询规划。** `QueryPlanner` 用一次 LLM 调用把复杂查询拆解为带 source/mode 的子查询；简单查询跳过它。
-- **防幻觉护栏。** ScoringAgent 在返回结果前运行多层护栏（规则层：来源有据、数值保真、引用完整、结构合规；外加 LLM 批判/辅助）。
+- **防幻觉护栏。** ScoringAgent 在返回结果前运行 L1-L4 确定性规则层（来源有据、数值保真、引用完整、结构合规；零 LLM、毫秒级）；深度语义评判（LLM-as-judge）已前移到离线 RAGAS faithfulness 评估。
 - **可观测的上下文组装。** 单一的 `ContextBuilder` 把检索到的 chunk 转成同时喂给 LLM 和护栏的 grounding，并发出保真轨迹（逐条 kept/dropped 及原因）。已被测试覆盖。
-- **图谱 RAG。** LightRAG 知识图谱接入入库流程；通过 function-calling 工具按需查询，由 `QueryPlanner` 的 `source: graph` 路由。
+- **图谱 RAG（可选，默认关闭）。** LightRAG 知识图谱接入入库流程；通过 function-calling 工具按需查询，由 `QueryPlanner` 的 `source: graph` 路由。lightrag 未纳入依赖锁定（PyPI 仅 beta），需源码安装并设 `LIGHTRAG_ENABLE=true` 才启用；默认关闭，避免未安装时启动报 `No module named 'lightrag'` 告警。
 - **多模态解析。** PDF 走 PyMuPDF（本地，无 API），图片走 qwen-vl-plus。
 - **Web UI + CLI。** FastAPI 暗色主题 UI（拖拽上传文件、知识库管理、双模式查询）以及一个 CLI。
 - **可扩展词典。** `DictionaryRegistry` 合并来自 `data/dictionaries/` 的外部 JSON——覆盖面无需改代码即可增长。
@@ -103,7 +103,7 @@ Agent 层（3 个）
    └─ Scoring    防幻觉护栏 + 质量评估
    │
    ├─ 检索        BM25 + Chroma · RRF + Rerank · +Graph
-   ├─ 数据 API    Tushare · 10jqka/东方财富 · LightRAG（已集成）
+   ├─ 数据 API    Tushare · 10jqka/东方财富 · LightRAG（可选，默认关闭）
    └─ LLM 层      LLMCaller（重试+缓存+JSON） · ModelRouter（4 档，Qwen）
 ```
 
@@ -118,9 +118,11 @@ AgentRouter 把每个查询分类为某种意图，然后调度器组装 Agent �
 | K 线分析 | "看下 600519 的 MACD" | Analysis → Scoring |
 | 事件影响 | "这次收购是利好还是利空？" | Analysis → Scoring |
 | 研报综合 | "总结一下 Q4 财报" | Ingestion → Analysis → Scoring |
-| 新闻深读 | "这周 AI 圈发生了什么？" | Analysis (deep) → Scoring |
+| 新闻深读 | "这周 AI 圈发生了什么？" | Analysis (deep_news) → Scoring |
 | 话题调研 | "调研一下 AI 芯片赛道" | Analysis (deep_topic) → Scoring |
 | 通用 | 其他任意查询 | Ingestion → Analysis → Scoring |
+
+> **两类路由**：K线/事件/研报/通用 是 AgentRouter 对自由文本做关键词+正则分类的意图；新闻深读(deep_news)/话题调研(deep_topic) 是「深度分析」面板的显式模式（`POST /api/analyze/news`、`/api/analyze/topic`），不经关键词分类，直接以 Analysis → Scoring 执行。（AgentRouter 另有一个 `news` 关键词意图，走 Ingestion → Analysis → Scoring。）
 
 用户输入一个自然语言问题；剩下的由系统决定。
 
@@ -130,7 +132,7 @@ AgentRouter 把每个查询分类为某种意图，然后调度器组装 Agent �
 
 | 层 | 技术 |
 |-------|-----------|
-| LLM | DashScope Qwen（turbo / plus / max / 235b） |
+| LLM | DashScope Qwen（默认 qwen-plus，改 config.py 切换） |
 | Embedding | text-embedding-v3（1024 维） |
 | Rerank | qwen3-rerank（回退到 RRF 分数） |
 | 后端 | FastAPI + 4 个 async 路由 + python-multipart（文件上传） |
@@ -143,7 +145,7 @@ AgentRouter 把每个查询分类为某种意图，然后调度器组装 Agent �
 | 图谱 RAG | LightRAG（PDF/图片 → 实体关系抽取 → 通过 function calling 查询图谱） |
 | 领域词典 | DictionaryRegistry（JSON 可扩展：`data/dictionaries/*.json`） |
 | 向量库 | ChromaDB（HNSW ANN，余弦距离，持久化存储） |
-| 测试 | pytest —— 护栏驱动、按流水线步骤（273 通过，离线）；加固期 CI 门禁临时改为手动触发 |
+| 测试 | pytest —— 护栏驱动、按流水线步骤（295 通过，离线）；加固期 CI 门禁临时改为手动触发 |
 | 可观测性 | Arize Phoenix（OpenInference/OTel，独立 `.venv-obs` 起服务 + 主应用 OTLP 外推，默认关闭；埋点收口 `financial_rag/observability/`） |
 
 ---
@@ -152,7 +154,7 @@ AgentRouter 把每个查询分类为某种意图，然后调度器组装 Agent �
 
 第一期已落地：**核心 RAG 链路**（LLM 调用 / 检索 / embedding / rerank）以 OpenInference span 推送到 Arize Phoenix，可视化 prompt·response·token·latency 与检索命中。
 
-- **默认关闭**：`PHOENIX_ENABLED=false` 时埋点走 no-op，零副作用、不联网，不影响 273 个离线测试与 MOCK_MODE。
+- **默认关闭**：`PHOENIX_ENABLED=false` 时埋点走 no-op，零副作用、不联网，不影响 295 个离线测试与 MOCK_MODE。
 - **横切收口**：埋点集中在 `financial_rag/observability/tracing.py`（`observe_span` 上下文管理器），业务代码仅用 `with observe_span(...)` 包裹，未启用时透传 `yield None`。
 - **环境隔离**：Phoenix 服务与主应用彻底分离——`arize-phoenix` 与主运行时存在硬性版本冲突，装进独立 `.venv-obs`（绝不进主环境）；主应用只需 `opentelemetry-sdk`（core）+ `opentelemetry-exporter-otlp-proto-http`（`observability` extra），经 OTLP/HTTP 把 span 推到外部 Phoenix 的 `/v1/traces`。
 - **懒加载**：未装 `observability` extra（缺 OTLP 导出器）时，`init_phoenix` 优雅降级返回 False、不报错，主流程照常。
@@ -234,7 +236,7 @@ uv lock                          # 改了 pyproject 依赖后重新锁定
 ## 测试
 
 ```bash
-python -m pytest tests/ -v    # 259 通过 —— 离线，无需 API key
+python -m pytest tests/ -v    # 295 通过 —— 离线，无需 API key
 
 # L1 检索评估 —— 分通道 IR 指标 + 基线回归锁（离线，无需 API key）
 python -m financial_rag.eval.runner                    # 对比 baseline，融合核心指标回归即非零退出

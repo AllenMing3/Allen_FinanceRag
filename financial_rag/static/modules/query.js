@@ -9,7 +9,6 @@ const RISK_MAP = { low: ['低风险', 'var(--ok)'], medium: ['中风险', '#f59e
 const LAYER_NAMES = {
   L1_source_grounding: '来源锚定', L2_numerical_fidelity: '数值一致',
   L3_citation_integrity: '引用完整', L4_structure_compliance: '结构规范',
-  L5_llm_critique: 'LLM质疑', L6_llm_assist: 'LLM协助',
 };
 const RETRIEVAL_STAGES = ['bm25_retrieval', 'vector_retrieval', 'rrf_fusion', 'rerank'];
 
