@@ -1,0 +1,3201 @@
+[
+  {
+    "text": "商汤科技发布2024年度财务报告显示,全年营收突破50亿元人民币大关,AI大模型业务成为核心增长引擎,研发投入持续加大推动多项技术创新突破,业绩表现亮眼市场前景广阔",
+    "meta": {
+      "source": "sel_a",
+      "file": "C:\\Users\\Allen\\AppData\\Local\\Temp\\pytest-of-Allen\\pytest-4\\test_api_ingest_file_selection0\\a.jsonl",
+      "doc_type": "financial_report",
+      "text_length": 82,
+      "_relevance_keywords": 8,
+      "company": "商汤科技",
+      "publish_date": "2024",
+      "sector": "AI",
+      "date_added": "2026-10-26",
+      "doc_id": "cf29845fb6bdb52c"
+    }
+  },
+  {
+    "text": "[news结论] Meta\n研判: neutral\n\nMeta 950亿美元筹资计划直接强化其AI基础设施自主能力，尤其在自研MTIA NPU和配套数据中心上形成技术护城河；但该支出未附带营收或ROI指引，叠加信用利差扩大与纳斯达克波动，表明资本市场正重新定价AI资本开支——高投入不等于高确定性回报。该事件利好AI基建与半导体产业链中游（如代工、封装），但对Meta自身构成短期现金流压力与估值再平衡压力。因新闻未披露筹资方式（债/股）、时间表或财务影响测算，无法判断净效应方向。",
+    "meta": {
+      "source": "analysis:news:Meta",
+      "timestamp": "2026-10-26 23:54",
+      "type": "analysis_result",
+      "assessment": "neutral",
+      "confidence": "medium",
+      "doc_id": "61919475298d2a76"
+    }
+  },
+  {
+    "text": "商汤科技发布2024年度财务报告显示,全年营收突破50亿元人民币大关,AI大模型业务成为核心增长引擎,研发投入持续加大推动多项技术创新突破,业绩表现亮眼市场前景广阔",
+    "meta": {
+      "source": "kb_docs.json",
+      "doc_type": "financial_report",
+      "text_length": 82,
+      "_relevance_keywords": 8,
+      "company": "商汤科技",
+      "publish_date": "2024",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "7c9c779c0b742184",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "商汤科技",
+            "role": "涉及方"
+          }
+        ],
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 50.0,
+            "unit": "亿元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "[news结论] Meta\n研判: neutral\n\nMeta 950亿美元筹资计划直接强化其AI基础设施自主能力,尤其在自研MTIA NPU和配套数据中心上形成技术护城河;但该支出未附带营收或ROI指引,叠加信用利差扩大与纳斯达克波动,表明资本市场正重新定价AI资本开支——高投入不等于高确定性回报。该事件利好AI基建与半导体产业链中游(如代工、封装),但对Meta自身构成短期现金流压力与估值再平衡压力。因新闻未披露筹资方式(债/股)、时间表或财务影响测算,无法判断净效应方向。",
+    "meta": {
+      "source": "kb_docs.json",
+      "doc_type": "financial_report",
+      "text_length": 241,
+      "_relevance_keywords": 7,
+      "company": "和配套数据",
+      "sector": "半导体",
+      "date_added": "2026-11-08",
+      "doc_id": "a5f556a74cc07864",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 950.0,
+            "unit": "亿美元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "陈茂波:香港AI+与产业发展策略委员会顺利组成 【陈茂波:香港AI+与产业发展策略委员会顺利组成】香港特区政府财政司司长陈茂波今日(7日)表示,财政预算案宣布成立的“AI+与产业发展策略委员会”已经顺利组成,成员包括专家、学者、以及商会、企业及园区公司的代表等,本月内将召开首次会议。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "陈茂波：香港AI+与产业发展策略委员会顺利组成",
+      "publish_time": "2026-06-07 15:02:52",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 142,
+      "_relevance_keywords": 2,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "54bd83f705ac660e",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "企业及园区公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "黄仁勋会见韩国两大游戏商代表共商游戏AI合作方案 【黄仁勋会见韩国两大游戏商代表共商游戏AI合作方案】据报道,英伟达首席执行官(CEO)黄仁勋7日在首尔江南区的网吧先后会见韩国游戏公司KRAFTON创始人兼董事长蔣柄圭和游戏开发商NCSOFT代表金泽辰。据悉,当天黄仁勋和蔣柄圭可能就物理AI等人形机器人,以及基于英伟达近期发布的首款AI笔记本电脑系列“RTX Spark”的游戏领域合作等进行讨论。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "黄仁勋会见韩国两大游戏商代表共商游戏AI合作方案",
+      "publish_time": "2026-06-07 14:53:02",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 200,
+      "_relevance_keywords": 8,
+      "sector": "机器人",
+      "date_added": "2026-11-08",
+      "doc_id": "9b4dc0cd571e2148",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "会见韩国游戏公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI等机器网络请求量首超人类 【AI等机器网络请求量首超人类】据央视新闻,全球最大的互联网托管服务商之一——云网络安全服务公司发布的最新数据显示,在其托管网站收到的网络访问请求中,约57.4%来自人工智能和自动化程序,42.6%来自人类用户。该公司称,这是互联网历史上来自人类的网络访问请求数量首次被机器超越。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI等机器网络请求量首超人类",
+      "publish_time": "2026-06-07 13:32:46",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 155,
+      "_relevance_keywords": 3,
+      "company": "等机器网络",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "8c79364e25fcc0cf",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "网络安全服务公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "OpenAI正在准备对ChatGPT进行其推出以来规模最大的一次改版 OpenAI正在准备对ChatGPT进行其推出以来规模最大的一次改版。该公司计划将ChatGPT转型为结合编码工具和人工智能体的“超级应用”,并添加高管们认为能够创造更多收入的产品。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "OpenAI正在准备对ChatGPT进行其推出以来规模最大的一次改版",
+      "publish_time": "2026-06-07 12:08:40",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 126,
+      "_relevance_keywords": 4,
+      "company": "合编码工具和人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "88825477ee2f57cb",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI巨无霸冲击IPO!警惕资本市场“最贵的陷阱” 【AI巨无霸冲击IPO!警惕资本市场“最贵的陷阱”】人工智能初创公司Anthropic本周官方宣布,已向美国证券交易委员会(SEC)秘密递交S-1招股书,就在交表前夕,该公司刚刚宣布完成了H轮融资,投后估值为6.5万亿元人民币(9650亿美元)。这家成立时间仅5年、今年二季度才开始盈利的公司,正创造着资本市场历史上的奇迹。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI巨无霸冲击IPO！警惕资本市场“最贵的陷阱”",
+      "publish_time": "2026-06-07 07:24:00",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 187,
+      "_relevance_keywords": 5,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "7f1600cc2f378659",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "人工智能初创公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "已向美国证券",
+            "role": "涉及方"
+          },
+          {
+            "name": "才开始盈利的公司",
+            "role": "涉及方"
+          }
+        ],
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 9650.0,
+            "unit": "亿美元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "估值37亿!端侧AI芯片新秀曦华科技再递表港交所 奇瑞投了 【估值37亿!端侧AI芯片新秀曦华科技再递表港交所 奇瑞投了】继2025年12月首次递表后,深圳曦华科技股份有限公司近日再次向港交所提交上市申请书,独家保荐人为农银国际。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "估值37亿！端侧AI芯片新秀曦华科技再递表港交所 奇瑞投了",
+      "publish_time": "2026-06-07 01:15:00",
+      "content_url": "",
+      "fetched_at": "2026-06-07 23:44:16",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 115,
+      "_relevance_keywords": 3,
+      "company": "芯片新秀曦华科技",
+      "publish_date": "2025-12",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "eb92e59067a5a83c",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "芯片新秀曦华科技",
+            "role": "涉及方"
+          },
+          {
+            "name": "深圳曦华科技股份有限公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "Altman预计OpenAI将于未来一年内IPO 【Altman预计OpenAI将于未来一年内IPO】据知情人士透露,OpenAI的CEOAltman周一发送员工内部信息,预计OpenAI将在未来一年内上市。该公司正在筹备全新的人工智能(AI)模型。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "Altman预计OpenAI将于未来一年内IPO",
+      "publish_time": "2026-06-10 23:42:49",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 125,
+      "_relevance_keywords": 2,
+      "company": "周一发送员工内部信息",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "df43ebf08e07936f",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "赛意信息:自研PCB行业工艺AI大模型已实现规模化商用 【赛意信息:自研PCB行业工艺AI大模型已实现规模化商用】赛意信息(300687.SZ)发布投资者关系活动记录表公告,依托二十年工业领域深耕经验与自有算力底座,公司重点打造工业垂类模型与AI数字员工产品,多款行业模型已在工艺设计优化、物流路径优化、工业质检、智能排产等场景落地,其中自研PCB行业工艺AI大模型已实现规模化商用,获得市场认可。针对现有智能体领域普遍灵活性不足的问题,公司研发新一代AI数字员工产品体系,计划于今年8月正式发布。尽管行业有观点认为目前工业垂类模型、数字员工仍然处于产品打磨与市场推广阶段,但结合行业发展规律来看,该类业务长期成长空间可观。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "赛意信息：自研PCB行业工艺AI大模型已实现规模化商用",
+      "publish_time": "2026-06-10 22:53:00",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 312,
+      "_relevance_keywords": 5,
+      "company": "赛意信息",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "2455c42557388291",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "摩根士丹利:2026年全球AI相关债券发行规模将接近5700亿美元 【摩根士丹利:2026年全球AI相关债券发行规模将接近5700亿美元】根据摩根士丹利的最新预测,2026年全球与人工智能(AI)相关的债券发行规模有望接近5700亿美元,较去年增长逾一倍。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "摩根士丹利：2026年全球AI相关债券发行规模将接近5700亿美元",
+      "publish_time": "2026-06-10 22:37:44",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 128,
+      "_relevance_keywords": 2,
+      "company": "年全球与人工智能",
+      "publish_date": "2026",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "40ba784a28bf5590",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 5700.0,
+            "unit": "亿美元"
+          },
+          {
+            "label": "金额",
+            "value": 5700.0,
+            "unit": "亿美元"
+          },
+          {
+            "label": "金额",
+            "value": 5700.0,
+            "unit": "亿美元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "普华永道:中国内地企业AI应用能力领跑全球 【普华永道:中国内地企业AI应用能力领跑全球】普华永道宏观经济研报指出,一系列数据展现出中国经济强劲的新动能——今年一季度,中国高技术产业实际使用外资同比增长30.7%,其中,研发与设计服务、计算机及办公设备制造业实际使用外资增幅分别达127.8%和88.1%。中国AI领域也表现亮眼,内地企业AI应用能力领跑全球,17%的企业实现AI降本增收。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "普华永道：中国内地企业AI应用能力领跑全球",
+      "publish_time": "2026-06-10 22:15:42",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 195,
+      "_relevance_keywords": 2,
+      "company": "一系列数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "f6fcdd414c041a47",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "另类资产管理公司KKR称市场可能低估了AI的电力需求 【另类资产管理公司KKR称市场可能低估了AI的电力需求】另类资产管理公司KKR称市场可能低估了AI的电力需求,但数字基础设施领域有泡沫。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "另类资产管理公司KKR称市场可能低估了AI的电力需求",
+      "publish_time": "2026-06-10 21:52:57",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 95,
+      "_relevance_keywords": 2,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "6fcaccf02680fc10",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "另类资产管理公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "科大讯飞与万新光学集团签署AI眼镜战略合作协议 【科大讯飞与万新光学集团签署AI眼镜战略合作协议】6月10日,科大讯飞股份有限公司与万新光学集团正式签署AI眼镜战略合作协议。双方将在渠道运维、产品共创、产业生态三大领域开展深度合作。在产品共创方面,双方将联合推出专属联名系列智能光学眼镜,并共建智能光学眼镜生态产业基地。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "科大讯飞与万新光学集团签署AI眼镜战略合作协议",
+      "publish_time": "2026-06-10 21:31:19",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 160,
+      "_relevance_keywords": 3,
+      "company": "科大讯飞",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "4545df32279d473a",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "飞与万新光学集团",
+            "role": "涉及方"
+          },
+          {
+            "name": "科大讯飞股份有限公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "与万新光学集团",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI基础设施初创公司TensorWave完成3.5亿美元B轮融资 【AI基础设施初创公司TensorWave完成3.5亿美元B轮融资】AI基础设施初创公司TensorWave完成3.5亿美元B轮融资,投后估值达15.5亿美元,用于扩建由AMD驱动的全球AI基础设施。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI基础设施初创公司TensorWave完成3.5亿美元B轮融资",
+      "publish_time": "2026-06-10 21:02:11",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 133,
+      "_relevance_keywords": 3,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "12a5bd4a8c65d35f",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "基础设施初创公司",
+            "role": "涉及方"
+          }
+        ],
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 3.5,
+            "unit": "亿美元"
+          },
+          {
+            "label": "金额",
+            "value": 3.5,
+            "unit": "亿美元"
+          },
+          {
+            "label": "金额",
+            "value": 3.5,
+            "unit": "亿美元"
+          },
+          {
+            "label": "金额",
+            "value": 15.5,
+            "unit": "亿美元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "机构:书本式折叠屏(大折叠)手机将成AI落地的最佳终端载体 【机构:书本式折叠屏(大折叠)手机将成AI落地的最佳终端载体】Counterpoint报告称,复杂任务需要同时查看原始内容、比对AI生成结果并确认下一步操作,频繁切换应用会严重拖累效率。书本式折叠屏手机凭借更大的内屏和更强的多任务承载能力,恰好满足这一需求,能够让复杂工作流持续可视化,信息并行、一步到位,从而充分释放AI生产力。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "机构：书本式折叠屏（大折叠）手机将成AI落地的最佳终端载体",
+      "publish_time": "2026-06-10 19:37:32",
+      "content_url": "",
+      "fetched_at": "2026-06-11 00:34:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 195,
+      "_relevance_keywords": 1,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "3080212559d1779a",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "商汤科技2024年营收50.3亿元 同比增长36% 生成式AI业务占比超60% 商汤科技2024年营收50.3亿元 同比增长36% 生成式AI业务占比超60%。详细分析内容...(模拟数据第1条)",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、AI、财经新闻",
+      "title": "商汤科技2024年营收50.3亿元 同比增长36% 生成式AI业务占比超60%",
+      "publish_time": "2026-06-14 23:48:59",
+      "content_url": "",
+      "fetched_at": "2026-06-14 23:49:05",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 98,
+      "_relevance_keywords": 4,
+      "company": "商汤科技",
+      "publish_date": "2024",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "aca3091fc25d68e4",
+      "analyzed": true,
+      "metrics": {
+        "revenue": {
+          "value": 50.3,
+          "unit": "亿元",
+          "source": "regex",
+          "_confidence": "low"
+        },
+        "_confidence": "low",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "商汤科技",
+            "role": "涉及方"
+          }
+        ],
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 50.3,
+            "unit": "亿元"
+          },
+          {
+            "label": "金额",
+            "value": 50.3,
+            "unit": "亿元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "英伟达发布Blackwell B200 GPU 单卡AI训练性能较H100提升4倍 英伟达发布Blackwell B200 GPU 单卡AI训练性能较H100提升4倍。详细分析内容...(模拟数据第3条)",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、AI、财经新闻",
+      "title": "英伟达发布Blackwell B200 GPU 单卡AI训练性能较H100提升4倍",
+      "publish_time": "2026-06-14 19:48:59",
+      "content_url": "",
+      "fetched_at": "2026-06-14 23:49:05",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 102,
+      "_relevance_keywords": 7,
+      "company": "模拟数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "2a4c31f3001890db",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "智谱AI完成B+轮融资 估值超200亿元 GLM-5系列模型Q2发布 智谱AI完成B+轮融资 估值超200亿元 GLM-5系列模型Q2发布。详细分析内容...(模拟数据第4条)",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、AI、财经新闻",
+      "title": "智谱AI完成B+轮融资 估值超200亿元 GLM-5系列模型Q2发布",
+      "publish_time": "2026-06-14 17:48:59",
+      "content_url": "",
+      "fetched_at": "2026-06-14 23:49:05",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 88,
+      "_relevance_keywords": 3,
+      "company": "模拟数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "676cfe89a4b586af",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 200.0,
+            "unit": "亿元"
+          },
+          {
+            "label": "金额",
+            "value": 200.0,
+            "unit": "亿元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "英伟达发布Blackwell B200 GPU 单卡AI训练性能较H100提升4倍 英伟达发布Blackwell B200 GPU 单卡AI训练性能较H100提升4倍。详细分析内容...(模拟数据第2条)",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "英伟达发布Blackwell B200 GPU 单卡AI训练性能较H100提升4倍",
+      "publish_time": "2026-06-14 21:49:13",
+      "content_url": "",
+      "fetched_at": "2026-06-14 23:49:17",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 102,
+      "_relevance_keywords": 7,
+      "company": "模拟数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "e87c0f0e659b4e01",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "智谱AI完成B+轮融资 估值超200亿元 GLM-5系列模型Q2发布 智谱AI完成B+轮融资 估值超200亿元 GLM-5系列模型Q2发布。详细分析内容...(模拟数据第3条)",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "智谱AI完成B+轮融资 估值超200亿元 GLM-5系列模型Q2发布",
+      "publish_time": "2026-06-14 19:49:13",
+      "content_url": "",
+      "fetched_at": "2026-06-14 23:49:17",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 88,
+      "_relevance_keywords": 3,
+      "company": "模拟数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "b6ca59bf0cb1cf9d",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 200.0,
+            "unit": "亿元"
+          },
+          {
+            "label": "金额",
+            "value": 200.0,
+            "unit": "亿元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "OpenAI发布GPT-4o 推理速度提升2倍 价格降低50% OpenAI发布GPT-4o 推理速度提升2倍 价格降低50%。详细分析内容...(模拟数据第4条)",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "OpenAI发布GPT-4o 推理速度提升2倍 价格降低50%",
+      "publish_time": "2026-06-14 17:49:13",
+      "content_url": "",
+      "fetched_at": "2026-06-14 23:49:17",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 82,
+      "_relevance_keywords": 4,
+      "company": "模拟数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "43c7722b2e54383d",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI算力需求强劲拉动 全球GPU市场规模预计突破500亿美元 AI算力需求强劲拉动 全球GPU市场规模预计突破500亿美元。详细分析内容...(模拟数据第5条)",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI算力需求强劲拉动 全球GPU市场规模预计突破500亿美元",
+      "publish_time": "2026-06-14 15:49:13",
+      "content_url": "",
+      "fetched_at": "2026-06-14 23:49:17",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 80,
+      "_relevance_keywords": 4,
+      "company": "模拟数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "abfcdaf83b05cf72",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 500.0,
+            "unit": "亿美元"
+          },
+          {
+            "label": "金额",
+            "value": 500.0,
+            "unit": "亿美元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "工信部发布AI产业发展规划 2025年智能算力规模达300EFlops 工信部发布AI产业发展规划 2025年智能算力规模达300EFlops。详细分析内容...(模拟数据第6条)",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "工信部发布AI产业发展规划 2025年智能算力规模达300EFlops",
+      "publish_time": "2026-06-14 13:49:13",
+      "content_url": "",
+      "fetched_at": "2026-06-14 23:49:17",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 90,
+      "_relevance_keywords": 4,
+      "company": "模拟数据",
+      "publish_date": "2025",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "9adb5c4c3ac91a45",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "Meta发布Llama 3.1 405B参数模型 开源最大规模AI模型 Meta发布Llama 3.1 405B参数模型 开源最大规模AI模型。详细分析内容...(模拟数据第7条)",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "Meta发布Llama 3.1 405B参数模型 开源最大规模AI模型",
+      "publish_time": "2026-06-14 11:49:13",
+      "content_url": "",
+      "fetched_at": "2026-06-14 23:49:17",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 90,
+      "_relevance_keywords": 2,
+      "company": "模拟数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "cb80e650a55d0dcf",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI进化速递丨AI版支付宝“阿宝”正式发布 1国家地方共建人形机器人创新中心将在年内推出2.0版本具身智能机器人实训场; 2智能体时代AI安全治理研讨会将于6月17日举行; 3Deepseek首轮融资规模约75亿美元,创始人梁文锋为最大单一出资方; 4AI版支付宝“阿宝”正式发布; 5报道称OpenAI去年支出超",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI进化速递丨AI版支付宝“阿宝”正式发布",
+      "publish_time": "2026-06-16 20:39:37",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:51",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 157,
+      "_relevance_keywords": 8,
+      "company": "版本具身智能",
+      "sector": "机器人",
+      "date_added": "2026-11-08",
+      "doc_id": "d13bd4403d0922ed",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 75.0,
+            "unit": "亿美元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "Databricks推出通用AI智能体 押注企业级AI应用市场 自生成式AI浪潮兴起以来,这类数据平台公司一直强调,其掌握的数据能够为AI模型提供关键上下文信息,从而帮助企业更有效地落地AI应用。而如今,越来越多企业开始认可这一逻辑。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "Databricks推出通用AI智能体 押注企业级AI应用市场",
+      "publish_time": "2026-06-16 23:18:28",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:51",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 117,
+      "_relevance_keywords": 3,
+      "company": "浪潮信息",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "b43f92524ac948c2",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "这类数据平台公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "镜头纪实丨探访首届AI眼镜展,众多AI新品首发 据悉,本次展会依托庞大参展体量与硬核技术成果,加速国产近眼显示技术迭代,助力深圳打造全球AI眼镜产业核心高地。组图为展会现场。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "镜头纪实丨探访首届AI眼镜展，众多AI新品首发",
+      "publish_time": "2026-06-16 16:11:00",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:51",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 87,
+      "_relevance_keywords": 2,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "50ce1bd0b32526c6",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "微信支付“AI专属卡”最快本周上线 支付巨头AI对垒战加速 6月16日,AI版支付宝正式推出,命名“阿宝”,成为全球首个完成全端AI化的超级应用;银联商务基于中国银联APOP协议推出AI支付产品,已落地园区食品预定、云缴费、AI点餐三个高频场景;京东发布国内首个智能体自主支付协议...巨头密集落子,路径各异。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "微信支付“AI专属卡”最快本周上线 支付巨头AI对垒战加速",
+      "publish_time": "2026-06-16 19:34:54",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:51",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 155,
+      "_relevance_keywords": 5,
+      "company": "京东发布国内首个智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "a261a4fb412c429d",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI版支付宝来了!大厂集体押注AI,超级App改头换面 在业内看来,大厂扎堆抢AI支付风口,核心原因只有一个:抢占下一代流量入口。“所有的互联网公司如今都有AI焦虑,既想要抓住AI的风口,又害怕AI替代,所以,蚂蚁开启AI支付宝是顺理成章的事,主要想用AI来打开支付宝新的获客渠道。”盘和林称。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI版支付宝来了！大厂集体押注AI，超级App改头换面",
+      "publish_time": "2026-06-16 14:10:22",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:51",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 147,
+      "_relevance_keywords": 2,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "d075f55a4c2750f7",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "所有的互联网公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "焦点科技:公司正持续推进AI麦可及Sourcing AI的产品迭代与创新 公司正持续推进AI麦可及Sourcing AI的产品迭代与创新,相关工作均在正常推进中。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "焦点科技：公司正持续推进AI麦可及Sourcing AI的产品迭代与创新",
+      "publish_time": "2026-06-16 18:51:00",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:51",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 81,
+      "_relevance_keywords": 1,
+      "company": "焦点科技",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "92faf135f3a76bf9",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "焦点科技",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI解答 医生把关 蚂蚁阿福试水“AI+医生”模式 这是国内首个落地“AI问答+医生把关”协作模式的AI应用,为AI与医生的合作提供了可行路径,打开了“AI+医生”赛道的想象空间。阿福测试数据显示,15%的用户会选择“医生把关”,阿福分析结果与医生把关的一致率超过90%。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI解答 医生把关 蚂蚁阿福试水“AI+医生”模式",
+      "publish_time": "2026-06-15 19:43:43",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:51",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 136,
+      "_relevance_keywords": 1,
+      "company": "阿福测试数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "d45c453b79c5de03",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "法国将追加投资用于发展人工智能 法国总理勒科尔尼16日宣布,政府将在“法国2030”投资计划框架下追加6.55亿欧元投资,用于推动人工智能发展,并推进人工智能工具在公共服务中的应用。勒科尔尼当天通过社交媒体发布视频说,这笔资金将重点支持人工智能基础设施、算力、科研、企业及相关产业链建设。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "法国将追加投资用于发展人工智能",
+      "publish_time": "2026-06-16 21:14:19",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:56",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 144,
+      "_relevance_keywords": 4,
+      "company": "投资用于发展人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "edbc6e9c7065c0dc",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "20cm速递 | 人工智能板块逆市走强,创业板人工智能ETF国泰(159388)收涨2% 创业板人工智能ETF国泰(159388)紧密跟踪创业板人工智能指数,为投资者提供一键布局创业板人工智能赛道的便捷工具,看好人工智能板块投资机会的投资者可重点关注。提及个股仅用于行业事件分析,不构成任何个股推荐或投资建议。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "20cm速递 | 人工智能板块逆市走强，创业板人工智能ETF国泰（159388）收涨2%",
+      "publish_time": "2026-06-16 16:01:10",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:56",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 155,
+      "_relevance_keywords": 2,
+      "company": "创业板ETF",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "06a30cd507be508d",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "【环球财经】法国将追加投资用于发展人工智能 新华财经巴黎6月16日电(记者崔可欣)法国总理勒科尔尼16日宣布,政府将在“法国2030”投资计划框架下追加6.55亿欧元投资,用于推动人工智能发展,并推进人工智能工具在公共服务中的应用。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "【环球财经】法国将追加投资用于发展人工智能",
+      "publish_time": "2026-06-16 21:59:23",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:56",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 116,
+      "_relevance_keywords": 4,
+      "company": "投资用于发展人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "6e4f151537befdb6",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "人工智能概念股走强,创业板人工智能ETF涨超3% 人工智能概念股走强,长芯博创涨超14%,协创数据涨超5%,天孚通信、润泽科技涨超4%。受盘面影响,创业板人工智能ETF涨超3%。当前,全球人工智能技术加速创新迭代,与各行业、各领域融合不断加深。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "人工智能概念股走强，创业板人工智能ETF涨超3%",
+      "publish_time": "2026-06-15 10:16:33",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:56",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 122,
+      "_relevance_keywords": 3,
+      "company": "创业板ETF",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "37ca8f559a41e1e0",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "润泽科技",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "港股人工智能股走强 智谱涨近11% 截至发稿,智谱(02513.HK)涨10.98%,联想集团(00992.HK)涨3.77%,纳芯微(02676.HK)涨2.71%。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "港股人工智能股走强 智谱涨近11%",
+      "publish_time": "2026-06-16 10:36:02",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:56",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 84,
+      "_relevance_keywords": 1,
+      "company": "港股人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "f07ad99891b8068e",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "联想集团",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "南威软件:积极拥抱人工智能产业链 南威软件表示,公司近年来全面ALL IN AI,已完成人工智能业务布局,形成以算力服务为底座,以储能电网为支撑,AI应用产业服务全球,拉动算力服务、储能电网发展、Token出海的人工智能产业链条。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "南威软件：积极拥抱人工智能产业链",
+      "publish_time": "2026-06-16 13:37:00",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:56",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 115,
+      "_relevance_keywords": 5,
+      "company": "积极拥抱人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "d66970f90ed3750e",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "顶层政策加码人工智能,人工智能主题指数涨超5%,人工智能ETF易方达(159819)近2日“吸金”超2亿元 截至14:46,中证人工智能主题指数上涨5.4%,中证科创创业人工智能指数上涨5.9%。数据显示,截至上一交易日,人工智能ETF易方达(159819)已连续2日获资金净流入,合计约2.2亿元。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "顶层政策加码人工智能，人工智能主题指数涨超5%，人工智能ETF易方达(159819)近2日“吸金”超2亿元",
+      "publish_time": "2026-06-15 14:52:06",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:56",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 150,
+      "_relevance_keywords": 1,
+      "company": "顶层政策加码人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "d254a75a9dc4d3d7",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 2.0,
+            "unit": "亿元"
+          },
+          {
+            "label": "金额",
+            "value": 2.2,
+            "unit": "亿元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "在北京,看见人工智能 会做冰激凌的机器人、上过春晚的机器人“店小二”...在位于北京市海淀区成府路的北京AI原点社区,人工智能不再只停留在实验室和论文里,而是成为触手可及的场景。就在一街之隔的新型研究机构里,科学家们正借助人工智能模型加速研发新材料,优化实验路径。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "在北京，看见人工智能",
+      "publish_time": "2026-06-15 05:37:11",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:56",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 132,
+      "_relevance_keywords": 3,
+      "company": "看见人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "3ce3263338fe2693",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "人工智能ETF易方达(159819)涨4%,人工智能相关产品出口增长迅猛 相关产品: 科创创业人工智能ETF易方达(159140.SZ),跟踪中证科创创业人工智能指数(932456.CSI),从科创板和创业板中选取人工智能领域上市公司证券作为样本,综合费率0.60%。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "人工智能ETF易方达(159819)涨4%，人工智能相关产品出口增长迅猛",
+      "publish_time": "2026-06-15 11:27:44",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:56",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 134,
+      "_relevance_keywords": 2,
+      "company": "创业板ETF",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "83aa1a80376dd779",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "智能领域上市公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "港股人工智能股走强 智谱一度涨超13% 上证报中国证券网讯 6月16日,港股人工智能股走强,智谱盘中一度涨超13%。截至10时47分,智谱涨超10%,联想集团涨近4%,纳芯微涨近3%。数据来源:Choice金融终端",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "港股人工智能股走强 智谱一度涨超13%",
+      "publish_time": "2026-06-16 10:49:56",
+      "content_url": "",
+      "fetched_at": "2026-06-17 00:32:56",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 107,
+      "_relevance_keywords": 2,
+      "company": "港股人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "ed7ab82f1b6dfa4d",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "上证报中国证券",
+            "role": "涉及方"
+          },
+          {
+            "name": "联想集团",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "八部门:支持人工智能商品首发首展 组织“人工智能进万家”活动 上证报中国证券网讯据商务部6月18日消息,商务部等八部门发布关于加快“人工智能+消费”发展的实施意见。意见提出:建设人工智能商品首发平台。办好世界人工智能大会,不断提升国际影响力,打造成人工智能产品展示窗口、中国方案发布平台。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "八部门：支持人工智能商品首发首展 组织“人工智能进万家”活动",
+      "publish_time": "2026-06-18 17:02:01",
+      "content_url": "",
+      "fetched_at": "2026-06-19 14:08:43",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 144,
+      "_relevance_keywords": 5,
+      "company": "支持人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "acbc85f0bc03f6ca",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "上证报中国证券",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "人工智能全面赋能电商大促 人工智能全面赋能电商大促 又是一年“618”电商年中大促。今年“618”的一个突出特点是人工智能(AI)全面赋能,被业内认为是首个“AI原生”电商大促。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "人工智能全面赋能电商大促",
+      "publish_time": "2026-06-19 08:38:00",
+      "content_url": "",
+      "fetched_at": "2026-06-19 14:08:43",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 89,
+      "_relevance_keywords": 5,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "fcc90a06de86a7c3",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "人工智能概念股走强,科创创业人工智能ETF涨超4% 人工智能概念股走强,寒武纪、昆仑万维涨超13%,北京君正涨超7%,芯原股份涨超6%。受盘面影响,科创创业人工智能ETF涨超4%。当前,全球人工智能技术加速创新迭代,与各行业、各领域融合不断加深。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "人工智能概念股走强，科创创业人工智能ETF涨超4%",
+      "publish_time": "2026-06-18 11:57:59",
+      "content_url": "",
+      "fetched_at": "2026-06-19 14:08:43",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 123,
+      "_relevance_keywords": 2,
+      "company": "寒武纪",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "3b60a7fe36a9c915",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "芯原股份",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "八部门:增加人工智能产品新供给 促进人工智能机器人消费 指导旅游景区配备人工智能眼镜、人工智能耳机等智能产品,提供人工智能+导游导览等服务。积极推进人工智能赋能文化产业发展,鼓励利用人工智能技术辅助开展戏剧、音乐、舞蹈、美术、沉浸式体验等创作,丰富优质文化产品供给。促进人工智能+住宿餐饮。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "八部门：增加人工智能产品新供给 促进人工智能机器人消费",
+      "publish_time": "2026-06-18 16:59:23",
+      "content_url": "",
+      "fetched_at": "2026-06-19 14:08:43",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 145,
+      "_relevance_keywords": 3,
+      "company": "增加人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "e73c13e2b4f0b50c",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "加快推出新一代人工智能手机、智能电脑...八部门发文促进“人工智能+消费” 《实施意见》围绕提升人工智能+商品消费、扩大人工智能+服务消费等五方面提出多项举措,促进人工智能进千家万户、进千商万店。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "加快推出新一代人工智能手机、智能电脑……八部门发文促进“人工智能+消费”",
+      "publish_time": "2026-06-19 10:33:00",
+      "content_url": "",
+      "fetched_at": "2026-06-19 14:08:43",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 98,
+      "_relevance_keywords": 3,
+      "company": "快推出新一代人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "9eacf6653fced9bd",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "《人工智能》特种邮票全国首发 本次发行的《人工智能》特种邮票一套四枚,图案名称分别为“智启纪元”“数智融合”“具身智能”“和谐共生”,由中国邮政著名邮票设计师王虎鸣担纲设计,河南省邮电科技有限公司印制。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "《人工智能》特种邮票全国首发",
+      "publish_time": "2026-06-18 21:26:13",
+      "content_url": "",
+      "fetched_at": "2026-06-19 14:08:43",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 101,
+      "_relevance_keywords": 3,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "7d126354332e7023",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "河南省邮电科技有限公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "中国首套人工智能邮票正式发行 中新社北京6月18日电中国邮政18日发行《人工智能》特种邮票,这是中国设计发行的第一套人工智能(AI)邮票,中国成为目前为数不多的发行人工智能邮票的国家之一。《人工智能》特种邮票由著名邮票设计师王虎鸣设计,全套4枚。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "中国首套人工智能邮票正式发行",
+      "publish_time": "2026-06-18 15:14:30",
+      "content_url": "",
+      "fetched_at": "2026-06-19 14:08:43",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 123,
+      "_relevance_keywords": 3,
+      "company": "中国首套人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "a693f0c09e24ae7d",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "政策出台加快推进人工智能创新发展,人工智能ETF万家盘中涨近6%冲击4连涨 万家中证人工智能主题ETF(场内简称:人工智能ETF万家,159248)紧密跟踪中证人工智能主题指数,中证人工智能主题指数选取50只业务涉及为人工智能提供基础资源、技术以及应用支持的上市公司证券作为指数样本,以反映人工智能主题上市公司证券的整体表现。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "政策出台加快推进人工智能创新发展，人工智能ETF万家盘中涨近6%冲击4连涨",
+      "publish_time": "2026-06-18 14:45:09",
+      "content_url": "",
+      "fetched_at": "2026-06-19 14:08:43",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 163,
+      "_relevance_keywords": 1,
+      "company": "出台加快推进人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "d77f628dbc7067ba",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "用支持的上市公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "智能主题上市公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "金融监管总局:推进人工智能金融行业应用基础设施建设 促进人工智能应用成果在行业共享复用 国家金融监督管理总局发布关于银行业保险业人工智能安全开发应用的指导意见。其中提出,促进行业人工智能应用生态建设。推进人工智能金融行业应用基础设施建设,促进人工智能应用成果在行业共享复用。鼓励大型金融机构发挥示范作用,向中小金融机构输出人工智能技术和管理经验。",
+    "meta": {
+      "source": "news",
+      "keyword": "人工智能、财经新闻、AI产业",
+      "title": "金融监管总局：推进人工智能金融行业应用基础设施建设 促进人工智能应用成果在行业共享复用",
+      "publish_time": "2026-06-18 18:50:15",
+      "content_url": "",
+      "fetched_at": "2026-06-19 14:08:43",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 173,
+      "_relevance_keywords": 2,
+      "company": "推进人工智能",
+      "sector": "金融",
+      "date_added": "2026-11-08",
+      "doc_id": "8d50c3976fcbc076",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "总局发布关于银行",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "曹操出行宣布全面AI转型:发布RoboX战略,打造全球领先的物理AI移动科技平台 为推动全面AI转型,曹操出行将在2026年上半年推进战略聚焦,持续优化业务结构,主动收缩非核心业务。公司围绕AI重构组织阵型,加大自动驾驶、AI运营系统及智能运力网络等领域的人才与资源投入,推动AI能力深度融入产品研发、运营管理和业务体系,加快向AI原生公司转型。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "曹操出行宣布全面AI转型：发布RoboX战略，打造全球领先的物理AI移动科技平台",
+      "publish_time": "2026-06-21 08:59:00",
+      "content_url": "",
+      "fetched_at": "2026-06-21 20:40:30",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 173,
+      "_relevance_keywords": 4,
+      "company": "移动科技",
+      "publish_date": "2026",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "fb467d037c02ec78",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "移动科技",
+            "role": "涉及方"
+          },
+          {
+            "name": "原生公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "上影节首设AI片场,电影行业离AI制作还有多远? 2026年6月15日,上海影城西侧四楼的AI片场,红蓝色霓虹灯,压暗的场地,四组创作队伍正盯着屏幕,每组团队包含一位影视创作者和一位AI创作者,坐在同一张长桌上协作。这是上海国际电影节首次设立“AI片场”单元,上影节官方将其定位为“以AI影像协作为研究对象的创制实验场”。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "上影节首设AI片场，电影行业离AI制作还有多远？",
+      "publish_time": "2026-06-20 12:13:47",
+      "content_url": "",
+      "fetched_at": "2026-06-21 20:40:30",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 161,
+      "_relevance_keywords": 2,
+      "publish_date": "2026-06-15",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "5d541d8c48c7a897",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI盛会,下月见! 此外,大会应用体验板块构建“馆内、街区、全程”三级AI沉浸式体验体系,联动上海16个区的AI资源,展现AI赋能产业与民生。展区共设五大AI互动板块,全程规划六条主题路线,串联三十余个特色点位,搭配趣味打卡任务,让大众更近距离感受AI的魅力。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI盛会，下月见！",
+      "publish_time": "2026-06-20 17:54:00",
+      "content_url": "",
+      "fetched_at": "2026-06-21 20:40:30",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 130,
+      "_relevance_keywords": 1,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "8a0eb2c119d654d8",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "美国电网扛不住AI热潮 近来,AI热潮使得美国各地数据中心用电需求猛增,导致多地电价持续走高,部分地区还发布了停电预警。据路透社报道,为缓解供电困境,美国联邦能源管制委员会18日要求各区域电网运营商考虑新的协议,加快数据中心等大型用电主体的并网速度。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "美国电网扛不住AI热潮",
+      "publish_time": "2026-06-20 16:41:37",
+      "content_url": "",
+      "fetched_at": "2026-06-21 20:40:30",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 125,
+      "_relevance_keywords": 4,
+      "company": "热潮使得美国各地数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "5050c1491a8c489b",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "字节一年砸2000亿AI、腾讯花800亿“补票”、农夫山泉不玩AI却赚翻:创富榜前三的AI选择题 不少评论认为,腾讯在AI时代的动作偏向保守。腾讯或有自己的盘算,微信用户规模高达14亿人,为C端引入靠谱的AI服务能力,意味着庞大的算力开支,在商业变现路径没有闭环,或是算力成本仍高居不下时,盲目Allin,全力参战AI军备赛,难言明智。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "字节一年砸2000亿AI、腾讯花800亿“补票”、农夫山泉不玩AI却赚翻：创富榜前三的AI选择题",
+      "publish_time": "2026-06-20 17:52:00",
+      "content_url": "",
+      "fetched_at": "2026-06-21 20:40:30",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 168,
+      "_relevance_keywords": 4,
+      "company": "腾讯控股",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "b437318fef625e85",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "企业拥抱AI比速度更要比深度 但现实中,部分企业的人工智能(AI)工具未能规模化落地,不少资本的重金投入仍未换来有效的盈利模式。一边是各类AI产品轮番进场、概念热度居高不下,一边是场景适配不足、人才缺口突出、投入产出失衡...AI热潮汹涌,企业却在追逐路上进退两难。AI赋能千行百业的趋势不可阻挡。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "企业拥抱AI比速度更要比深度",
+      "publish_time": "2026-06-21 05:39:56",
+      "content_url": "",
+      "fetched_at": "2026-06-21 20:40:30",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 149,
+      "_relevance_keywords": 2,
+      "company": "部分企业的人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "5b833e71a22cec71",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI进化速递丨深圳打造生物医药特殊物品通关AI服务平台 1广东:抢抓人工智能发展机遇,建设具有国际竞争力的软件和信息技术服务业创新中心; 2深圳打造生物医药特殊物品通关AI服务平台; 32026湾区科技节深圳启幕荣耀携其自研人形机器人“闪电”与“元气仔”亮相。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "AI进化速递丨深圳打造生物医药特殊物品通关AI服务平台",
+      "publish_time": "2026-06-19 20:58:43",
+      "content_url": "",
+      "fetched_at": "2026-06-21 20:40:30",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 130,
+      "_relevance_keywords": 6,
+      "company": "抢抓人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "418632efb44340ab",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "湾区科技",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "修图老大美图“改行”做AI包工头 两年来,吴欣鸿认为核心变化有四点:产品层面从App到AI Agent,商业模式层面从订阅模式到AI算力点消费,组织层面从成熟组织到AI创新组织,价值层面从交付功能到交付成果。2025年,他说在AI时代很担心来自初创公司的竞争,2026年这个看法没有改变。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "修图老大美图“改行”做AI包工头",
+      "publish_time": "2026-06-21 18:51:05",
+      "content_url": "",
+      "fetched_at": "2026-06-21 20:40:30",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 144,
+      "_relevance_keywords": 4,
+      "publish_date": "2025",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "34b7505dd4ab3971",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "担心来自初创公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "微信AI助手“小微”小范围灰度上线 微信AI已小范围灰度上线。部分网友微信主界面左上角已出现小眼睛式样图标,该图标即为AI助手“小微”测试版入口。据腾讯客服介绍,微信小微是微信团队在小范围内测的原生AI助手,小微支持通过文字或语音对话操作微信原生功能、调起小程序等,例如帮助好友发送消息、查询朋友圈、预约服务等。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、财经新闻",
+      "title": "微信AI助手“小微”小范围灰度上线",
+      "publish_time": "2026-06-21 12:53:34",
+      "content_url": "",
+      "fetched_at": "2026-06-21 20:40:30",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 156,
+      "_relevance_keywords": 4,
+      "company": "腾讯控股",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "4c6e018d1ec32ac5",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI人工智能ETF平安(512930)冲击6连涨,国产算力基础设施建设有望提速 AI人工智能ETF平安(512930)上涨0.40%, 冲击6连涨。最新价报0.75元。消息面上,字节跳动正与国产AI芯片厂商洽谈采购,拟用于豆包等AI应用的推理需求,进一步扩充其国产GPU供应商体系。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能、OpenAI",
+      "title": "AI人工智能ETF平安(512930)冲击6连涨，国产算力基础设施建设有望提速",
+      "publish_time": "2026-06-22 10:15:04",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:47:18",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 141,
+      "_relevance_keywords": 7,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "28bc053937afd45e",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 0.75,
+            "unit": "元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI算力产业链正经历结构性供给瓶颈转移,AI人工智能ETF平安涨超3% 截至2026年6月18日 11:30,中证人工智能主题指数(930713)强势上涨4.08%,AI人工智能ETF平安(512930)上涨3.92%, 冲击5连涨。最新价报0.74元。消息面上,AI算力产业链正经历结构性供给瓶颈转移,部分环节呈现量价齐升态势。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能、OpenAI",
+      "title": "AI算力产业链正经历结构性供给瓶颈转移，AI人工智能ETF平安涨超3%",
+      "publish_time": "2026-06-18 12:24:37",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:47:18",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 165,
+      "_relevance_keywords": 4,
+      "company": "人工智能",
+      "publish_date": "2026-06-18",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "099155e5ec8ae0f9",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 0.74,
+            "unit": "元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI“筛豆子”出圈!AI专区首秀链博会 AI便利农业直观可感,AI赋能工业同样步伐稳健。“从工业自动化迈向工业自主化,不仅需要AI模型辅助决策,还需要大量的工业数据作为支撑。”霍尼韦尔大中华区总裁余锋向记者介绍。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、OpenAI",
+      "title": "AI“筛豆子”出圈！AI专区首秀链博会",
+      "publish_time": "2026-06-22 20:54:32",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:55:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 106,
+      "_relevance_keywords": 2,
+      "company": "还需要大量的工业数据",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "e3bb8379eacec002",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "英特尔AI Box Ultra首次量产上车 联合长安发布AI座舱方案 6月22日消息,界面新闻获悉,在第四届中国国际供应链促进博览会期间,英特尔与长安汽车联合发布搭载英特尔AI Box Ultra的AI座舱解决方案。英特尔中国行业与解决方案业务部总经理王景佳表示,此次合作是英特尔AI Box Ultra量产上车的第一步。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、OpenAI",
+      "title": "英特尔AI Box Ultra首次量产上车 联合长安发布AI座舱方案",
+      "publish_time": "2026-06-22 21:08:15",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:55:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 161,
+      "_relevance_keywords": 4,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "255cd2983a13632c",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI专属卡推出后,微信原生AI助手“小微”开启内测 在主流互联网公司中,京东、美团、携程、滴滴四家大厂已经官宣接入微信AI生态。近日,微信支付方面宣布正式推出专为AI智能体(Agent)支付场景设计的AI专属卡。据了解,AI专属卡就像智能体的专属钱包。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、OpenAI",
+      "title": "AI专属卡推出后，微信原生AI助手“小微”开启内测",
+      "publish_time": "2026-06-22 16:31:00",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:55:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 126,
+      "_relevance_keywords": 5,
+      "company": "专属卡就像智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "0ceb16cf88450183",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "在主流互联网公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI完成完全自主设计 云服务商Datasection发布OHMAI 上证报中国证券网讯(记者俞立严)日前,在巴黎举行的VivaTech科技创新展上,亚洲云服务商Datasection发布了一款名为OHMAI的AI Companion,这也是行业尝试由人工智能完成完全自主设计的可运行产品系统。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、OpenAI",
+      "title": "AI完成完全自主设计 云服务商Datasection发布OHMAI",
+      "publish_time": "2026-06-22 15:01:36",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:55:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 146,
+      "_relevance_keywords": 5,
+      "company": "是行业尝试由人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "9b6ecd2e3094dc89",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "上证报中国证券",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI智能体对抗时代来临 奇安信推多款AI防御产品 人民财讯6月22日电,6月22日,奇安信宣布启动“AI时代,攻防先行”系列新品发布周。面对黑客利用AI批量发起攻击的新挑战,奇安信推出多款聚焦“安全智能”与“智能安全”的产品组合,宣告网络安全正式步入“AI智能体对抗”新阶段。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、OpenAI",
+      "title": "AI智能体对抗时代来临 奇安信推多款AI防御产品",
+      "publish_time": "2026-06-22 14:22:00",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:55:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 138,
+      "_relevance_keywords": 6,
+      "company": "安全智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "a0c1f87a098084c6",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "京东开源JoyAI-VL-Interaction 它让大模型从“一问一答”走向“边看边说”,开发者基于这套框架,可以快速搭建能持续观察、自主判断、即时响应的实景AI助手。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、OpenAI",
+      "title": "京东开源JoyAI-VL-Interaction",
+      "publish_time": "2026-06-22 16:33:22",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:55:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 85,
+      "_relevance_keywords": 2,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "a407dcccd9fc7289",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI视频生成企业Sand.ai 完成两轮超1亿美元融资 据悉,源码资本在2024年领投了Sand.ai的种子轮,是Sand.ai最早的机构投资人之一,并在后续多轮中持续加注。本次融资,源码资本作为老股东再度追加投资,延续了对Sand.ai的长期支持。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、OpenAI",
+      "title": "AI视频生成企业Sand.ai 完成两轮超1亿美元融资",
+      "publish_time": "2026-06-22 15:47:08",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:55:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 125,
+      "_relevance_keywords": 3,
+      "publish_date": "2024",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "c7aa0b1612821f25",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 1.0,
+            "unit": "亿美元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "亚马逊AI主管:已就向外部出售实体Trainium芯片进行商谈 Peter DeSantis 称 AWS 最新的 Trainium3 芯片已“基本售罄”;企业方面则表示后续的 Trainium4 芯片已引起广泛关注。这位高管并不认为外售芯片会蚕食 AWS 的 AI 云业务,宣称 AI 算力领域还有很大的增长空间。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、OpenAI",
+      "title": "亚马逊AI主管：已就向外部出售实体Trainium芯片进行商谈",
+      "publish_time": "2026-06-22 11:07:57",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:55:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 157,
+      "_relevance_keywords": 3,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "5496ecdc8a1a6f2e",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI视频生成公司Sand.ai三个月连续完成两轮融资 据悉,Sand.ai将于今年三季度开源新一代视频生成模型。该模型采用MoE架构,兼顾高效推理与目前开源领域最大的参数规模。Sand.ai创始人、CEO曹越表示,有信心做到头部水准,并且要把它开源给所有人。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI、人工智能、OpenAI",
+      "title": "AI视频生成公司Sand.ai三个月连续完成两轮融资",
+      "publish_time": "2026-06-22 13:42:44",
+      "content_url": "",
+      "fetched_at": "2026-06-22 23:55:55",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 129,
+      "_relevance_keywords": 4,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "ccee548fd9223be5",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "视频生成公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "英伟达发布Halos机器人安全系统,AI人工智能ETF平安(512930)交投活跃 流动性方面,AI人工智能ETF平安盘中换手1.3%,成交4120.26万元。拉长时间看,截至6月22日,AI人工智能ETF平安近1周日均成交1.92亿元。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "英伟达发布Halos机器人安全系统，AI人工智能ETF平安(512930)交投活跃",
+      "publish_time": "2026-06-23 10:03:17",
+      "content_url": "",
+      "fetched_at": "2026-06-25 01:22:08",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 119,
+      "_relevance_keywords": 4,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "fcbbfc52acef955a",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 4120.26,
+            "unit": "万元"
+          },
+          {
+            "label": "金额",
+            "value": 1.92,
+            "unit": "亿元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI人工智能ETF平安(512930)日均成交2.1亿,机构看好国产芯片、存储、光通信国产替代机遇 流动性方面,AI人工智能ETF平安盘中换手0.27%,成交844.51万元。拉长时间看,截至6月23日,AI人工智能ETF平安近1周日均成交2.10亿元。消息面上,全球半导体封测市场即将迈入千亿美金时代,中国大陆已成全球第二大基地。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "AI人工智能ETF平安(512930)日均成交2.1亿，机构看好国产芯片、存储、光通信国产替代机遇",
+      "publish_time": "2026-06-24 09:42:16",
+      "content_url": "",
+      "fetched_at": "2026-06-25 01:22:08",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 166,
+      "_relevance_keywords": 6,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "db0c7b3dbb5b9b23",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 844.51,
+            "unit": "万元"
+          },
+          {
+            "label": "金额",
+            "value": 2.1,
+            "unit": "亿元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI人工智能ETF平安(512930)上涨2.24%,上交所发布人工智能大模型企业适用科创板第五套上市标准 拉长时间看,截至2026年6月17日,AI人工智能ETF平安近1周累计上涨5.31%,涨幅排名可比基金2/4。wind数据显示,杠杆资金持续布局中。AI人工智能ETF平安最新融资买入额达479.16万元,最新融资余额达4899.56万元。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "AI人工智能ETF平安(512930)上涨2.24%，上交所发布人工智能大模型企业适用科创板第五套上市标准",
+      "publish_time": "2026-06-18 10:59:28",
+      "content_url": "",
+      "fetched_at": "2026-06-25 01:22:08",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 173,
+      "_relevance_keywords": 5,
+      "company": "人工智能",
+      "publish_date": "2026-06-17",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "c16bee240d976c27",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "涨幅排名可比基金",
+            "role": "涉及方"
+          }
+        ],
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 479.16,
+            "unit": "万元"
+          },
+          {
+            "label": "金额",
+            "value": 4899.56,
+            "unit": "万元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "DeepSeek首轮融资或落地,AI人工智能ETF平安(512930)备受关注 流动性方面,AI人工智能ETF平安盘中换手0.19%,成交569.64万元。拉长时间看,截至6月16日,AI人工智能ETF平安近1月日均成交1.82亿元。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "DeepSeek首轮融资或落地，AI人工智能ETF平安(512930)备受关注",
+      "publish_time": "2026-06-17 10:08:21",
+      "content_url": "",
+      "fetched_at": "2026-06-25 01:22:08",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 117,
+      "_relevance_keywords": 2,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "36bbe471526ddfbb",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 569.64,
+            "unit": "万元"
+          },
+          {
+            "label": "金额",
+            "value": 1.82,
+            "unit": "亿元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "OpenAI推出GPT-Live语音模型,AI人工智能ETF平安(512930)涨近2% 此外,SpaceXAI发布了一款名为Grok 4.5的新型人工智能模型,该模型是与AI编程初创公司Cursor合作打造的,旨在缩小与Anthropic PBC和OpenAI等竞争对手的差距。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "OpenAI推出GPT-Live语音模型，AI人工智能ETF平安(512930)涨近2%",
+      "publish_time": "2026-07-09 09:52:54",
+      "content_url": "",
+      "fetched_at": "2026-07-12 23:46:38",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 140,
+      "_relevance_keywords": 6,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "2108218c19825f22",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "编程初创公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI人工智能ETF平安(512930)冲击3连涨,MiniMax宣布完成新一轮160亿港元融资 AI人工智能ETF平安紧密跟踪中证人工智能主题指数,中证人工智能主题指数选取50只业务涉及为人工智能提供基础资源、技术以及应用支持的上市公司证券作为指数样本,以反映人工智能主题上市公司证券的整体表现。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "AI人工智能ETF平安(512930)冲击3连涨，MiniMax宣布完成新一轮160亿港元融资",
+      "publish_time": "2026-07-10 13:30:10",
+      "content_url": "",
+      "fetched_at": "2026-07-12 23:46:38",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 148,
+      "_relevance_keywords": 3,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "3ec08bec6b42e962",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "用支持的上市公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "智能主题上市公司",
+            "role": "涉及方"
+          }
+        ],
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 160.0,
+            "unit": "亿港元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI人工智能ETF平安(512930)涨超2%,存储芯片短缺美光斥资2500亿美元扩产 AI人工智能ETF平安紧密跟踪中证人工智能主题指数,中证人工智能主题指数选取50只业务涉及为人工智能提供基础资源、技术以及应用支持的上市公司证券作为指数样本,以反映人工智能主题上市公司证券的整体表现。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "AI人工智能ETF平安(512930)涨超2%，存储芯片短缺美光斥资2500亿美元扩产",
+      "publish_time": "2026-07-10 10:09:52",
+      "content_url": "",
+      "fetched_at": "2026-07-12 23:46:38",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 144,
+      "_relevance_keywords": 3,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "2cbdd9d2674caeb4",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "用支持的上市公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "智能主题上市公司",
+            "role": "涉及方"
+          }
+        ],
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 2500.0,
+            "unit": "亿美元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI人工智能ETF平安(512930)涨超2.2%,Meta推出AI图像生成模型 AI人工智能ETF平安紧密跟踪中证人工智能主题指数,中证人工智能主题指数选取50只业务涉及为人工智能提供基础资源、技术以及应用支持的上市公司证券作为指数样本,以反映人工智能主题上市公司证券的整体表现。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "AI人工智能ETF平安(512930)涨超2.2%，Meta推出AI图像生成模型",
+      "publish_time": "2026-07-08 09:46:06",
+      "content_url": "",
+      "fetched_at": "2026-07-12 23:46:38",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 141,
+      "_relevance_keywords": 2,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "11459a10a935dcfc",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "用支持的上市公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "智能主题上市公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "国家发展改革委披露人工智能产业“十五五”五大工作思路,AI人工智能ETF平安涨超2% AI人工智能ETF平安紧密跟踪中证人工智能主题指数,中证人工智能主题指数选取50只业务涉及为人工智能提供基础资源、技术以及应用支持的上市公司证券作为指数样本,以反映人工智能主题上市公司证券的整体表现。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "国家发展改革委披露人工智能产业“十五五”五大工作思路，AI人工智能ETF平安涨超2%",
+      "publish_time": "2026-07-08 14:20:29",
+      "content_url": "",
+      "fetched_at": "2026-07-12 23:46:38",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 143,
+      "_relevance_keywords": 3,
+      "company": "展改革委披露人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "c6331aa07b81c7db",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "用支持的上市公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "智能主题上市公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "国家超算互联网核心节点于当日正式上线运行,AI人工智能ETF平安涨超3% AI人工智能ETF平安紧密跟踪中证人工智能主题指数,中证人工智能主题指数选取50只业务涉及为人工智能提供基础资源、技术以及应用支持的上市公司证券作为指数样本,以反映人工智能主题上市公司证券的整体表现。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "国家超算互联网核心节点于当日正式上线运行，AI人工智能ETF平安涨超3%",
+      "publish_time": "2026-07-09 13:26:38",
+      "content_url": "",
+      "fetched_at": "2026-07-12 23:46:38",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 137,
+      "_relevance_keywords": 2,
+      "company": "人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "09fb02684363c548",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "用支持的上市公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "智能主题上市公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "腾讯正式发布升级版人工智能模型混元Hy3,AI人工智能ETF平安(512930)涨近2% AI人工智能ETF平安紧密跟踪中证人工智能主题指数,中证人工智能主题指数选取50只业务涉及为人工智能提供基础资源、技术以及应用支持的上市公司证券作为指数样本,以反映人工智能主题上市公司证券的整体表现。",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "腾讯正式发布升级版人工智能模型混元Hy3，AI人工智能ETF平安(512930)涨近2%",
+      "publish_time": "2026-07-07 09:52:19",
+      "content_url": "",
+      "fetched_at": "2026-07-12 23:46:38",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 145,
+      "_relevance_keywords": 5,
+      "company": "腾讯控股",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "cd7d2db15f2bc4d9",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "用支持的上市公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "智能主题上市公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "新一届董事会落地!探迹科技全面接管真爱美家,AI人工智能团队掌舵 凭借上述技术与产品布局,探迹科技将AI生产力注入企业增长全链路,累计服务客户超5万家,覆盖30多个行业,短短几年便跻身\"全球独角兽榜单\",估值达13亿美元,并屡获评\"最具发展潜力人工智能企业\",入选人工智能创新应用新锐榜、AIGC创新企业榜&产品创新榜、人工智能应用先锋榜,荣获首届全国人工智能应用场景创新挑战赛总决赛一等奖等多项荣誉",
+    "meta": {
+      "source": "news",
+      "keyword": "AI人工智能、人工智能",
+      "title": "新一届董事会落地！探迹科技全面接管真爱美家，AI人工智能团队掌舵",
+      "publish_time": "2026-07-08 21:31:00",
+      "content_url": "",
+      "fetched_at": "2026-07-12 23:46:38",
+      "doc_type": "新闻报道",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 200,
+      "_relevance_keywords": 5,
+      "company": "探迹科技",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "1104cb26560e4598",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "探迹科技",
+            "role": "涉及方"
+          }
+        ],
+        "financial_figures": [
+          {
+            "label": "金额",
+            "value": 13.0,
+            "unit": "亿美元"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "苹果OpenAI从队友变对手\n\n微软曾是OpenAI最坚定的盟友,但已将OpenAI从Copilot和内部用户中撤出,加速转向自有模型。苹果本应是OpenAI通往消费者的桥梁,现在这座桥已变成对峙的法律战场。正如一位行业评论者所言:“OpenAI正在烧毁它拥有的每一座桥。”",
+    "meta": {
+      "source": "东方财富",
+      "keyword": "OpenAI、人工智能",
+      "title": "苹果OpenAI从队友变对手",
+      "publish_time": "2026-07-13 21:12:51",
+      "url": "http://finance.eastmoney.com/a/202607133804136926.html",
+      "sentiment": "中性",
+      "fetched_at": "2026-07-14 01:21:35",
+      "doc_type": "news",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 137,
+      "_relevance_keywords": 2,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "e8c6c9c4c408de7b",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "苹果起诉OpenAI\n\n美国苹果公司10日在加州北区联邦地区法院起诉美国开放人工智能研究中心(OpenAI)及其两名前员工,指控其窃取苹果公司商业机密,帮助OpenAI加快布局消费级硬件业务。",
+    "meta": {
+      "source": "东方财富",
+      "keyword": "OpenAI、人工智能",
+      "title": "苹果起诉OpenAI",
+      "publish_time": "2026-07-12 14:47:00",
+      "url": "http://finance.eastmoney.com/a/202607123802616943.html",
+      "sentiment": "中性",
+      "fetched_at": "2026-07-14 01:21:35",
+      "doc_type": "news",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 96,
+      "_relevance_keywords": 3,
+      "company": "起诉美国开放人工智能",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "8fb70b2700523f99",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "美国苹果公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "控其窃取苹果公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "苹果公司起诉OpenAI窃取商业机密\n\n诉讼文件显示,“本案涉及苹果前员工窃取公司商业机密,以造福OpenAI。苹果提起诉讼是为了制止这种行为。”两名现就职于OpenAI的前苹果员工,也被列为被告。OpenAI发言人德鲁·普萨特里在一份声明中表示,OpenAI“对其他公司的商业秘密不感兴趣。",
+    "meta": {
+      "source": "东方财富",
+      "keyword": "OpenAI、人工智能",
+      "title": "苹果公司起诉OpenAI窃取商业机密",
+      "publish_time": "2026-07-13 08:25:34",
+      "url": "http://finance.eastmoney.com/a/202607133803442749.html",
+      "sentiment": "中性",
+      "fetched_at": "2026-07-14 01:21:35",
+      "doc_type": "news",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 146,
+      "_relevance_keywords": 1,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "853782b17d2b005b",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "苹果公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "果前员工窃取公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "对其他公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "突破Coding模式 OpenAI宣布GPT-5.6全量上线\n\n在经历了美国政府两周严格安全审查之后,日前,OpenAI正式宣布GPT-5.6系列模型面向全球全面开放。作为目前OpenAI旗下性能最强的模型,此次除了上线多个版本外,OpenAI更进一步将其Coding能力整合进了GPT应用当中。",
+    "meta": {
+      "source": "东方财富",
+      "keyword": "OpenAI、人工智能",
+      "title": "突破Coding模式 OpenAI宣布GPT-5.6全量上线",
+      "publish_time": "2026-07-13 09:28:00",
+      "url": "http://finance.eastmoney.com/a/202607133802773150.html",
+      "sentiment": "正面",
+      "fetched_at": "2026-07-14 01:21:35",
+      "doc_type": "news",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 148,
+      "_relevance_keywords": 4,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "f5b25a07a42b4ac4",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "AI模型竞争进入成本战 OpenAI、Meta相继竞逐token性价比\n\n相比之下,OpenAI的降价空间可能更有限,但同样认为必须保持成本竞争力。OpenAI首席执行官萨姆·奥尔特曼上周表示:“如今,每一家企业都在关注AI投入以及能够获得多少价值,这正是我们希望解决的问题。” 这一表态与一年前形成鲜明对比。",
+    "meta": {
+      "source": "东方财富",
+      "keyword": "OpenAI、人工智能",
+      "title": "AI模型竞争进入成本战 OpenAI、Meta相继竞逐token性价比",
+      "publish_time": "2026-07-13 17:13:16",
+      "url": "http://finance.eastmoney.com/a/202607133803864365.html",
+      "sentiment": "中性",
+      "fetched_at": "2026-07-14 01:21:35",
+      "doc_type": "news",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 155,
+      "_relevance_keywords": 1,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "16a50b039109a30c",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "OpenAI 优化 GPT-5.6 Sol 并放宽使用限额 Anthropic 延长 Fable 5 推广期\n\n模型上线后,OpenAI 也根据首批用户的反馈进行了多项调整。OpenAI 表示,GPT-5.6 发布后带来了前所未有的访问量高峰,整体流量达到此前峰值的约两倍。",
+    "meta": {
+      "source": "东方财富",
+      "keyword": "OpenAI、人工智能",
+      "title": "OpenAI 优化 GPT-5.6 Sol 并放宽使用限额 Anthropic 延长 Fable 5 推广期",
+      "publish_time": "2026-07-13 14:27:44",
+      "url": "http://finance.eastmoney.com/a/202607133803671452.html",
+      "sentiment": "中性",
+      "fetched_at": "2026-07-14 01:21:35",
+      "doc_type": "news",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 137,
+      "_relevance_keywords": 3,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "369cab79e53b932c",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "苹果起诉OpenAI窃取商业机密\n\n当地时间7月10日,苹果公司以窃取商业机密为由起诉OpenAI,指控该公司通过协同行动窃取苹果未发布产品的相关信息。苹果指控OpenAI蓄意策动苹果员工泄露未发布产品的相关信息、元器件、图纸及其他材料,以服务于其自主研发硬件设备的计划。",
+    "meta": {
+      "source": "东方财富",
+      "keyword": "OpenAI、人工智能",
+      "title": "苹果起诉OpenAI窃取商业机密",
+      "publish_time": "2026-07-11 07:03:03",
+      "url": "http://finance.eastmoney.com/a/202607113802257865.html",
+      "sentiment": "中性",
+      "fetched_at": "2026-07-14 01:21:35",
+      "doc_type": "news",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 136,
+      "_relevance_keywords": 2,
+      "company": "未发布产品的相关信息",
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "aa474d540d849f41",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "苹果公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "指控该公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "苹果起诉OpenAI盗用商业机密\n\n苹果指控,OpenAI无视合同限制,劝说苹果合作方为其硬件研发复刻苹果的金属精加工工艺。指控OpenAI 向供应商询问诸多仅内部人员才知晓的、关于苹果生产工艺与零部件的高度细节化问题。指控 OpenAI 授意求职应聘者携带苹果样机及设计资料参与面试。",
+    "meta": {
+      "source": "东方财富",
+      "keyword": "OpenAI、人工智能",
+      "title": "苹果起诉OpenAI盗用商业机密",
+      "publish_time": "2026-07-11 04:57:28",
+      "url": "http://finance.eastmoney.com/a/202607113802247996.html",
+      "sentiment": "中性",
+      "fetched_at": "2026-07-14 01:21:35",
+      "doc_type": "news",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 143,
+      "_relevance_keywords": 1,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "6dc39c8232926afc",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "_confidence": "none",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "OpenAI二把手离职\n\n当地时间7月9日,OpenAI产品与商业负责人菲吉·西莫宣布,由于长期患有的慢性疾病近期恶化,她将辞去公司全职职位,转为担任兼职顾问。西莫此前负责OpenAI的产品、商业化及部分管理事务,曾被OpenAI联合创始人萨姆·奥尔特曼任命负责推动公司的应用业务发展。",
+    "meta": {
+      "source": "东方财富",
+      "keyword": "OpenAI、人工智能",
+      "title": "OpenAI二把手离职",
+      "publish_time": "2026-07-10 17:14:00",
+      "url": "http://finance.eastmoney.com/a/202607103802476813.html",
+      "sentiment": "中性",
+      "fetched_at": "2026-07-14 01:21:35",
+      "doc_type": "news",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 143,
+      "_relevance_keywords": 2,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "ae73f75128c4c97d",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "她将辞去公司",
+            "role": "涉及方"
+          },
+          {
+            "name": "任命负责推动公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "苹果状告OpenAI细节曝光:超400名前员工为OpenAI工作,多人窃取商业秘密;关键人物任OpenAI首席硬件官,诱导苹果在职员工携带机密面试\n\n离职后联合他人创立io Products,后该公司被OpenAI收购,Tan Tang出任OpenAI首席硬件官。",
+    "meta": {
+      "source": "东方财富",
+      "keyword": "OpenAI、人工智能",
+      "title": "苹果状告OpenAI细节曝光：超400名前员工为OpenAI工作，多人窃取商业秘密；关键人物任OpenAI首席硬件官，诱导苹果在职员工携带机密面试",
+      "publish_time": "2026-07-11 12:07:00",
+      "url": "http://finance.eastmoney.com/a/202607113802463944.html",
+      "sentiment": "中性",
+      "fetched_at": "2026-07-14 01:21:35",
+      "doc_type": "news",
+      "file": "./data/knowledge_base\\news_archive.jsonl",
+      "text_length": 132,
+      "_relevance_keywords": 1,
+      "sector": "AI",
+      "date_added": "2026-11-08",
+      "doc_id": "19e1a4ecf14962e6",
+      "analyzed": true,
+      "metrics": {
+        "_confidence": "none",
+        "_source": "regex"
+      },
+      "entities": {
+        "companies": [
+          {
+            "name": "后该公司",
+            "role": "涉及方"
+          }
+        ],
+        "_confidence": "low",
+        "_source": "regex"
+      }
+    }
+  },
+  {
+    "text": "[news结论] 新闻报道\n研判: unknown\n\nLLM 分析失败: [LLMCaller] API 调用失败且重试耗尽 (2 次): DashScope LLM error: code=400, message=Access denied, please make sure your account is in good standing. For details, see: https://help.aliyun.com/zh/model-studio/error-code#overdue-payment",
+    "meta": {
+      "source": "analysis:news:新闻报道",
+      "timestamp": "2026-11-08 23:04",
+      "type": "analysis_result",
+      "assessment": "unknown",
+      "confidence": "",
+      "doc_id": "c63333124236351a"
+    }
+  },
+  {
+    "text": "[news结论] 微软\n研判: bullish\n\nMIT实证GPT-6 Astra对Qwen权重的直接修改能力，使Qwen数学能力提升6倍，证明OpenAI在模型间知识迁移与底层参数控制上取得实质性突破；GPT-6.2 Astra灰度测试启动，表明其已脱离纯研发阶段，进入真实用户环境验证，缩短商业化路径；GPT-6.1 Terra安全规范发布，通过系统卡片等机制增强可审计性与合规可信度，降低企业客户部署风险。三者共同构成技术可控性、工程进度与监管适配的三角验证。但全文未提供任何营收、订单、股价变动或用户规模数据，所有影响均限于技术验证层。",
+    "meta": {
+      "source": "analysis:news:微软",
+      "timestamp": "2026-11-08 23:40",
+      "type": "analysis_result",
+      "assessment": "bullish",
+      "confidence": "medium",
+      "doc_id": "3763f030e05a1467"
+    }
+  },
+  {
+    "text": "[news结论] 香港证监会\n研判: bullish\n\n该调研由香港证监会于金融科技周发布，覆盖占全港75%成交额的核心中介机构，权威性高。95%机构计划持续扩张AI应用，表明AI已从试点进入规模化部署阶段；55%考虑部署主动型AI智能体，标志AI从被动分析向自主决策演进。虽未点名具体科技公司，但直接利好AI基础设施、金融大模型及Agent开发平台供应商。监管机构主动披露积极数据，释放明确政策支持信号，将加速金融机构AI采购预算释放与POC转为正式合同。",
+    "meta": {
+      "source": "analysis:news:香港证监会",
+      "timestamp": "2026-11-08 23:46",
+      "type": "analysis_result",
+      "assessment": "bullish",
+      "confidence": "high"
+    }
+  }
+]

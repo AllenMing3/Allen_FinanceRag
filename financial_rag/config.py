@@ -142,9 +142,28 @@ class AppConfig:
     mock: MockConfig = field(default_factory=MockConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
 
+    # ---- KB 分层目录（动态派生自 kb_dir；monkeypatch kb_dir 后自动跟随）----
+    @property
+    def source_dir(self) -> str:
+        """真相源层：不可再生数据（kb_docs / news_metadata / news_archive）。"""
+        return os.path.join(self.kb_dir, "source")
+
+    @property
+    def index_dir(self) -> str:
+        """派生索引层：可随时删除重建（kb_index / bm25 / chroma / embedding_cache / lightrag）。"""
+        return os.path.join(self.kb_dir, "index")
+
+    @property
+    def state_dir(self) -> str:
+        """运行状态层：可删（stats / .kb_version / conversations / learning）。"""
+        return os.path.join(self.kb_dir, "state")
+
     def __post_init__(self):
-        for d in [self.data_dir, self.kb_dir, self.output_dir]:
+        for d in [self.data_dir, self.kb_dir, self.output_dir,
+                  self.source_dir, self.index_dir, self.state_dir]:
             os.makedirs(d, exist_ok=True)
+        # LightRAG 图谱归入派生索引层（可重建）
+        self.lightrag.working_dir = os.path.join(self.index_dir, "lightrag")
 
 
 # 全局配置

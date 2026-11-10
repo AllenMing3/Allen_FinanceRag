@@ -54,12 +54,12 @@ def create_hybrid_retriever() -> Any:
     # ---- 查询解析器 ----
     parser = QueryParser()
 
-    # ---- Chroma 持久化目录 ----
-    chroma_dir = os.path.join(_cfg.kb_dir, "chroma")
+    # ---- Chroma 持久化目录（派生索引层，可重建）----
+    chroma_dir = os.path.join(_cfg.index_dir, "chroma")
     os.makedirs(chroma_dir, exist_ok=True)
 
-    # ---- BM25 FTS5 数据库 ----
-    bm25_db_path = os.path.join(_cfg.kb_dir, "bm25_index.db")
+    # ---- BM25 FTS5 数据库（派生索引层，可重建）----
+    bm25_db_path = os.path.join(_cfg.index_dir, "bm25_index.db")
 
     # ---- 组装 ----
     if not api_key:

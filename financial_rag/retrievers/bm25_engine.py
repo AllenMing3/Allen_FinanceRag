@@ -23,8 +23,7 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# 默认数据库路径
-_DEFAULT_DB_DIR = os.path.join("data", "knowledge_base")
+# 默认数据库名（目录运行时从 config.index_dir 派生 —— 派生索引层，可重建）
 _DEFAULT_DB_NAME = "bm25_index.db"
 
 
@@ -39,8 +38,10 @@ class BM25Engine:
         """
         self._tokenizer = tokenizer
         if db_path is None:
-            os.makedirs(_DEFAULT_DB_DIR, exist_ok=True)
-            db_path = os.path.join(_DEFAULT_DB_DIR, _DEFAULT_DB_NAME)
+            from financial_rag.config import config
+            db_dir = config.index_dir
+            os.makedirs(db_dir, exist_ok=True)
+            db_path = os.path.join(db_dir, _DEFAULT_DB_NAME)
         self._db_path = db_path
         self._initialized = False
         self._ensure_table()

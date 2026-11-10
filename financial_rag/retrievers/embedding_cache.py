@@ -19,8 +19,7 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# 默认缓存文件路径
-_DEFAULT_CACHE_DIR = os.path.join("data", "knowledge_base")
+# 默认缓存文件名（目录运行时从 config.index_dir 派生 —— 派生索引层，可重建）
 _DEFAULT_CACHE_FILE = "embedding_cache.json"
 _DEFAULT_MAX_ENTRIES = 5000
 
@@ -40,9 +39,12 @@ class EmbeddingCache:
 
     def __init__(
         self,
-        cache_dir: str = _DEFAULT_CACHE_DIR,
+        cache_dir: Optional[str] = None,
         max_entries: int = _DEFAULT_MAX_ENTRIES,
     ):
+        if cache_dir is None:
+            from financial_rag.config import config
+            cache_dir = config.index_dir
         self._cache_dir = cache_dir
         self._cache_path = os.path.join(cache_dir, _DEFAULT_CACHE_FILE)
         self._max_entries = max_entries
@@ -52,7 +54,7 @@ class EmbeddingCache:
         self._load()
 
     @classmethod
-    def get_instance(cls, cache_dir: str = _DEFAULT_CACHE_DIR) -> "EmbeddingCache":
+    def get_instance(cls, cache_dir: Optional[str] = None) -> "EmbeddingCache":
         """获取全局单例"""
         if cls._instance is None:
             with cls._lock:

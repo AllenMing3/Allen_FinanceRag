@@ -16,23 +16,33 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-_BASE = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "knowledge_base"))
-_LEARNING_DIR = os.path.join(_BASE, "learning")
+from financial_rag.config import config as _cfg
 
-KB_PATH = os.path.join(_BASE, "kb_docs.json")
-META_PATH = os.path.join(_BASE, "news_metadata.json")
-NEWS_ARCHIVE_PATH = os.path.join(_BASE, "news_archive.jsonl")
-STATS_PATH = os.path.join(_BASE, "stats.json")
-VERSION_PATH = os.path.join(_BASE, ".kb_version")
+# KB 分层目录统一由 config 派生（真相源 source / 派生索引 index / 运行状态 state）。
+# 保留 _BASE 别名向后兼容；各路径按“可否再生”归入对应层。
+_BASE = _cfg.kb_dir
+
+# —— 真相源层（不可再生，务必备份）——
+KB_PATH = os.path.join(_cfg.source_dir, "kb_docs.json")
+META_PATH = os.path.join(_cfg.source_dir, "news_metadata.json")
+NEWS_ARCHIVE_PATH = os.path.join(_cfg.source_dir, "news_archive.jsonl")
+
+# —— 运行状态层（可删）——
+STATS_PATH = os.path.join(_cfg.state_dir, "stats.json")
+VERSION_PATH = os.path.join(_cfg.state_dir, ".kb_version")
+_LEARNING_DIR = os.path.join(_cfg.state_dir, "learning")
 LEARNING_HISTORY_PATH = os.path.join(_LEARNING_DIR, "history.jsonl")
 
+# —— 派生索引层（可删重建）——
 # Index persistence path (for HybridRetriever save/load)
-INDEX_PATH = os.path.join(_BASE, "kb_index.json")
+INDEX_PATH = os.path.join(_cfg.index_dir, "kb_index.json")
 
 # News archive rotation cap (max lines kept after trim)
 NEWS_ARCHIVE_MAX_LINES = 5000
 
-os.makedirs(_BASE, exist_ok=True)
+os.makedirs(_cfg.source_dir, exist_ok=True)
+os.makedirs(_cfg.index_dir, exist_ok=True)
+os.makedirs(_cfg.state_dir, exist_ok=True)
 os.makedirs(_LEARNING_DIR, exist_ok=True)
 
 

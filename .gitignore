@@ -99,12 +99,9 @@ data/**/*.parquet
 data/**/*.db
 data/**/*.sqlite3
 
-# 但保留样本数据
+# 但保留样本数据（source/ 层的 json/jsonl 真相源）
 !data/**/*.jsonl
 !data/**/*.json
-
-# embedding 缓存不入库（可能很大）
-data/knowledge_base/embedding_cache.json
 
 # 日志
 *.log
@@ -122,15 +119,13 @@ temp/
 *.tmp
 
 # ===================== 运行时产物 & 一次性脚本（保持 git status 清爽）=====================
-# KB 运行时状态：每次运行都变，本地保留即可，不入库
-data/knowledge_base/chroma/
-data/knowledge_base/conversations/
-data/knowledge_base/learning/
-data/knowledge_base/kb_index.json
-data/knowledge_base/stats.json
-data/knowledge_base/.kb_version
-data/knowledge_base/*.bak
-data/knowledge_base/*.bak_pre_clean
+# KB 分层：index/(派生索引·可删重建) + state/(运行状态·每次运行都变) 不入库；
+#          source/(真相源·不可再生) 保留追踪。目录级忽略，新增派生文件自动覆盖。
+data/knowledge_base/index/
+data/knowledge_base/state/
+# 备份文件（persistence 单代 .bak 机制自动生成于各层）
+data/knowledge_base/**/*.bak
+data/knowledge_base/**/*.bak_pre_clean
 
 # 实验/评估产物（脚本生成，可复现）
 experiments/lightrag_demo/

@@ -226,8 +226,10 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
   lightrag_adapter 图谱检索。
 - **llm/**：DashScopeLLM + LLMCaller(重试/缓存/JSON 平衡括号解析) + ModelRouter(4 档模型)。
 - **services/**：analysis(新闻/话题分析 fallback 实现)、conversation(会话管理)、persistence(KB 持久化)。
-- **数据**（data/knowledge_base/）：kb_docs.json(知识文档)、news_metadata.json(新闻元数据)、
-  bm25_index.db(FTS5)、chroma/(向量库)、embedding_cache.json、conversations/、lightrag/。
+- **数据**（data/knowledge_base/ 按“能否再生”分三层，路径统一由 config.kb_dir 派生，详见 data/README.md）：
+  source/(真相源·不可再生·入库) kb_docs.json、news_metadata.json、news_archive.jsonl；
+  index/(派生索引·可删重建·不入库) kb_index.json、bm25_index.db、chroma/、embedding_cache.json、lightrag/；
+  state/(运行状态·可删·不入库) stats.json、.kb_version、conversations/、learning/。
 
 ## 8. 已知问题 & Backlog（业务通路优先，其余降级）
 
