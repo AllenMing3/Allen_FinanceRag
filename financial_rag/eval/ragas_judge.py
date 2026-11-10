@@ -177,6 +177,84 @@ def get_judge_llm(model: str = None):
     return llm_factory(model or _JUDGE_MODEL, client=client, temperature=0.0, max_tokens=2048)
 
 
+def _build_cn_faithfulness_prompts():
+    """中文化 RAGAS Faithfulness 两步 prompt（声明分解 + NLI），修复 good 档假阴性。
+
+    B 诊断（claim 级 dump）坐实：RAGAS 默认英文 prompt 使 qwen-plus 把中文声明翻译成
+    英文再判定，翻译引入语义偏移（省略主语错绑相邻主体、"计划/布局"强化为"已部署"）
+    并过度拆分并列成分 → auto_04=0.5 / api_05=0.667 假阴性。中文化后声明保持中文、
+    不过度拆分、主语补全更准（实测 api_05→1.0）。NLI 阶段本身判得准，失效只在分解。
+
+    懒加载 import ragas 保持"未装也不报错"契约；属 eval judge 内部实现，不进 prompts.py
+    （业务生成 prompt 不应引入 ragas 依赖）。
+    """
+    from ragas.metrics.collections.faithfulness.util import (
+        NLIStatementInput,
+        NLIStatementOutput,
+        NLIStatementPrompt,
+        StatementFaithfulnessAnswer,
+        StatementGeneratorInput,
+        StatementGeneratorOutput,
+        StatementGeneratorPrompt,
+    )
+
+    class StatementGeneratorPromptCN(StatementGeneratorPrompt):
+        instruction = (
+            "给定一个问题和一个回答，把回答拆分成若干条可独立理解、可验证的原子声明。规则："
+            "(1) 保持与回答相同的语言（中文），严禁翻译成英文；"
+            "(2) 若某句省略主语，补全时必须用回答/问题中真实指代的主体，严禁错绑到相邻句的其它主体；"
+            "(3) 严禁改变原意强度，如'计划/拟/布局'不得强化为'已完成/已部署/已实现'；"
+            "(4) 并列成分（如'东南亚和中东'）保持一条，不拆成多条改变原意的声明；"
+            "(5) 不使用代词。"
+        )
+        examples = [
+            (
+                StatementGeneratorInput(
+                    question="商汤科技2024年年报披露了哪些业务进展？",
+                    answer="商汤绝影与超30家车企合作，覆盖L2+到L4级别方案。公司计划布局东南亚和中东市场。",
+                ),
+                StatementGeneratorOutput(statements=[
+                    "商汤绝影自动驾驶平台已与超过30家车企合作。",
+                    "商汤绝影自动驾驶方案覆盖L2+到L4级别。",
+                    "商汤科技计划布局东南亚和中东市场。",
+                ]),
+            ),
+        ]
+
+    class NLIStatementPromptCN(NLIStatementPrompt):
+        instruction = (
+            "你的任务是依据给定上下文判断一系列声明的忠实度。对每条声明：能由上下文直接推出则 "
+            "verdict=1，不能直接推出则 verdict=0。保持中文语义判断，注意：'计划/布局'不等于"
+            "'已完成/已部署'；上下文未提及的信息一律 verdict=0；主体张冠李戴也判 verdict=0。"
+        )
+        examples = [
+            (
+                NLIStatementInput(
+                    context="商汤科技发布2024年年报，全年营业收入50.3亿元，同比增长36.4%。"
+                            "公司计划进一步扩大算力基础设施投资，并在东南亚和中东市场布局海外业务。",
+                    statements=[
+                        "商汤科技2024年营业收入50.3亿元。",
+                        "商汤科技已在东南亚市场部署海外业务。",
+                        "商汤科技2024年净利润为10亿元。",
+                    ],
+                ),
+                NLIStatementOutput(statements=[
+                    StatementFaithfulnessAnswer(
+                        statement="商汤科技2024年营业收入50.3亿元。",
+                        reason="上下文明确写明'全年营业收入50.3亿元'，可直接推出。", verdict=1),
+                    StatementFaithfulnessAnswer(
+                        statement="商汤科技已在东南亚市场部署海外业务。",
+                        reason="上下文说的是'计划…布局海外业务'，属计划而非已部署，不能推出'已部署'。", verdict=0),
+                    StatementFaithfulnessAnswer(
+                        statement="商汤科技2024年净利润为10亿元。",
+                        reason="上下文未提及净利润具体数字，无法推出。", verdict=0),
+                ]),
+            ),
+        ]
+
+    return StatementGeneratorPromptCN(), NLIStatementPromptCN()
+
+
 # ===================== 评估主流程 =====================
 
 def _mean(values) -> float:
@@ -212,6 +290,10 @@ def run_faithfulness(samples: List[Dict], judge_model: str = None) -> List[float
 
     model = judge_model or _JUDGE_MODEL
     metric = Faithfulness(llm=get_judge_llm(model))
+    # B 诊断坐实：默认英文 prompt 使 judge 把中文声明翻译扭曲（主语错绑/过度拆分），
+    # 注入中文化两步 prompt 修复（详见 _build_cn_faithfulness_prompts）
+    metric.statement_generator_prompt, metric.nli_statement_prompt = (
+        _build_cn_faithfulness_prompts())
     inputs = build_metric_inputs(samples)
 
     logger.info(f"开始 RAGAS faithfulness 评估: {len(samples)} 条样本, judge={model}")
@@ -361,6 +443,12 @@ def load_expected(path: Path = RESULTS_PATH) -> Optional[Dict]:
 
 def main(argv=None) -> int:
     import argparse
+    # Windows GBK 控制台 print 中文 / U+2212(−) 会 UnicodeEncodeError → 强制 std 流 utf-8
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
     logging.getLogger("ragas").setLevel(logging.WARNING)
 
