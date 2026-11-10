@@ -232,78 +232,32 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
 ## 8. 已知问题 & Backlog（业务通路优先，其余降级）
 
 ### P0 — 影响通路正确性（新架构跑通前必须处理）
-1. **编排器并发竞态**：orchestrator 是共享单例，`set_pipeline()`+`self.context`
-   为可变全局状态，并发请求互相覆写链与上下文（orchestrator.py L128/L151 ↔ pipeline.py L360 ↔ analysis_router.py L151）。
-2. **防幻觉静默跳过**（可靠性层自己会被无痕绕过）：① `ScoringAgent.can_handle =
-   bool(final_answer or intermediate_findings)`（scoring_agent.py L51-53），上游链忘写回
-   final_answer → orchestrator 无痕 continue，整层评分+防幻觉消失且无"未校验"提示；
-   ② `check_hallucination` 中 `if not check_text: return {}`（scoring_agent.py L101-102）
-   → 待校验文本为空时静默跳过。二者均违反"防幻觉禁止静默跳过"（该规范只在 Guard
-   内部 skip 落实，未覆盖"整层该不该跑"）。方向：can_handle 兜底 + 空文本走显式
-   skipped 标记而非 return {}。**用户 2026-10 拍板：先记录，暂不动代码。**
-3. **检索 grounding 被腰斩，RAG 名不副实**（探针实测）：深度分析路径把 KB 背景砍到
-   `kb_sources[:3]` 且每条 `s['text'][:150]`（analysis.py L388 / L512）—— 实测召回 3286
-   字 chunk 只喂进 450 字，**保真率 13.7%**，且每条断在半句/半词。后果连锁：AI 几乎拿不到
-   真实 KB 上下文（只能靠新闻原文+先验）→ 幻觉温床；而 HallucinationGuard 又用**同一批
-   150 字残片**当 grounding 打分 → answer 与"来源"同源于贫瘠输入 → **防幻觉分数系统性虚高、
-   自我欺骗**。方向：grounding 组装统一走 ReliabilityService（见 P1-5），按 token 预算而非
-   固定 150 字截断，优先保整句/整段。
-4. **embedding 缓存 `text[:500]` 撞键 → 向量污染**（探针实测，静默数据损坏）：缓存键
-   `MD5(text[:500])`（embedding_cache.py L200）。实测两 chunk 前 500 字相同（模板抬头/免责
-   声明/重复段落）即得同一 hash `ec398a…` → 后者复用前者的 embedding → **存进错误向量** →
-   检索召回错内容，静默难复现。方向：hash 用全文或 (source_id+chunk_id)。
+1. **编排器并发竞态**：orchestrator 是共享单例，`set_pipeline()`+`self.context` 为可变全局状态，并发请求互相覆写链与上下文（orchestrator.py L128/L151 ↔ pipeline.py L360 ↔ analysis_router.py L151）。
+2. **防幻觉静默跳过**（可靠性层会被无痕绕过）：① `ScoringAgent.can_handle=bool(final_answer or intermediate_findings)`（scoring_agent.py L51-53），上游忘写回 final_answer → orchestrator 无痕 continue，整层评分+防幻觉消失且无"未校验"提示；② `check_hallucination` 中 `if not check_text: return {}`（L101-102）→ 空文本静默跳过。方向：can_handle 兜底 + 空文本走显式 skipped 标记。**用户 2026-10 拍板：先记录，暂不动代码。**
+3. **检索 grounding 被腰斩，RAG 名不副实**（探针实测）：深度分析路径把 KB 背景砍到 `kb_sources[:3]` 且每条 `s['text'][:150]`（analysis.py L388/L512）—— 实测 3286 字 chunk 只喂 450 字（**保真率 13.7%**）且断在半句。后果：AI 拿不到真实上下文 → 幻觉温床；Guard 又用同一批残片当 grounding 打分 → **防幻觉分数系统性虚高、自我欺骗**。方向：grounding 统一走 ReliabilityService（见 P1-5），按 token 预算而非固定 150 字截断。
+4. **embedding 缓存 `text[:500]` 撞键 → 向量污染**（探针实测，静默数据损坏）：缓存键 `MD5(text[:500])`（embedding_cache.py L200），两 chunk 前 500 字相同（模板抬头/免责声明）即同 hash → 后者复用前者 embedding → 存进错误向量、检索召回错内容。方向：hash 用全文或 (source_id+chunk_id)。
 
 ### P1 — 通路跑通后第一批清理
-5. **可靠性入口收敛 → 抽 ReliabilityService**（用户 2026-10 拍板方向·待开工）：
-   `HallucinationGuard.check()` 现有 **4 个各自为政的调用点** —— ①链内 scoring_tools.
-   check_hallucination（走 ScoringAgent）②analysis_router._run_hallucination_check（新闻/
-   话题 fallback，硬编码 mode=analysis）③kb_router /kb-query（默认 mode=rag）④pipeline.
-   _phase_evolve。每处自拼 sources、自定 mode、自决触发 → 同一输出走不同入口分数不可
-   复现；通路 B 上 ①④ 对同一输出**双重评分**；改策略需同步 4 处易漂移（serializer
-   注释仍写"统一 3 个调用点"，实为 4）。方向：抽 `ReliabilityService` 封装
-   check()+mode 决策+source 组装+序列化，其余 3 处改为调它，ScoringAgent 亦复用。
-6. 假分数：`evaluate_pipeline_quality` 硬编码 fetch=0.9/index=0.85/process=0.8
-   （scoring_tools.py L63/70/79，"有数据即高分"）、`_phase_evolve` 硬编码 0.9/0.85/0.8
-   → pipeline_grade 系统性虚高，应换真实质量信号（RAGAS 基线已建）。
-   **另：L1 语义反转盲点**（旧 L5/L6 LLM 纠错层已淘汰删除，运行时无 LLM 兜底）
-   —— L1 来源锚定阈值 token 重叠 ≥0.30 即算锚定（rule_layers.py GROUNDING_THRESHOLD；
-   Step 7 加固已从 0.15 提到 0.30，钉死编造句漏抓），但**语义反转仍未解**（"下降15%"
-   vs"增长15%"）因 token 高度重叠被误判已锚定；离线 RAGAS faithfulness 对这类
-   改写/极性也不敏感。方向：词级极性/方向校验，非单纯提阈能解。
+5. **可靠性入口收敛 → 抽 ReliabilityService**（用户 2026-10 拍板·待开工）：`HallucinationGuard.check()` 现有 **4 个各自为政的调用点**（① scoring_tools.check_hallucination ② analysis_router._run_hallucination_check 硬编码 mode=analysis ③ kb_router /kb-query 默认 mode=rag ④ pipeline._phase_evolve），每处自拼 sources+自定 mode+自决触发 → 同一输出分数不可复现、通路 B 上双重评分、改策略需同步 4 处易漂移。方向：抽 `ReliabilityService` 封装 check()+mode 决策+source 组装+序列化，其余 3 处及 ScoringAgent 均复用。
+6. **假分数 + L1 语义反转盲点**：`evaluate_pipeline_quality`/`_phase_evolve` 硬编码 0.9/0.85/0.8（scoring_tools.py L63/70/79，"有数据即高分"）→ pipeline_grade 系统性虚高，应换真实质量信号（RAGAS 基线已建）。另 L1 来源锚定 token 重叠 ≥0.30 即算锚定（rule_layers.py GROUNDING_THRESHOLD，Step7 已从 0.15 提到 0.30），但**语义反转仍未解**（"下降15%"vs"增长15%"因 token 高度重叠被误判已锚定）；方向：词级极性/方向校验。
 7. 重试机制失效：BaseAgent.run 吞掉所有异常，orchestrator 的 max_retries 永不触发。
 8. 三条 AnalysisAgent 入口（链 / _run_analysis_via_agent_chain / api_kline 直连）收敛为一条。
-9. **数据存储迁移到 PostgreSQL**（用户 2026-10 拍板，方向已定·待开工）：根治内存单例整表重写+无锁并发导致的丢数据（news_metadata 曾 -1361 行）与四份真相计数校验。范围核心先行——kb_docs/news_meta/stats/version 入 PG 做唯一真相，Chroma/LightRAG/bm25 降为可重建派生索引；`persistence.py` 换实现留签名（~18 处调用点零改动）；前置需 PG 实例 + 驱动 + Alembic + config/.env。
-10. **检索→组装三套截断 + 三套 prompt 不一致**（探针实测）：同一份 KB chunk 走不同通路
-    喂给 AI 的信息量差 5 倍以上 —— KB问答(slot_filler 不截断) / 深度分析(每条 150) /
-    新闻综合(每条 800, 总 12000)。prompt 亦分裂三套：prompts.py 富模板(CoT+anti_hallucination
-    +rubric+few-shot) / analysis.py 内联富 prompt(L390-448, 与前者风格重复) / slot_filler
-    极简 system(L96-99)。→ 输出质量不可复现、不可比 + 维护漂移。方向：组装与截断收敛到
-    统一 context-builder，prompt 统一到 prompts.py 单一来源。
-11. **槽位填充碎片化推理**（"快"换"深"的副作用）：QUICK_QA 每槽 `max_tokens` 30-100、
-    独立并行、system 极简（templates.py L178-211）。首 token 延迟压到 0.3-0.8s，但"直接回答"
-    仅 100 token 预算，**承载不了连贯/有深度的分析**，对可靠性是负分。方向：区分"快答"与
-    "深度"两档，深度档放开 token 预算或改回单次长生成。
-12. **分块配置三处散落**：factory(1500/100/80/skip500, 被 doctype 覆盖) vs chunk_tools
-    "default"(500/50, chunk_tools.py L28-44) vs kb_router(`TextChunker(chunk_size=req.chunk_size)`
-    直接 `.split`, kb_router.py L555)。`chunk_document` 工具那条与真正入库那条用的 size 都不同。
-    方向：单一 chunk 配置源（并入 config.py），工具与入库共用。
+9. **数据存储迁移到 PostgreSQL**（用户 2026-10 拍板·待开工）：根治内存单例整表重写+无锁并发丢数据（news_metadata 曾 -1361 行）与四份真相计数校验。核心先行——kb_docs/news_meta/stats/version 入 PG 做唯一真相，Chroma/LightRAG/bm25 降为可重建派生索引；`persistence.py` 换实现留签名（~18 处调用点零改动）；前置需 PG 实例+驱动+Alembic+config/.env。
+10. **检索→组装三套截断 + 三套 prompt 不一致**（探针实测）：同一 KB chunk 走不同通路信息量差 5 倍以上（KB问答不截断 / 深度分析每条 150 / 新闻综合每条 800 总 12000）；prompt 亦分裂三套（prompts.py 富模板 / analysis.py 内联 L390-448 / slot_filler 极简 L96-99）→ 输出不可复现+维护漂移。方向：截断收敛到统一 context-builder，prompt 统一到 prompts.py。
+11. **槽位填充碎片化推理**（"快"换"深"的副作用）：QUICK_QA 每槽 `max_tokens` 30-100、独立并行、system 极简（templates.py L178-211），首 token 延迟压到 0.3-0.8s，但 100 token 预算**承载不了连贯深度分析**。方向：区分"快答/深度"两档，深度档放开 token 或改单次长生成。
+12. **分块配置三处散落**：factory(1500/100/80/skip500) vs chunk_tools "default"(500/50, L28-44) vs kb_router(`TextChunker(chunk_size=req.chunk_size)` 直接 `.split`, L555)，`chunk_document` 工具与真正入库用的 size 不同。方向：单一 chunk 配置源（并入 config.py）。
 
 ### P2 — 历史债（明确降级，不阻塞业务）
-13. **chunk 边界/位置追溯损坏**（探针实测）：`_add_overlap` 把前块尾部拼到后块头后，
-    `text.find(chunk[:20])` 定位失效 —— 内容重复时指向**错误位置**（实测 chunk_start 非单调
-    `[0,502,863,166,620,36,…]`），位移时返回 -1（chunker.py L117-124）；`_merge_small_chunks`
-    无分隔符直接 `merged[-1]+chunk` 拼接残片（L273）；overlap 后 chunk 会**超过 chunk_size**
-    （实测 1534>1500）；news=(500,0) 无重叠 → >500 字新闻边界处上下文断裂无补偿。
-14. 死代码：ExecutionMode.PARALLEL/CONDITIONAL、MessageBus(protocol.py)、
-   pipeline data_orchestrator 多Pool分支、_route_query fetched_date 死信号。
+13. **chunk 边界/位置追溯损坏**（探针实测）：`_add_overlap` 拼接后 `text.find(chunk[:20])` 定位失效（内容重复指向错误位置、位移返回 -1，chunker.py L117-124）；`_merge_small_chunks` 无分隔符拼残片（L273）；overlap 后 chunk 超 chunk_size（实测 1534>1500）；news=(500,0) 无重叠致长新闻边界断裂。
+14. 死代码：ExecutionMode.PARALLEL/CONDITIONAL、MessageBus(protocol.py)、data_orchestrator 多Pool分支、_route_query fetched_date 死信号。
 15. orchestrator.history 无界增长；tool call ID 秒级时间戳会撞。
 16. 同步+线程池架构 → async 化；verbose print → logger。
 17. IngestionAgent EXPECTED_METADATA_FIELDS 与 DocMetadata schema 脱节（fiscal_period/currency 财报时代残留）。
 18. AgentRouter 关键词正则分类 → LLM/Planner 路由；公司名硬编码正则与 STOCK_MAP 双份维护。
-19. 测试套件对齐：旧架构的约 594 用例全量套已废弃，替换为护栏驱动的按 RAG 流水线步骤测试（当前 295 用例，覆盖预处理/入库/查询解析/召回/RRF 融合/过滤门控/生成有据化 + 上下文组装 + L1 检索评估 + L2 输出评估 + L3 LLM-as-judge(RAGAS，离线映射部分) + 可观测性埋点，详见 README）。RAG 流水线 Step 0-7 已全部闭环；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁仍为手动触发。
-20. 可观测性：RAG 可观测性工具选型已定 Phoenix（OpenInference/OTel，独立 `.venv-obs` 起服务 + 主应用 OTLP/HTTP 外推，默认关闭）；第一期核心 RAG 链路（LLM/检索/embedding/rerank）已落地，第二期（Agent 链/Pipeline 5 阶段/工具调用/护栏）尚未埋点。
-21. 依赖治理：迁移到 uv + PEP 621 `pyproject.toml`（单一真相源）+ `uv.lock`（可复现）。移除全项目 0 引用的 `llama-index` 冗余（曾拖进 openai<3 生态、与 Phoenix 冲突）；分 core/dev/observability 三组 extras；`arize-phoenix` 隔离到独立 `.venv-obs`；`requirements.txt` 改为 `uv export` 锁定产物。主环境 `.venv` 由 `uv sync --extra dev` 建；CI 改用 setup-uv + `uv sync --frozen`。
-22. **RAGAS LLM-as-judge 精度薄 + eval golden 单一**（六层防护退役后新增，用户 2026-11 拍板降级为辅助观测·后期强化）：① **judge 区分度弱**——qwen-plus 对中文改写声明判定噪声大（good 档被误扣到 0.5-0.6），good−defect mean-gap 实测仅 0.04-0.06（远低于理想 0.15）；qwen-max 对 RAGAS instructor schema 返回残缺 JSON、校验失败不可用。故 `eval/ragas_judge.py` 现定位为辅助观测（跑通即 exit 0，区分度仅报告不阻断），质量门禁实际仍靠 L1/L2 规则尺子 + step7。② **golden 集单一**——`output_news_brief.jsonl` 11 case 全部共用 1 篇源文档 `d_sensetime_long`（9 个不同 query），L2/L3 尺子判别力与泛化性受限于单文档、有过拟合风险。③ `extract_brief_claims` 只适配 NEWS_BRIEF 模板（写死 市场/展望 字段解析），deep_analysis/quick_qa 走不通。④ RAGAS 需 API key+重依赖，不进 CI，在线评判无回归保护。方向：扩 golden 到多源文档/多模板 + 试更强 judge 或专用 NLI + few-shot 提示改善区分度。
+19. 测试套件对齐：旧架构约 594 用例全量套已废弃，替换为护栏驱动按 RAG 流水线步骤测试（当前 295，覆盖预处理/入库/查询解析/召回/RRF融合/过滤门控/生成有据化 + 上下文组装 + L1检索评估 + L2输出评估 + L3 LLM-as-judge(RAGAS) + 可观测性埋点，Step 0-7 已闭环，详见 README）；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁手动触发。
+20. 可观测性：Phoenix 选型已定（OpenInference/OTel，独立 `.venv-obs` + 主应用 OTLP/HTTP 外推，默认关闭）；第一期核心 RAG 链路（LLM/检索/embedding/rerank）已落地，第二期（Agent 链/Pipeline 5 阶段/工具调用/护栏）尚未埋点。
+21. 依赖治理：已迁移 uv + PEP 621 `pyproject.toml`（单一真相源）+ `uv.lock`（可复现）；移除全项目 0 引用的 `llama-index`（曾拖进 openai<3 生态、与 Phoenix 冲突）；分 core/dev/observability 三组 extras；`arize-phoenix` 隔离独立 `.venv-obs`；`requirements.txt` 为 `uv export` 锁定产物；CI 用 setup-uv + `uv sync --frozen`。
+22. **RAGAS LLM-as-judge 辅助观测**（六层防护退役后新增，用户 2026-11 拍板降级为辅助观测）：① **judge 区分度已修复**——原默认英文 prompt 致中文声明翻译扭曲（主语错绑/过度拆分）、good−defect mean-gap 仅 0.04-0.06（远低于 0.15）；中文化两步 prompt 后 gap 抬到 **0.18 越过 0.15 阈值**（good_mean 0.87/defect_mean 0.68，两次复现，见 `eval/ragas_judge.py` `_build_cn_faithfulness_prompts`）。仍定位辅助观测（跑通 exit 0、区分度仅报告不阻断），主门禁靠 L1/L2 规则尺子 + step7。② **golden 集单一**——`output_news_brief.jsonl` 11 case 全部共用 1 篇源文档 `d_sensetime_long`，L2/L3 尺子判别力/泛化性受限、有过拟合风险。③ `extract_brief_claims` 只适配 NEWS_BRIEF 模板，deep_analysis/quick_qa 走不通。④ RAGAS 需 API key+重依赖、不进 CI、在线评判无回归保护。方向：扩 golden 到多源/多模板 + gap 在线波动取多次均值 + 查 compute_03 中文化后退步(1.0→0.667)。
 
 ## 9. 测试与运行
 
