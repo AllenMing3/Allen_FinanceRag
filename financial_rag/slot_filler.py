@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import time
 import logging
+import re
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -64,6 +65,7 @@ class FillStats:
     phases: int = 0
     parallel_gain: float = 0.0        # 并行收益（节省的时间比例）
     slot_results: Dict[str, SlotResult] = field(default_factory=dict)
+    context_trace: Dict = field(default_factory=dict)  # ContextBuilder 组装 trace（保真率可观测）
 
 
 # ===================== 填充引擎 =====================
@@ -79,8 +81,8 @@ class SlotFiller:
     4. 与 PipelineScoreCard 集成，记录每个槽位的评分
     """
 
-    # 首 token 延迟预估系数：总耗时 / token 数的经验比例
-    TTFT_ESTIMATE_RATIO = 0.15  # 假设首token约占总耗时的15%
+    # 首 token 延迟预估系数：无流式时按总耗时的该比例估算
+    TTFT_ESTIMATE_RATIO = 0.3
 
     def __init__(
         self,
@@ -93,10 +95,8 @@ class SlotFiller:
         self.llm = llm
         self.scorecard = scorecard
         self.max_workers = max_workers
-        self.system_prompt = system_prompt or (
-            "你是专业的金融分析师。基于参考信息回答，不确定时标注'信息不足'。"
-            "只输出要求的内容，不要额外解释。禁止编造参考信息中没有的数据。"
-        )
+        from financial_rag.prompts import SLOT_FILLER_SYSTEM
+        self.system_prompt = system_prompt or SLOT_FILLER_SYSTEM
         self.verbose = verbose
 
         # 使用 LLMCaller 包装，获得重试 + 缓存 + 输入长度校验
@@ -129,6 +129,17 @@ class SlotFiller:
             phases=len(template.phases),
         )
 
+        # 统一 grounding 组装（ContextBuilder 唯一算法：预算 + 句边界 + [N] 标号 + trace）
+        # 所有槽位共享同一份参考段，只组装一次
+        from financial_rag.context_builder import ContextBuilder
+        items = [
+            {"text": d, "source": f"参考{i + 1}", "score": 1.0}
+            for i, d in enumerate(context_docs[:5]) if d and d.strip()
+        ]
+        assembled = ContextBuilder.for_path("quick_qa").build(items)
+        grounding = assembled.grounding_text
+        stats.context_trace = assembled.trace.to_dict()
+
         # 按 Phase 执行
         for phase_idx, phase_keys in enumerate(template.phases):
             # 构建此 Phase 的上下文（包含前序槽位结果）
@@ -140,7 +151,7 @@ class SlotFiller:
                 slot_keys=phase_keys,
                 template=template,
                 query=query,
-                context_docs=context_docs,
+                grounding=grounding,
                 prev_context=prev_context,
             )
             all_results.update(phase_results)
@@ -185,7 +196,7 @@ class SlotFiller:
         slot_keys: List[str],
         template: "SlottedTemplate",
         query: str,
-        context_docs: List[str],
+        grounding: str,
         prev_context: str,
     ) -> Dict[str, SlotResult]:
         """并行填充一个 Phase 内的所有槽位"""
@@ -199,14 +210,7 @@ class SlotFiller:
                 logger.warning(f"槽位 {key} 不在模板 {template.name} 中")
                 continue
 
-            # 检查依赖是否已满足（理论上按 phase 执行不会出问题）
-            deps_unmet = [d for d in slot_def.depends_on
-                         if d not in results and d not in results]
-
-            if deps_unmet and prev_context:
-                # 依赖的前序槽位已填充，但在 prev_context 中
-                pass
-
+            # 槽位依赖由 phase 顺序保证（template.phases），前序结果经 prev_context 注入
             tasks.append((key, slot_def))
 
         # 并行执行（如果只有一个任务，直接执行避免线程开销）
@@ -217,7 +221,7 @@ class SlotFiller:
                 slot_def=slot_def,
                 phase_idx=phase_idx,
                 query=query,
-                context_docs=context_docs,
+                grounding=grounding,
                 prev_context=prev_context,
             )
             results[key] = result
@@ -231,7 +235,7 @@ class SlotFiller:
                         slot_def=slot_def,
                         phase_idx=phase_idx,
                         query=query,
-                        context_docs=context_docs,
+                        grounding=grounding,
                         prev_context=prev_context,
                     )
                     futures[fut] = key
@@ -262,7 +266,7 @@ class SlotFiller:
         slot_def: "SlotDef",
         phase_idx: int,
         query: str,
-        context_docs: List[str],
+        grounding: str,
         prev_context: str,
     ) -> SlotResult:
         """填充单个槽位"""
@@ -272,7 +276,7 @@ class SlotFiller:
         prompt = self._build_slot_prompt(
             slot_def=slot_def,
             query=query,
-            context_docs=context_docs,
+            grounding=grounding,
             prev_context=prev_context,
         )
 
@@ -289,8 +293,8 @@ class SlotFiller:
 
             elapsed_ms = (time.time() - t_slot) * 1000
 
-            # 质量评分
-            score = self._score_slot(slot_def, clean_value)
+            # 质量评分（数字锚定防编造）
+            score = self._score_slot(slot_def, clean_value, grounding=grounding)
 
             return SlotResult(
                 key=key,
@@ -325,16 +329,15 @@ class SlotFiller:
         self,
         slot_def: "SlotDef",
         query: str,
-        context_docs: List[str],
+        grounding: str,
         prev_context: str,
     ) -> str:
         """为单个槽位构建短 prompt"""
         parts = []
 
-        # 上下文（检索到的文档） — 完整内容交给 LLM 深入分析
-        if context_docs:
-            short_context = "\n---\n".join(doc for doc in context_docs[:5])
-            parts.append(f"参考信息:\n{short_context}")
+        # 上下文（ContextBuilder 统一组装：预算 + 句边界 + [N] 来源标号）
+        if grounding:
+            parts.append(f"参考信息:\n{grounding}")
 
         # 用户问题
         if query:
@@ -408,8 +411,8 @@ class SlotFiller:
         content = response.content.strip()
         token_count = response.usage.get('total_tokens', max(1, len(content)))
         total_ms = (time.time() - t_call) * 1000
-        # 首 token 延迟：无流式时用经验估算（总耗时的 20~40%）
-        ttft_ms = total_ms * 0.3 if total_ms > 0 else 0.0
+        # 首 token 延迟：无流式时按统一系数估算
+        ttft_ms = total_ms * self.TTFT_ESTIMATE_RATIO if total_ms > 0 else 0.0
 
         return content, ttft_ms, token_count
 
@@ -422,30 +425,46 @@ class SlotFiller:
 
         value = raw.strip()
 
-        # 去除常见的 LLM 废话前缀
+        # 去除常见的 LLM 废话前缀（多层循环剥离，有界 3 轮）
         prefixes_to_strip = [
             "好的，", "根据参考信息，", "综上所述，", "分析如下：",
             "以下是", "回答：", "答案是", "根据以上信息，",
             "OK，", "好的。", "根据您提供的信息，",
         ]
-        for pfx in prefixes_to_strip:
-            if value.startswith(pfx):
-                value = value[len(pfx):].strip()
+        for _ in range(3):
+            for pfx in prefixes_to_strip:
+                if value.startswith(pfx):
+                    value = value[len(pfx):].strip()
+                    break
+            else:
                 break
 
-        # 去除引号包裹
-        for q in ['"', '"', '"', "'", "'", "'"]:
-            if value.startswith(q) and value.endswith(q) and len(value) > 2:
+        # 去除引号包裹（直引号 + 中文弯引号成对）
+        for left, right in [('"', '"'), ("'", "'"), ("“", "”"), ("‘", "’")]:
+            if value.startswith(left) and value.endswith(right) and len(value) > 2:
                 value = value[1:-1]
+                break
 
         return value.strip()
 
     # ===================== 槽位评分 =====================
 
-    def _score_slot(self, slot_def: "SlotDef", value: str) -> float:
-        """对填充结果评分 (0~1)"""
+    def _score_slot(self, slot_def: "SlotDef", value: str, grounding: str = "") -> float:
+        """对填充结果评分 (0~1)
+
+        激励原则：诚实合规（拒答/按指令输出"无"）不罚，编造数据必罚。
+        """
         if not value:
             return 0.0
+
+        # 诚实拒答 / 按指令输出"无"：合规行为，固定 0.6，不与其他罚则叠加
+        if value.strip() in ("无", "无。", "N/A"):
+            return 0.6
+        honest_markers = ["无法确定", "没有足够信息", "我不知道", "无法判断",
+                          "抱歉", "对不起", "信息不足"]
+        for m in honest_markers:
+            if m in value:
+                return 0.6
 
         score = 1.0
 
@@ -457,13 +476,11 @@ class SlotFiller:
             # 输出过长（可能废话多）
             score -= 0.2
 
-        # 检查是否包含拒绝回答的标记
-        refuse_markers = ["无法确定", "没有足够信息", "我不知道", "无法判断",
-                          "抱歉", "对不起", "信息不足"]
-        for m in refuse_markers:
-            if m in value:
-                score -= 0.3
-                break
+        # 数字锚定：输出中的数字必须能在 grounding 中找到（防编造，封顶一次）
+        if grounding:
+            numbers = re.findall(r"\d+(?:\.\d+)?", value)
+            if any(n not in grounding for n in numbers):
+                score -= 0.4
 
         return max(0.0, min(1.0, score))
 
@@ -486,6 +503,12 @@ class SlotFiller:
                 slot_def = template.get_slot(key)
                 label = slot_def.label if slot_def else key
                 output = output.replace(placeholder, f"（{label}暂缺）")
+
+        # 兜底：模板中已知但未被尝试的槽位，不留裸 {key}
+        for slot_def in template.slots:
+            placeholder = "{" + slot_def.key + "}"
+            if placeholder in output:
+                output = output.replace(placeholder, f"（{slot_def.label}暂缺）")
 
         return output.strip()
 

@@ -5,7 +5,7 @@
 输入一个自然语言问题，系统自动完成：意图路由 → 混合检索 → LLM 分析 → 防幻觉校验 → 打分，返回带来源引用的判断。
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
-![Tests](https://img.shields.io/badge/tests-314%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-359%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-gray)
 
 ---
@@ -128,14 +128,14 @@ Agent 只做编排，业务逻辑全部委托给工具（`call_tool()`），由�
 
 **V1.0 —— 能用但粗糙，正在做 TDD 护栏加固。**
 
-功能面已铺开（多 Agent 路由、混合检索、图谱 RAG、Web UI），但质量正一步步用测试度量、而非用文字断言：RAG 流水线 Step 0-7 已逐步验证，**314 个离线测试**（无需 API key）钉住已修复的回归。加固期内 CI 门禁临时改为手动触发。
+功能面已铺开（多 Agent 路由、混合检索、图谱 RAG、Web UI），但质量正一步步用测试度量、而非用文字断言：RAG 流水线 Step 0-7 已逐步验证，**359 个离线测试**（无需 API key）钉住已修复的回归。加固期内 CI 门禁临时改为手动触发。
 
 ---
 
 ## 开发与测试
 
 ```bash
-python -m pytest tests/ -q          # 314 passed，离线，无需 API key
+python -m pytest tests/ -q          # 359 passed，离线，无需 API key
 python -m financial_rag.eval.runner # L1 检索评估：分通道 IR 指标 + 基线回归锁
 ```
 

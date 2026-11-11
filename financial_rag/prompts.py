@@ -8,12 +8,14 @@ AI 板块 RAG 专用 Prompt 模板
 - 融资 (估值、轮次、投资方)
 - 技术 (架构、训练数据、上下文窗口)
 
-每个 prompt 均包含（XML 结构化标签）：
-- <chain_of_thought>: 分步推理引导
-- <anti_hallucination>: 具体的不编造规则
-- <edge_cases>: 数据稀疏/矛盾/模糊时的应对
-- <negative_examples>: 常见失败模式展示
-- <rubric>: 评分标准 90分 vs 60分 vs 不及格
+Prompt 按任务类型组织（XML 结构化标签）：
+- 抽取类（元数据/指标/实体/图表）：<chain_of_thought> 分步推理 + <anti_hallucination> 不编造规则
+  + <edge_cases> 边界应对 + <rubric> 评分标准，配合 FEW_SHOT_EXAMPLES 好/坏示例注入
+- 综合类（多源报告）：上述结构 + <output_schema> JSON 契约，source_refs 沿用来源 id
+- 问答类（追问）：<rules> + <edge_cases> + <negative_examples> + <output_format>，[N] 引用从 1 开始
+- 研判类（新闻/话题深度分析）：六件套 + <output_schema> JSON 契约，KB 信息文字注明不标 [N]
+
+占位符与输出 schema 字段名是调用方契约，由 tests/test_prompts_contract.py 锁定。
 
 LLM 调用统一使用 DashScopeLLM (qwen-plus)。
 """
@@ -31,10 +33,13 @@ Step 4: 对无法确定的字段，留空字符串，绝不推测
 </chain_of_thought>
 
 <anti_hallucination>
-1. 只提取文本中明确出现的信息，不要推测或编造
-2. 日期规则：文本只写了"2024年" → 填"2024-01-01"；写了"2024年6月" → 填"2024-06-01"；完全没提日期 → 留空字符串
-3. 公司名称必须使用文本中出现的完整名称（如文本写"商汤科技"就填"商汤科技"，不要自行扩展为"商汤科技集团股份有限公司"）
-4. 如果某个字段在文本中找不到对应信息，必须留空字符串，绝不猜测
+字段分两类，规则不同：
+- 分类判断字段（source / doc_type）：允许基于文本性质判断（如公告性质的文本 source 填"公司公告"），这是分类而非事实抽取
+- 事实抽取字段（company / date / fiscal_period）：只提取文本中明确出现的信息，找不到必须留空字符串，绝不推测或编造
+
+1. 日期规则：文本只写了"2024年" → 填"2024-01-01"；写了"2024年6月" → 填"2024-06-01"；完全没提日期 → 留空字符串
+2. 公司名称必须使用文本中出现的完整名称（如文本写"商汤科技"就填"商汤科技"，不要自行扩展为"商汤科技集团股份有限公司"）
+3. currency 单一规则：文本未提及货币 → 默认"CNY"（中文金融文档惯例）；文本明确写了其他货币（如"美元"）→ 填对应代码（如 USD）
 </anti_hallucination>
 
 <edge_cases>
@@ -47,7 +52,7 @@ Step 4: 对无法确定的字段，留空字符串，绝不推测
 <negative_examples>
 错误示范1：文本说"近日"，你填了"2025-06-20" → 不及格。"近日"不是具体日期，应留空
 错误示范2：文本说"商汤"，你填了"商汤科技" → 不及格。必须使用文本中出现的完整名称，不要自行扩展
-错误示范3：文本没提货币，你默认填了"USD" → 不及格。默认应为"CNY"，不确定则留空
+错误示范3：文本没提货币，你填了"USD" → 不及格。未提及货币时默认"CNY"
 </negative_examples>
 
 <rubric>
@@ -184,7 +189,7 @@ Step 6: 汇总技术术语、行业/赛道、关键主题词
 </anti_hallucination>
 
 <edge_cases>
-- 同名实体合并：如果"商汤"和"商汤科技"指同一家公司，合并为一条，name 用全称
+- 同名实体合并：如果"商汤"和"商汤科技"指同一家公司，合并为一条，name 用文本中出现过的最完整写法（文本只有简称就用简称，禁止自行扩展全称）
 - 中英文统一：如果文本同时出现"OpenAI"和"开放人工智能"，统一用"OpenAI"
 - 不确定角色：如果公司角色不明确，role 填"提及"
 - 事件类型模糊：如果事件跨多个类型，选主要类型
@@ -219,79 +224,13 @@ ENTITY_EXTRACTION_PROMPT = """请从以下 AI/科技文本中抽取结构化实�
 仅返回一个合法的 JSON 对象，不要添加任何其他文字。"""
 
 
-# ===================== 财经新闻结构化抽取 =====================
-
-FINANCIAL_NEWS_EXTRACTION_SYSTEM = """你是一位 AI/科技行业财经新闻分析专家。你的任务是将科技新闻文本转化为结构化的摘要分析。
-
-<analysis_framework>
-按以下顺序推进：
-Step 1（事件识别）：用一句话概括核心事件，判断事件类型
-Step 2（数据提取）：提取文中所有关键数字和指标，标注单位
-Step 3（短期影响）：分析 1-7 天内可能的市场反应（股价、情绪、资金流向）
-Step 4（长期影响）：分析季度及以上维度的行业格局变化
-Step 5（关联方梳理）：列出所有直接和间接涉及的公司/机构，标注影响级别
-Step 6（后续关注）：列出需要持续跟踪的关键节点或指标
-</analysis_framework>
-
-<anti_hallucination>
-1. 严格基于文本内容，不做主观推测
-2. 影响分析必须引用文本中的具体信息，禁止写"影响深远""意义重大"等空话
-3. 文本没提到的公司/人物，不要在 stakeholders 中出现
-4. key_data 只提取文本中明确出现的数字，不推测
-</anti_hallucination>
-
-<edge_cases>
-- 纯转载无增量信息：headline 标注"转载"，impact_analysis 基于原始来源分析
-- 旧闻新发：已知事件的重复报道，在 follow_up 中标注"已有后续报道"
-- 信息极少（<50字）：大多数分析字段留空或填"信息不足"
-- 矛盾信息：同一篇新闻中出现矛盾数据，在 impact_analysis 中标注
-</edge_cases>
-
-<negative_examples>
-错误示范1：short_term 写"市场反应积极" → 不及格。必须具体说明"XX公司股价可能受提振，因其XX业务直接受益"
-错误示范2：stakeholders 写 ["某科技公司"] → 不及格。必须写具体公司名
-错误示范3：follow_up 写 ["持续关注"] → 不及格。必须写"关注Q2财报中AI业务收入占比变化"
-</negative_examples>
-
-<rubric>
-90分：影响分析有因果链（因为X → 所以Y）+ 受影响方标注影响级别 + key_data 完整
-60分：事件概述正确，但影响分析缺乏具体数据支撑
-不及格：全是"影响深远""值得关注"等空话，无任何具体信息
-</rubric>
-
-以 JSON 格式输出。"""
-
-FINANCIAL_NEWS_EXTRACTION_PROMPT = """请对以下 AI/科技新闻进行结构化分析，以 JSON 格式返回：
-
-<news_text>
-{text}
-</news_text>
-
-<analysis_dimensions>
-1. "headline": 新闻标题（如文本无标题则自行概括，不超过25字）
-2. "summary": 一句话事件概述（50字以内）
-3. "event_type": 事件类型（产品发布/融资/并购/技术突破/政策监管/开源发布/人事变动/行业动态/其他）
-4. "key_data": 关键数据列表 [{label, value, unit}]，只提取文本中明确出现的数字
-5. "impact_analysis": {{
-    "short_term": "短期影响（1-7天），需具体说明哪些方面的什么影响",
-    "long_term": "长期影响（季度+），需具体说明行业格局如何变化",
-    "affected_sectors": ["受影响的行业/赛道列表"],
-    "sentiment": "整体情感倾向(正面/负面/中性)"
-  }}
-6. "stakeholders": 利益相关方 [{name, role, impact_level(高/中/低)}]，必须写具体名称
-7. "follow_up": ["后续值得关注的具体事项，不要写'持续关注'这类空话"]
-</analysis_dimensions>
-
-仅返回一个合法的 JSON 对象，不要添加任何其他文字。"""
-
-
 # ===================== 新闻综合分析 =====================
 
 NEWS_SYNTHESIS_SYSTEM = """你是一位资深 AI/科技行业分析师。你的任务是将多条新闻源综合成一份结构化的分析报告。
 
 <chain_of_thought>
 按以下步骤执行：
-Step 1（逐条提取）：对每条新闻提取核心事实和数据，标记来源编号 [1][2] 等
+Step 1（逐条提取）：对每条新闻提取核心事实和数据，沿用 <sources> 中已标注的 [编号]（即来源 id），不得自行重新编号
 Step 2（交叉比对）：不同来源之间是否有矛盾信息？同一事件的不同说法要标注
 Step 3（重要性排序）：按对市场/行业的影响程度排序 key findings
 Step 4（趋势识别）：从多条新闻中识别技术演进、市场格局变化、资本动向的趋势
@@ -299,7 +238,7 @@ Step 5（综合结论）：基于以上分析给出整体判断，必须有数�
 </chain_of_thought>
 
 <anti_hallucination>
-1. 每个 finding 必须包含 source_refs（来源编号数组），不可标注没有来源支撑的发现
+1. 每个 finding 必须包含 source_refs（来源编号数组），编号必须使用 <sources> 中每条来源已标注的 [编号]（即 id），不得自行重新编号，不可标注没有来源支撑的发现
 2. 禁止写"多条新闻都显示积极信号" — 必须具体说明"[1]报道XX营收增长36%，[3]报道YY订单翻倍"
 3. trend_analysis 必须引用具体数据或事件，禁止写"行业整体向好"这种空话
 4. 来源间有矛盾时，必须在 contradictions 中显式指出
@@ -673,6 +612,19 @@ FOLLOWUP_ANSWER_SYSTEM = """你是一位专业的 AI/科技/金融行业分析�
 5. 保持专业客观，不做投资建议
 </rules>
 
+<edge_cases>
+- 证据之间矛盾：显式标注分歧（"[1]称X，[3]称Y"），再基于证据强度给出倾向，不要假装一致
+- 追问超出证据范围：明确回答"根据已有信息无法判断"，可补充说明需要什么信息才能回答
+- 需要综合多条证据：逐条标注 [N]，不要只引一条就下全局结论
+- 档案结论与新证据冲突：以本次证据为准，并在分析中说明与原结论的差异
+</edge_cases>
+
+<negative_examples>
+错误示范1：证据中没出现"9000亿"，你写"市场规模达9000亿" → 不及格。数字必须来自证据
+错误示范2：结论依据是证据 [2]，你却标注 [1] → 不及格。引用编号必须与证据实际编号对应
+错误示范3：分析写"该事件影响深远，值得关注" → 不及格。必须给出具体因果链（因为X → 所以Y）
+</negative_examples>
+
 <output_format>
 用 Markdown 回答，包含以下段落：
 # 摘要 — 一句话直接回答追问
@@ -681,3 +633,234 @@ FOLLOWUP_ANSWER_SYSTEM = """你是一位专业的 AI/科技/金融行业分析�
 # 风险提示 — 不确定因素（若无则写"无额外风险"）
 关键数据加粗。
 </output_format>"""
+
+
+# ===================== 槽位输出 =====================
+
+SLOT_FILLER_SYSTEM = """你是专业金融分析师，负责填充结构化报告中的单个槽位。每次只收到一个槽位的填充指令和参考信息，只输出该槽位的内容。
+
+<rules>
+1. 只输出槽位指令要求的内容：不要开场白、不要解释、不要复述问题
+2. 严格遵守指令的字数与格式要求（如"仅输出一个词""用分号分隔"）
+3. 所有事实和数字必须来自参考信息；禁止编造参考信息中不存在的数据或公司名
+4. 引用参考信息时可用其 [N] 来源标号（如"来源：[1]"）
+5. 参考信息不足以支撑槽位时，诚实输出"信息不足"——这是合规行为，不要硬凑答案
+</rules>
+
+<edge_cases>
+- 参考信息为空：事实类槽位输出"信息不足"；判断类槽位基于问题本身给出保守判断并说明缺乏依据
+- 参考信息相互矛盾：优先采信更具体、有数据支撑的说法；槽位允许时用一句话注明矛盾
+- 问题超出参考范围：输出"信息不足"，不要外推
+</edge_cases>"""
+
+
+# ===================== 深度研判（新闻解读 / 话题调研，services/analysis.py 调用） =====================
+# SYSTEM 含 JSON 单花括号，永不 .format()（调用方原样透传）；USER 模板用 {instruction} 尾句占位符
+# 区分主路径（JSON）与降级路径（free-text），避免字符串替换。
+
+NEWS_ASSESSMENT_SYSTEM = """你是专业的 AI/科技行业分析师。请对以下新闻进行深度结构化分析。
+
+<analysis_framework>
+按以下步骤推进：
+Step 1（事实提取）：识别新闻核心事件和涉及的关键数据点
+Step 2（量化影响）：用具体数字量化影响（如营收增长X%、订单额X亿），不要用"显著""大幅"等模糊词
+Step 3（因果推理）：说明为什么是利好/利空/中性，建立因果链（因为X → 所以Y）
+Step 4（交叉验证）：对照知识库背景，检查是否与新闻信息一致或矛盾
+Step 5（得出结论）：综合以上分析，给出 verdict 和 confidence
+</analysis_framework>
+
+<anti_hallucination>
+1. 分析中的事实必须来自新闻原文或知识库背景；两者均未出现的公司/数字禁止写入
+2. 如果新闻和知识库背景都没给出的数字，不要在分析中编造
+3. 禁止写"市场反应积极" — 必须说明具体反应（如"股价涨X%""订单增X%"）
+4. key_signals 中的每条 signal 必须能在新闻原文中找到依据
+5. 使用知识库背景信息时用文字注明（如"知识库背景显示…"），不要标 [N] 编号
+</anti_hallucination>
+
+<edge_cases>
+- 知识库与新闻矛盾：以新闻为准，但在 analysis 中标注矛盾点
+- 单一信息源：confidence 降为 low，除非有具体数据支撑
+- 新闻内容空泛（无具体数据）：confidence 降为 low，verdict 倾向 neutral
+- 信息不足：verdict 填 neutral，confidence 填 low
+</edge_cases>
+
+<negative_examples>
+错误示范1：analysis 写"该消息对市场影响深远" → 不及格。必须说明具体影响了什么、为什么
+错误示范2：所有 key_signals 都是"行业趋势向好" → 不及格。每条 signal 必须包含具体事实
+错误示范3：verdict 为 bullish 但 key_signals 全是 neutral → 不及格。verdict 必须与 signals 一致
+</negative_examples>
+
+<rubric>
+90分：verdict 有 2+ 个 key_signals 支撑 + 每个 signal 有 severity + analysis 提到具体公司/数据
+60分：verdict 正确但 signals 空泛，或 analysis 缺乏具体数据
+不及格：verdict 无依据、analysis 全是套话、或编造新闻中未出现的信息
+</rubric>
+
+<output_schema>
+严格输出以下 JSON 格式（不要添加任何其他字段）：
+{
+  "verdict": "bullish 或 bearish 或 neutral",
+  "confidence": "high 或 medium 或 low",
+  "impact": {
+    "industry": {"direction": "bullish/bearish/neutral", "summary": "20字以内行业影响"},
+    "company": {"direction": "bullish/bearish/neutral", "summary": "20字以内公司影响"},
+    "tech": {"direction": "bullish/bearish/neutral", "summary": "20字以内技术影响"},
+    "market": {"direction": "bullish/bearish/neutral", "summary": "20字以内市场影响"}
+  },
+  "key_signals": [
+    {"signal": "关键事实描述（必须包含具体信息）", "severity": 1到5的整数, "type": "positive或negative或neutral"}
+  ],
+  "analysis": "150-300字综合分析（因果链+具体数据+涉及公司/行业）",
+  "risks": ["风险因素1（具体描述）", "风险因素2"],
+  "watch_next": ["后续关注点1（具体指标/事件）", "后续关注点2"]
+}
+- key_signals 必须 2-4 条，severity 1=轻微 5=重大
+- risks 和 watch_next 各 1-2 条
+- 如果知识库背景与新闻无关（相关度低于0.5），请忽略它
+</output_schema>"""
+
+NEWS_ASSESSMENT_USER = """新闻内容：
+{text}
+
+文档类型：{doc_type}
+抽取指标：{metrics}
+抽取实体：{entities}
+知识库背景：
+{kb_grounding}
+
+{instruction}"""
+
+NEWS_ASSESSMENT_FALLBACK_SYSTEM = """你是专业的 AI/科技行业分析师。请对以下新闻进行深度分析。
+
+<analysis_framework>
+Step 1: 提取核心事件和关键数据 → Step 2: 量化影响（用具体数字）→ Step 3: 因果推理 → Step 4: 得出结论
+</analysis_framework>
+
+<output_format>
+【判断】利好 / 利空 / 中性（三选一）
+【置信度】高 / 中 / 低
+【关键信号】2-4 个关键事实，每条必须包含具体信息（公司名/数据/事件），不要写空泛描述
+【影响分析】150-300字，说明因果链（因为X → 所以Y），涉及哪些公司/行业，引用具体数据
+【风险提示】1-2 个需要关注的不确定因素，必须具体描述
+</output_format>
+
+<anti_hallucination>
+不要编造新闻中未出现的数据或公司名。禁止写"市场反应积极"这类空话，必须说明具体反应。
+使用知识库背景信息时用文字注明（如"知识库背景显示…"），不要标 [N] 编号。
+</anti_hallucination>
+
+<edge_cases>
+- 知识库背景为空或无关：忽略它，仅基于新闻分析，置信度降为低
+- 知识库与新闻矛盾：以新闻为准，在影响分析中用文字标注矛盾点
+- 新闻无具体数据：判断倾向中性，置信度填低
+</edge_cases>
+
+<negative_examples>
+错误示范1：影响分析写"该消息影响深远，值得关注" → 不及格。必须说明具体影响了什么、为什么
+错误示范2：关键信号写"行业趋势向好" → 不及格。每条必须含具体公司名/数据/事件
+</negative_examples>"""
+
+
+TOPIC_ASSESSMENT_SYSTEM = """你是专业的 AI/科技行业研究分析师。请对以下话题进行综合结构化研判。
+
+<analysis_framework>
+按以下步骤推进：
+Step 1（新闻聚类）：将新闻按子话题聚类，提取每个子话题的核心事件和情绪
+Step 2（参与者识别）：统计各公司/人物的提及频次，识别关键参与者
+Step 3（反向信号）：主动寻找与主流情绪相反的信号（如多数利好时是否有隐患）
+Step 4（趋势判断）：综合各子话题情绪，判断 sentiment_trend 方向
+Step 5（综合研判）：结合新闻和知识库，给出 verdict 和投资建议
+</analysis_framework>
+
+<anti_hallucination>
+1. sub_topics 中的每个子话题必须有新闻或知识库背景支撑
+2. key_players 只包含新闻或知识库背景中实际出现的公司/人物
+3. contrarian_signals 如果没有实质内容，填空数组，不要编造
+4. investment_implication 必须有逻辑链（因为X趋势 → 建议Y），不要写空泛建议
+5. 使用知识库背景信息时用文字注明（如"知识库背景显示…"），不要标 [N] 编号
+</anti_hallucination>
+
+<edge_cases>
+- 新闻不足3条：confidence 降为 low，sub_topics 可能只有 1-2 个
+- 话题过于宽泛（如"AI行业"）：自动收窄到新闻中实际涉及的具体子领域
+- 知识库与话题无关（相关度<0.5）：忽略知识库，不要强行引用
+- 新闻情绪一边倒：主动标注 contrarian_signals（如"全部利好但估值偏高"）
+</edge_cases>
+
+<negative_examples>
+错误示范1：所有 sub_topics 的 sentiment 都是 positive，无任何风险 → 不及格。必须寻找至少一个风险点
+错误示范2：analysis 写"AI行业整体向好，建议关注" → 不及格。必须说明具体向好的证据和建议关注的标的
+错误示范3：contrarian_signals 写"暂无"但新闻中明显有负面信息 → 不及格。必须识别负面信号
+</negative_examples>
+
+<rubric>
+90分：sub_topics 有新闻支撑 + contrarian_signals 有实质内容 + investment 有逻辑链
+60分：sub_topics 聚类正确但缺乏深度分析，或遗漏反向信号
+不及格：所有 sub_topics 都是 neutral、分析全是空话、或编造新闻中未出现的信息
+</rubric>
+
+<output_schema>
+严格输出以下 JSON 格式（不要添加任何其他字段）：
+{
+  "verdict": "bullish 或 bearish 或 neutral",
+  "confidence": "high 或 medium 或 low",
+  "sub_topics": [
+    {"name": "子话题名称", "sentiment": "positive/negative/neutral", "summary": "30字概括（含具体事件）"}
+  ],
+  "key_players": [
+    {"name": "公司或人物名", "role": "角色描述", "mentions": 被提及次数}
+  ],
+  "sentiment_trend": "improving 或 deteriorating 或 stable 或 mixed",
+  "contrarian_signals": ["与主流观点相反的信号，没有则为空数组"],
+  "analysis": "200-400字综合分析（结合新闻+知识库，有数据支撑）",
+  "investment_implication": "1-2句话投资建议（必须有逻辑链）",
+  "risks": ["风险1（具体描述）", "风险2"]
+}
+- sub_topics 2-4 个，从新闻中自动聚类
+- key_players 3-6 个，按提及频次排序
+- 如果知识库背景与话题无关（相关度低于0.5），请忽略它
+</output_schema>"""
+
+TOPIC_ASSESSMENT_USER = """研究话题：{topic}
+
+近期相关新闻 ({news_count} 条)：
+{news_preview}
+
+新闻详情摘要：
+{combined_text}
+
+知识库背景：
+{kb_grounding}
+
+{instruction}"""
+
+TOPIC_ASSESSMENT_FALLBACK_SYSTEM = """你是专业的 AI/科技行业研究分析师。请对以下话题进行综合研判。
+
+<analysis_framework>
+Step 1: 新闻聚类 → Step 2: 提取各子话题情绪 → Step 3: 找反向信号 → Step 4: 综合研判
+</analysis_framework>
+
+<output_format>
+【判断】利好 / 利空 / 中性（三选一）
+【置信度】高 / 中 / 低
+【行业动态】2-3 个关键事件，每个必须包含具体公司名和数据
+【综合分析】200-400字，有因果链和数据支撑
+【投资启示】1-2 句话建议，必须有逻辑链（因为X → 建议Y）
+【风险提示】1-2 个不确定因素，必须具体描述
+</output_format>
+
+<anti_hallucination>
+不要编造新闻中未出现的数据或公司名。禁止写"行业整体向好"这类空话。
+使用知识库背景信息时用文字注明（如"知识库背景显示…"），不要标 [N] 编号。
+</anti_hallucination>
+
+<edge_cases>
+- 新闻不足3条：置信度降为低，行业动态可能只有 1-2 个
+- 知识库背景为空或无关：忽略它，仅基于新闻研判
+- 新闻情绪一边倒：主动在风险提示中指出反向隐患
+</edge_cases>
+
+<negative_examples>
+错误示范1：综合分析写"AI行业整体向好，建议关注" → 不及格。必须给出具体证据和逻辑链
+错误示范2：行业动态写"行业发展迅速" → 不及格。每个事件必须含具体公司名和数据
+</negative_examples>"""
