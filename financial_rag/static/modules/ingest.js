@@ -7,11 +7,29 @@ import { refreshKBManager } from './kb.js';
 // ── State ──
 const _dirData = {};
 const _selectedFiles = {};
+let _lastIngestSummary = '';
+
+const _MODE_HINTS = {
+  analyze: '🔍 深度分析：导入后后台 AI 提炼财务指标 / 实体（需数分钟、消耗 API 额度），结果可在知识库查看',
+  quick: '⚡ 快速导入：仅清洗 + 去重 + 入库，立即可检索，不调用 AI 分析',
+};
+
+const _FR_STATUS = {
+  imported: ['✅', 'var(--ok)'],
+  duplicate: ['🔁', 'var(--text2)'],
+  rejected: ['🚫', 'var(--danger)'],
+  empty: ['📭', 'var(--text3)'],
+};
 
 function _getIngestMode() {
   const radio = document.querySelector('input[name="ingestMode"]:checked');
   return radio ? radio.value : 'analyze';
 }
+
+window._updateIngestModeHint = function () {
+  const el = document.getElementById('ingestModeHint');
+  if (el) el.textContent = _MODE_HINTS[_getIngestMode()] || '';
+};
 
 // ── Directory browser ──
 
@@ -21,10 +39,13 @@ export async function loadDirBrowser() {
     d.directories.forEach(dir => {
       if (dir.exists) {
         _dirData[dir.path] = dir.files;
-        _selectedFiles[dir.path] = new Set(dir.files.map(f => f.name));
+        // 默认只勾未导入的文件——已导入的重复导入只会跳过，不打扰用户
+        _selectedFiles[dir.path] = new Set(
+          dir.files.filter(f => !(f.ingest && f.ingest.imported)).map(f => f.name));
       }
     });
     renderDirBrowser(d.directories);
+    window._updateIngestModeHint();
   } catch (e) {
     document.getElementById('dirBrowser').innerHTML =
       `<div style="color:var(--danger)">加载目录失败: ${escHtml(e.message)}</div>`;
@@ -36,31 +57,41 @@ function renderDirBrowser(dirs) {
   let h = '';
   dirs.forEach(dir => {
     const icon = dir.exists ? '📂' : '📭';
-    const status = dir.exists ? `${dir.file_count} 个文件 · ${dir.total_size_kb} KB` : '目录不存在';
     const dirId = dir.path.replace(/[^a-zA-Z0-9]/g, '_');
+    const status = !dir.exists ? '目录不存在'
+      : `${dir.imported_files || 0}/${dir.file_count} 已导入 · ${dir.total_size_kb} KB`;
     h += `<div class="dir-card" id="dirCard_${dirId}">`;
     h += `<div class="dir-header">`;
     h += `<div class="dir-label"><span class="dir-icon">${icon}</span> ${escHtml(dir.label)}<span class="dir-path">${escHtml(dir.path)}</span></div>`;
     h += `<span class="tag ${dir.file_count > 0 ? 'tag-info' : 'tag-off'}">${status}</span>`;
     h += `</div>`;
     if (dir.exists && dir.files.length > 0) {
+      const newCount = dir.files.filter(f => !(f.ingest && f.ingest.imported)).length;
       h += `<div class="dir-files">`;
-      h += `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;margin-bottom:6px">`;
-      h += `<label style="font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px">`;
-      h += `<input type="checkbox" id="selAll_${dirId}" checked onchange="window._toggleSelectAll('${escHtml(dir.path)}', this.checked)"> 全选</label>`;
-      h += `<span style="font-size:11px;color:var(--text3)" id="selCount_${dirId}">${dir.files.length}/${dir.files.length} 已选</span>`;
-      h += `<button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="window._ingestSelected('${escHtml(dir.path)}', this)">📥 导入所选</button>`;
+      h += `<div class="dir-toolbar">`;
+      h += `<label class="dir-sel-all"><input type="checkbox" id="selAll_${dirId}" onchange="window._toggleSelectAll('${escHtml(dir.path)}', this.checked)"> 全选</label>`;
+      h += `<button class="btn btn-secondary btn-xs" onclick="window._selectUnimported('${escHtml(dir.path)}')">只选未导入${newCount ? ` (${newCount})` : ''}</button>`;
+      h += `<span class="dir-sel-count" id="selCount_${dirId}"></span>`;
+      h += `<button class="btn btn-primary btn-sm" id="ingestBtn_${dirId}" style="margin-left:auto" onclick="window._ingestSelected('${escHtml(dir.path)}', this)">📥 导入所选</button>`;
       h += `</div>`;
       dir.files.forEach(f => {
         const typeIcon = f.ext === '.jsonl' ? '📝' : f.ext === '.json' ? '📦' : f.ext === '.txt' ? '📄' : '📎';
         const lineInfo = f.line_count > 0 ? ` · ${f.line_count} 条` : '';
         const previewId = `preview_${dirId}_${f.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        h += `<div class="dir-file">`;
+        const ing = f.ingest || {};
+        const checked = _selectedFiles[dir.path] && _selectedFiles[dir.path].has(f.name);
+        const badge = ing.imported
+          ? (ing.analyzed_count >= ing.doc_count
+            ? `<span class="file-status fs-ok" title="已导入知识库，AI 分析完成">✅ 已导入 ${ing.doc_count} 篇</span>`
+            : `<span class="file-status fs-warn" title="已导入知识库，AI 分析未完成">🕓 已导入 ${ing.doc_count} 篇 · 待分析</span>`)
+          : '<span class="file-status fs-new">○ 未导入</span>';
+        h += `<div class="dir-file${ing.imported ? ' is-imported' : ''}">`;
         h += `<label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer;min-width:0">`;
-        h += `<input type="checkbox" checked data-dir="${escHtml(dir.path)}" data-file="${escHtml(f.name)}" onchange="window._updateSelCount('${escHtml(dir.path)}','${dirId}')">`;
+        h += `<input type="checkbox" ${checked ? 'checked' : ''} data-dir="${escHtml(dir.path)}" data-file="${escHtml(f.name)}" onchange="window._updateSelCount('${escHtml(dir.path)}','${dirId}')">`;
         h += `<span class="file-name">${typeIcon} ${escHtml(f.name)}</span>`;
         h += `</label>`;
         h += `<span class="file-size">${f.size_kb} KB${lineInfo}</span>`;
+        h += badge;
         h += `<button class="file-preview-btn" onclick="window._previewFile('${escHtml(dir.path)}','${escHtml(f.name)}','${previewId}')">👁</button>`;
         h += `<div id="${previewId}" class="file-preview"></div>`;
         h += `</div>`;
@@ -70,6 +101,12 @@ function renderDirBrowser(dirs) {
     h += '</div>';
   });
   el.innerHTML = h;
+  // 同步选中计数 / 导入按钮状态
+  dirs.forEach(dir => {
+    if (dir.exists && dir.files.length > 0) {
+      window._updateSelCount(dir.path, dir.path.replace(/[^a-zA-Z0-9]/g, '_'));
+    }
+  });
 }
 
 // ── Global handlers ──
@@ -88,8 +125,20 @@ window._updateSelCount = function (dirPath, dirId) {
   const countEl = document.getElementById(`selCount_${dirId}`);
   if (countEl) countEl.textContent = `${selected.length}/${checkboxes.length} 已选`;
   const selAllEl = document.getElementById(`selAll_${dirId}`);
-  if (selAllEl) selAllEl.checked = selected.length === checkboxes.length;
+  if (selAllEl) selAllEl.checked = checkboxes.length > 0 && selected.length === checkboxes.length;
+  const btn = document.getElementById(`ingestBtn_${dirId}`);
+  if (btn && !btn.dataset.busy) {
+    btn.disabled = selected.length === 0;
+    btn.textContent = selected.length > 0 ? `📥 导入所选 (${selected.length})` : '📥 导入所选';
+  }
   _selectedFiles[dirPath] = new Set(selected.map(cb => cb.dataset.file));
+};
+
+window._selectUnimported = function (dirPath) {
+  const files = _dirData[dirPath] || [];
+  const sel = new Set(files.filter(f => !(f.ingest && f.ingest.imported)).map(f => f.name));
+  document.querySelectorAll(`input[data-dir="${dirPath}"]`).forEach(cb => { cb.checked = sel.has(cb.dataset.file); });
+  window._updateSelCount(dirPath, dirPath.replace(/[^a-zA-Z0-9]/g, '_'));
 };
 
 window._previewFile = async function (dirPath, fileName, previewId) {
@@ -113,21 +162,65 @@ window._ingestSelected = async function (dirPath, btn) {
   const files = Array.from(_selectedFiles[dirPath] || []);
   if (files.length === 0) { toast('请至少选择一个文件', 'warning'); return; }
   const analyze = _getIngestMode() === 'analyze';
-  if (btn) { btn.disabled = true; btn.textContent = '导入中...'; }
+  if (btn) { btn.disabled = true; btn.dataset.busy = '1'; btn.textContent = '导入中...'; }
   try {
     const d = await api('/api/ingest/files', { dir: dirPath, analyze, files });
     updateKBStatus(d.total || 0);
+    renderIngestResult(d);
     const skipInfo = d.skipped_duplicates > 0 ? ` · 跳过 ${d.skipped_duplicates} 重复` : '';
     toast(`已导入 ${d.loaded || 0} 篇${skipInfo}`, 'success');
-    if (btn) { btn.textContent = `✓ ${d.loaded || 0} 篇已导入`; btn.className = 'btn btn-success btn-sm'; }
     if (d.status === 'analyzing_in_background') _pollIngestProgress(btn);
     refreshKBStatus();
     refreshKBManager();
+    loadDirBrowser();  // 刷新文件状态徽章，默认勾选剩余未导入文件
   } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = '📥 导入所选'; }
+    if (btn) { btn.disabled = false; delete btn.dataset.busy; btn.textContent = '📥 导入所选'; }
     toast('导入失败: ' + e.message, 'error');
   }
 };
+
+// ── 逐文件导入结果面板（新增 / 重复 / 质量拒绝 / 解析为空）──
+
+function _frRow(r) {
+  const [icon, color] = _FR_STATUS[r.status] || ['•', 'var(--text2)'];
+  const nums = [];
+  if (r.loaded > 0) nums.push(`新增 ${r.loaded}`);
+  if (r.duplicates > 0) nums.push(`重复 ${r.duplicates}`);
+  if (r.rejected > 0) nums.push(`拒绝 ${r.rejected}`);
+  if (r.status === 'empty') nums.push('解析为空');
+  return `<div class="ir-file"><span>${icon}</span><span class="ir-name" style="color:${color}">${escHtml(r.file)}</span><span class="ir-nums">读 ${r.read} 篇 → ${nums.join(' · ') || '无变化'}</span></div>`;
+}
+
+function renderIngestResult(d) {
+  const el = document.getElementById('ingest-file-result');
+  if (!el) return;
+  const fr = d.file_results || [];
+  const tot = fr.reduce((a, r) => ({ dup: a.dup + r.duplicates, rej: a.rej + r.rejected }), { dup: 0, rej: 0 });
+  let summary = `<span style="color:var(--ok)">✅ 新增 ${d.loaded || 0} 篇</span>`;
+  if (tot.dup > 0) summary += ` · <span style="color:var(--text2)">🔁 重复跳过 ${tot.dup}</span>`;
+  if (tot.rej > 0) summary += ` · <span style="color:var(--danger)">🚫 质量拒绝 ${tot.rej}</span>`;
+  summary += ` <span style="color:var(--text3)">（知识库共 ${d.total || 0} 篇）</span>`;
+  let h = '<div class="ingest-result">';
+  h += `<div class="ir-summary">${summary}</div>`;
+  if (d.message && (d.status === 'all_rejected' || d.status === 'no_new_docs')) {
+    h += `<div class="ir-note">${escHtml(d.message)}</div>`;
+  }
+  fr.forEach(r => { h += _frRow(r); });
+  const pp = d.preprocessing;
+  if (pp && (pp.rejected_short || pp.rejected_irrelevant || pp.rejected_empty)) {
+    const reasons = [];
+    if (pp.rejected_short) reasons.push(`文本过短 ${pp.rejected_short}`);
+    if (pp.rejected_irrelevant) reasons.push(`领域无关 ${pp.rejected_irrelevant}`);
+    if (pp.rejected_empty) reasons.push(`空内容 ${pp.rejected_empty}`);
+    h += `<div class="ir-note">🚫 拒绝原因：${reasons.join(' · ')}（清洗 + 领域相关性门控 + 最小长度）</div>`;
+  }
+  if (d.status === 'analyzing_in_background') {
+    h += '<div class="ir-note">🔍 深度分析后台进行中，完成后徽章自动变为 ✅</div>';
+  }
+  h += '</div>';
+  _lastIngestSummary = h;
+  el.innerHTML = h;
+}
 
 function _pollIngestProgress(btn) {
   const resultEl = document.getElementById('ingest-file-result');
@@ -136,21 +229,22 @@ function _pollIngestProgress(btn) {
       const p = await apiGet('/api/ingest/progress');
       const pct = p.total > 0 ? Math.round(p.current / p.total * 100) : 0;
       if (resultEl) {
-        resultEl.innerHTML = `<div class="ingest-progress">
-          <div class="progress-text"><span>分析中 <strong>${p.current}/${p.total}</strong></span><span>${pct}% · 失败 ${p.errors}</span></div>
+        resultEl.innerHTML = _lastIngestSummary + `<div class="ingest-progress">
+          <div class="progress-text"><span>AI 分析中 <strong>${p.current}/${p.total}</strong></span><span>${pct}% · 失败 ${p.errors}</span></div>
           ${progressBar(pct)}
         </div>`;
       }
-      if (btn) btn.textContent = `分析中 ${pct}%`;
+      if (btn && btn.isConnected) btn.textContent = `分析中 ${pct}%`;
       if (!p.running) {
         clearInterval(poll);
-        if (btn) { btn.textContent = `✓ 完成: ${p.analyzed}/${p.total}`; btn.disabled = false; }
+        if (btn && btn.isConnected) { btn.textContent = `✓ 完成: ${p.analyzed}/${p.total}`; btn.disabled = false; delete btn.dataset.busy; }
         if (resultEl) {
-          resultEl.innerHTML = `<div style="margin-top:8px"><span class="tag tag-ok">完成</span> ${p.analyzed}/${p.total} 篇已分析，${p.errors} 篇失败</div>`;
+          resultEl.innerHTML = _lastIngestSummary + `<div style="margin-top:8px"><span class="tag tag-ok">分析完成</span> ${p.analyzed}/${p.total} 篇已分析，${p.errors} 篇失败</div>`;
         }
         toast(`分析完成: ${p.analyzed}/${p.total}`, p.errors > 0 ? 'warning' : 'success');
         refreshKBStatus();
         refreshKBManager();
+        loadDirBrowser();  // 待分析 → 已导入，刷新徽章
       }
     } catch (e) { clearInterval(poll); }
   }, 2000);
@@ -172,11 +266,13 @@ export async function ingestCustomDir() {
   try {
     const d = await api('/api/ingest/files', { dir, analyze });
     updateKBStatus(d.total || 0);
+    renderIngestResult(d);
     const skipInfo = d.skipped_duplicates > 0 ? ` · 跳过 ${d.skipped_duplicates} 篇重复` : '';
     toast(`新增 ${d.loaded || 0} 篇${skipInfo}`, 'success');
     if (d.status === 'analyzing_in_background') _pollIngestProgress(null);
     refreshKBStatus();
     refreshKBManager();
+    loadDirBrowser();
   } catch (e) { toast('导入失败: ' + e.message, 'error'); }
 }
 
@@ -251,7 +347,10 @@ window._doUpload = async function () {
       throw new Error(e.detail || resp.statusText);
     }
     const d = await resp.json();
-    if (resultEl) resultEl.innerHTML = `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> ${escHtml(d.message)}</div>`;
+    let h = `<div class="ingest-result"><div class="ir-summary">✅ ${escHtml(d.message || `已导入 ${d.loaded || 0} 篇`)}</div>`;
+    (d.file_results || []).forEach(r => { h += _frRow(r); });
+    h += '</div>';
+    if (resultEl) resultEl.innerHTML = h;
     updateKBStatus(d.total || 0);
     refreshKBStatus();
     refreshKBManager();
@@ -275,6 +374,12 @@ export async function ingestNews() {
     let h = `<div style="margin-top:8px"><span class="tag tag-ok">OK</span> 抓取 ${d.fetched} 条新闻 → 元数据`;
     if (d.has_summary) h += ' + AI摘要';
     h += ` (累计: ${d.meta_total} 条)</div>`;
+    if ((d.kb_added || 0) > 0 || (d.kb_skipped_duplicates || 0) > 0) {
+      h += `<div style="margin-top:6px;font-size:12px;color:var(--text2)">📚 优质正文自动入知识库：<strong style="color:var(--ok)">+${d.kb_added || 0} 篇</strong>${d.kb_skipped_duplicates ? ` · 跳过重复 ${d.kb_skipped_duplicates}` : ''}（KB 共 ${d.kb_total} 篇）</div>`;
+      updateKBStatus(d.kb_total || 0);
+      refreshKBStatus();
+      refreshKBManager();
+    }
     updateMetaStatus(d.meta_total);
     if (d.headlines && d.headlines.length) {
       h += '<div style="margin-top:8px">';

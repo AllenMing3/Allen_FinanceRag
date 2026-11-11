@@ -2,6 +2,7 @@
 import { api, apiGet, apiDelete } from './api.js';
 import { toast, escHtml } from './ui.js';
 import { renderMarkdown } from './render.js';
+import { renderFollowupQuality, guardBadgeLite } from './quality.js';
 
 let chatSessionId = null;
 
@@ -37,6 +38,15 @@ function renderChatMessages(messages) {
     const cls = msg.role === 'user' ? 'user' : 'assistant';
     const content = cls === 'assistant' ? renderMarkdown(msg.content) : escHtml(msg.content);
     h += `<div class="chat-msg ${cls}">${content}`;
+    // 助手历史消息：从落盘 metadata 还原 Guard 徽章 / 来源数 / 耗时
+    const meta = msg.metadata || {};
+    if (cls === 'assistant' && (meta.guard_risk || meta.elapsed_ms || meta.source_count != null)) {
+      h += '<div class="msg-meta-row">';
+      h += guardBadgeLite(meta.guard_risk, meta.guard_score);
+      if (meta.source_count != null) h += `<span class="fuq-badge fuq-badge-neutral fuq-badge-sm">📚 ${meta.source_count} 来源</span>`;
+      if (meta.elapsed_ms) h += `<span class="msg-meta-time">⏱ ${(meta.elapsed_ms / 1000).toFixed(1)}s</span>`;
+      h += '</div>';
+    }
     if (msg.timestamp) h += `<div class="msg-time">${msg.timestamp}</div>`;
     h += '</div>';
   });
@@ -120,8 +130,14 @@ export async function sendFollowup() {
     const d = await api('/api/chat/followup', { session_id: chatSessionId, message: msg });
     const loading = document.getElementById('chatLoading');
     if (loading) loading.remove();
-    const now = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-    messagesEl.innerHTML += `<div class="chat-msg assistant">${renderMarkdown(d.answer)}<div class="msg-time">${now}${d.elapsed_ms ? ` · ${(d.elapsed_ms / 1000).toFixed(1)}s` : ''}</div></div>`;
+    if (d.error) {
+      messagesEl.innerHTML += `<div class="chat-msg assistant" style="color:var(--danger)">❌ ${escHtml(d.error)}</div>`;
+      toast(d.error, 'error');
+    } else {
+      const now = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      // 开卷追问质量闭环：回答 + 证据/Guard/检索诊断/组装 trace（后端新增字段全部落地）
+      messagesEl.innerHTML += `<div class="chat-msg assistant">${renderMarkdown(d.answer)}${renderFollowupQuality(d)}<div class="msg-time">${now}${d.elapsed_ms ? ` · ${(d.elapsed_ms / 1000).toFixed(1)}s` : ''}</div></div>`;
+    }
     messagesEl.scrollTop = messagesEl.scrollHeight;
   } catch (e) {
     const loading = document.getElementById('chatLoading');

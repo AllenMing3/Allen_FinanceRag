@@ -2,6 +2,7 @@
 
 import { apiGet } from './modules/api.js';
 import { initCollapsibleCards } from './modules/ui.js';
+import { initQualityCollapsibles } from './modules/quality.js';
 import { renderHealthBanners, loadOverviewStats, refreshKBStatus } from './modules/overview.js';
 import { refreshKBManager, buildKB, clearKB, searchKBKeyword, deleteKBKeyword, renderDocList } from './modules/kb.js';
 import { loadDirBrowser, browseCustomDir, ingestCustomDir, ingestNews, initUploadZone } from './modules/ingest.js';
@@ -74,3 +75,4 @@ apiGet('/api/config').then(d => {
 
 loadOverviewStats();
 initCollapsibleCards();
+initQualityCollapsibles();

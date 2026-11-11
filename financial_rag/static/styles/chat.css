@@ -126,6 +126,80 @@
 .chat-msg.assistant strong { color: var(--accent); }
 .chat-msg.assistant code { background: rgba(0,0,0,.3); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
 .chat-msg .msg-time { font-size: 10px; opacity: .4; margin-top: 4px; }
+
+/* ── 历史消息元信息行（Guard 徽章 / 来源数 / 耗时）── */
+.msg-meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.msg-meta-time { font-size: 10px; color: var(--text3); }
+
+/* ── 追问质量条（开卷追问质量闭环）── */
+.fu-quality {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface);
+}
+.fu-quality-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: var(--surface2);
+  transition: background var(--transition);
+}
+.fu-quality-header:hover { background: var(--surface3); }
+.fuq-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.fuq-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.fuq-badge-neutral { color: var(--text2); border-color: var(--border); background: var(--surface3); }
+.fuq-badge-sm { font-size: 10px; padding: 1px 6px; }
+.fuq-expand { font-size: 11px; color: var(--text3); white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.fu-quality-header.open .fuq-expand { color: var(--accent); }
+.fu-quality-body { padding: 12px; font-size: 12px; color: var(--text2); }
+.fuq-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 4px 0 8px;
+}
+.fuq-section-title:not(:first-child) { margin-top: 14px; }
+
+/* ── 证据来源列表（1-based 编号对齐回答 [N] 引用）── */
+.fuq-sources { display: flex; flex-direction: column; gap: 6px; }
+.fuq-source {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+}
+.fuq-src-idx { font-size: 11px; font-weight: 700; color: var(--accent); flex-shrink: 0; font-family: 'SF Mono', 'Fira Code', monospace; }
+.fuq-src-body { flex: 1; min-width: 0; }
+.fuq-src-text { font-size: 12px; color: var(--text); line-height: 1.6; }
+.fuq-src-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; color: var(--text3); margin-top: 4px; }
+.fuq-empty { font-size: 11px; color: var(--text3); padding: 8px 10px; background: var(--surface2); border-radius: var(--radius-sm); }
+
+/* 质量条内复用评分卡层得分条（qs-* 定义于 query.css），收紧间距 */
+.fu-quality-body .qs-layers { margin-top: 4px; }
+.fu-quality-body .quality-scorecard { margin-bottom: 0; }
 .chat-msg.loading {
   align-self: flex-start;
   background: var(--surface2);

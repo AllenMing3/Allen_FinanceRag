@@ -62,6 +62,68 @@
 }
 .dir-file .file-preview-btn:hover { opacity: 1; }
 
+/* ── 文件导入状态徽章（已导入 / 待分析 / 未导入）── */
+.file-status {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.file-status.fs-ok { color: var(--ok); background: rgba(107,203,119,.1); border: 1px solid rgba(107,203,119,.25); }
+.file-status.fs-warn { color: var(--warn); background: rgba(255,217,61,.08); border: 1px solid rgba(255,217,61,.25); }
+.file-status.fs-new { color: var(--text3); background: var(--surface2); border: 1px solid var(--border); }
+.dir-file.is-imported .file-name { color: var(--text2); }
+
+/* ── 目录工具栏（全选 / 只选未导入 / 计数 / 导入按钮）── */
+.dir-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.dir-sel-all { font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px; color: var(--text2); }
+.dir-sel-count { font-size: 11px; color: var(--text3); }
+
+/* ── 分析模式说明 ── */
+.mode-hint {
+  font-size: 11px;
+  color: var(--text3);
+  margin: -8px 0 12px;
+  padding: 0 4px;
+  line-height: 1.5;
+}
+
+/* ── 逐文件导入结果面板 ── */
+.ingest-result {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.ingest-result .ir-summary { font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.ingest-result .ir-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 11px;
+}
+.ingest-result .ir-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ingest-result .ir-nums { color: var(--text3); flex-shrink: 0; }
+.ingest-result .ir-note { font-size: 11px; color: var(--text3); margin-top: 6px; line-height: 1.5; }
+
 /* ── Import mode toggle ── */
 .mode-toggle {
   display: flex;

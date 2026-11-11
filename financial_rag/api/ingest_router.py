@@ -109,6 +109,73 @@ _KNOWN_DIRS = [
 ]
 
 
+# ===================== Import status helpers =====================
+
+
+def _build_kb_file_index(kb_docs: list) -> tuple[dict, dict]:
+    """Index KB docs by source file → (by_file, by_source), values = [doc_count, analyzed_count].
+
+    by_file keys are normalized paths (meta.file); by_source keys are meta.source.
+    Lookup prefers by_file (exact attribution), falls back to by_source for docs
+    without meta.file (e.g. .json imports).
+    """
+    by_file: dict = {}
+    by_source: dict = {}
+    for d in kb_docs:
+        meta = d.get("meta", {})
+        analyzed = 1 if meta.get("analyzed") else 0
+        f = meta.get("file")
+        if f:
+            e = by_file.setdefault(os.path.normpath(f), [0, 0])
+            e[0] += 1
+            e[1] += analyzed
+        s = meta.get("source")
+        if s:
+            e = by_source.setdefault(s, [0, 0])
+            e[0] += 1
+            e[1] += analyzed
+    return by_file, by_source
+
+
+def _file_ingest_info(fname: str, fpath: str, by_file: dict, by_source: dict) -> dict:
+    """Per-file import status for the directory browser (imported / pending analysis / new)."""
+    cnt, ana = by_file.get(os.path.normpath(fpath)) or by_source.get(fname) or (0, 0)
+    return {"imported": cnt > 0, "doc_count": cnt, "analyzed_count": ana}
+
+
+def _build_file_results(entries: list, cleaned_docs: list, new_docs: list) -> list:
+    """Per-file ingest breakdown: read = loaded + duplicates + rejected.
+
+    Args:
+        entries: [(fname, fpath, read_n)] — read_n = docs parsed from the file
+        cleaned_docs: docs that passed preprocessing (this request)
+        new_docs: docs actually added to KB after dedup (this request)
+
+    Status: imported / duplicate (all already in KB) / rejected (quality gate) / empty (parse failed).
+    """
+    results = []
+    for fname, fpath, read_n in entries:
+        def _match(d, _fp=fpath, _fn=fname):
+            m = d.get("meta", {})
+            return m.get("file") == _fp or m.get("source") == _fn
+        clean_n = sum(1 for d in cleaned_docs if _match(d))
+        loaded_n = sum(1 for d in new_docs if _match(d))
+        if read_n == 0:
+            status = "empty"
+        elif clean_n == 0:
+            status = "rejected"
+        elif loaded_n == 0:
+            status = "duplicate"
+        else:
+            status = "imported"
+        results.append({
+            "file": fname, "read": read_n, "loaded": loaded_n,
+            "duplicates": clean_n - loaded_n, "rejected": read_n - clean_n,
+            "status": status,
+        })
+    return results
+
+
 # ===================== Endpoints =====================
 
 
@@ -151,6 +218,7 @@ async def api_directories():
     """Scan known data directories and return file listings"""
     import json as _json
 
+    by_file, by_source = _build_kb_file_index(_state.get("kb_docs", []))
     results = []
     for dir_rel, label in _KNOWN_DIRS:
         dir_path = os.path.normpath(dir_rel)
@@ -188,19 +256,22 @@ async def api_directories():
                 preview = "[PDF文件]"
             elif ext in (".png", ".jpg", ".jpeg", ".webp"):
                 preview = f"[图片文件] {ext[1:].upper()}"
-            files.append({
+            f_entry = {
                 "name": fname,
                 "ext": ext,
                 "size_kb": round(fsize / 1024, 1),
                 "line_count": line_count,
                 "preview": preview[:150],
-            })
+                "ingest": _file_ingest_info(fname, fpath, by_file, by_source),
+            }
+            files.append(f_entry)
 
         results.append({
             "path": dir_rel,
             "label": label,
             "exists": True,
             "file_count": len(files),
+            "imported_files": sum(1 for f in files if f["ingest"]["imported"]),
             "total_size_kb": round(total_size / 1024, 1),
             "files": files,
         })
@@ -311,6 +382,8 @@ async def api_ingest_files(req: IngestFilesRequest):
             "status": "all_rejected",
             "message": f"所有 {pp_stats['total']} 篇文档未通过质量检查（短文本/无关/空内容）",
             "preprocessing": pp_stats,
+            "file_results": _build_file_results(
+                [(fn, os.path.join(dir_path, fn), n) for fn, _, n in file_stats], [], []),
         }
 
     # LightRAG 图谱构建: PDF/图片解析内容送入知识图谱
@@ -349,6 +422,8 @@ async def api_ingest_files(req: IngestFilesRequest):
 
     # Return response based on whether analysis was requested
     actual_loaded = len(new_only)
+    file_results = _build_file_results(
+        [(fn, os.path.join(dir_path, fn), n) for fn, _, n in file_stats], raw_docs, new_only)
     if actual_loaded == 0 and skipped > 0:
         return {
             "loaded": 0,
@@ -358,6 +433,8 @@ async def api_ingest_files(req: IngestFilesRequest):
             "status": "no_new_docs",
             "message": f"所有 {skipped} 篇文档已存在于知识库，已跳过",
             "kb_path": _KB_PATH,
+            "preprocessing": pp_stats,
+            "file_results": file_results,
         }
 
     # Phase 3: Launch background analysis if requested
@@ -376,6 +453,8 @@ async def api_ingest_files(req: IngestFilesRequest):
             "status": "analyzing_in_background",
             "message": f"已导入 {actual_loaded} 篇新文档（跳过 {skipped} 篇重复），后台分析中...",
             "kb_path": _KB_PATH,
+            "preprocessing": pp_stats,
+            "file_results": file_results,
         }
 
     return {
@@ -385,6 +464,8 @@ async def api_ingest_files(req: IngestFilesRequest):
         "total": len(_state["kb_docs"]),
         "documents": [],
         "kb_path": _KB_PATH,
+        "preprocessing": pp_stats,
+        "file_results": file_results,
     }
 
 
@@ -527,26 +608,31 @@ async def api_ingest_upload(files: list[UploadFile] = File(...)):
 
         # Phase 2: Parse files
         raw_docs = []
+        parsed_paths = set()
         llm = _state.get("llm")
         for fname, fpath, ext in saved:
             try:
                 if ext == ".pdf":
                     text = _parse_pdf_text(fpath)
                     if text:
+                        parsed_paths.add(fpath)
                         raw_docs.append({"text": text, "meta": {
                             "source": fname, "file": fpath, "parse_type": "pdf"
                         }})
                 elif ext in (".png", ".jpg", ".jpeg", ".webp"):
                     text = _describe_image(llm, fpath)
                     if text:
+                        parsed_paths.add(fpath)
                         raw_docs.append({"text": text, "meta": {
                             "source": fname, "file": fpath, "parse_type": "image"
                         }})
             except Exception as e:
                 logger.warning(f"[Upload] Skip {fname}: {e}")
 
+        upload_entries = [(fn, fp, 1 if fp in parsed_paths else 0) for fn, fp, _ in saved]
         if not raw_docs:
-            return {"loaded": 0, "message": "所有文件解析为空", "total": len(_state.get("kb_docs", []))}
+            return {"loaded": 0, "message": "所有文件解析为空", "total": len(_state.get("kb_docs", [])),
+                    "file_results": _build_file_results(upload_entries, [], [])}
 
         # Preprocessing pipeline
         raw_docs, pp_stats = _preprocess_docs(raw_docs)
@@ -555,7 +641,8 @@ async def api_ingest_upload(files: list[UploadFile] = File(...)):
                 f"[Upload] 预处理: {pp_stats['cleaned']}/{pp_stats['total']} 通过"
             )
         if not raw_docs:
-            return {"loaded": 0, "message": "所有文件未通过质量检查", "total": len(_state.get("kb_docs", [])), "preprocessing": pp_stats}
+            return {"loaded": 0, "message": "所有文件未通过质量检查", "total": len(_state.get("kb_docs", [])),
+                    "preprocessing": pp_stats, "file_results": _build_file_results(upload_entries, [], [])}
 
         # LightRAG graph insertion
         lightrag = _state.get("lightrag")
@@ -588,6 +675,7 @@ async def api_ingest_upload(files: list[UploadFile] = File(...)):
             "skipped_duplicates": skipped,
             "total": len(_state["kb_docs"]),
             "message": f"已导入 {actual_loaded} 篇" + (f"，跳过 {skipped} 篇重复" if skipped else ""),
+            "file_results": _build_file_results(upload_entries, raw_docs, new_only),
         }
     finally:
         # Cleanup temp files
