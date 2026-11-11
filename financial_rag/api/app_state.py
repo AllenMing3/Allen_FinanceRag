@@ -173,6 +173,13 @@ def _ensure_init():
         # Conversation manager
         from financial_rag.services.conversation import ConversationManager
         _state["conversation_manager"] = ConversationManager()
+        # 追问工具依赖全量注入（cm 晚于 registry 工厂创建，工厂期的注入缺 cm）
+        from financial_rag.tools.conversation_tools import inject_conversation_deps
+        inject_conversation_deps(
+            llm=_state["llm"], retriever=_state.get("retriever"),
+            kb_built=_state.get("kb_built", False),
+            conversation_manager=_state["conversation_manager"],
+        )
 
         # KB 状态摘要日志
         kb_docs = _state["kb_docs"]

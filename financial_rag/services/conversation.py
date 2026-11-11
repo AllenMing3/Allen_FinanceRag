@@ -1,17 +1,19 @@
 """
-ConversationManager — 多轮对话会话管理
+ConversationManager — 多轮对话会话管理（案件档案存储层）
 
-为新闻解读和话题调研提供 follow-up 追问能力:
+为新闻解读和话题调研提供 follow-up 追问的档案与历史管理:
 - Session CRUD (创建/读取/列出/删除)
-- 消息历史管理
-- Follow-up LLM 调用 (注入原始分析上下文 + 历史消息)
-- JSON 文件持久化
+- 消息历史管理 + 历史压缩
+- JSON 文件持久化（state 层：可删、不入库）
+
+追问的业务逻辑（KB 检索 + 证据组装 + LLM + Guard）在
+tools/conversation_tools.py 的 answer_followup 工具中，本模块不直接调 LLM。
 
 用法:
     from financial_rag.services.conversation import ConversationManager
     cm = ConversationManager()
     sid = cm.create_session("news", "茅台新闻分析", initial_analysis, context)
-    answer = cm.followup(sid, "这个公司最近有什么风险？", llm)
+    msgs = cm._build_messages(cm.get_session(sid), "追问内容", llm=llm)
 """
 import json
 import os
@@ -22,10 +24,6 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger(__name__)
-
-# 持久化目录
-_CONV_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                         "data", "knowledge_base", "conversations")
 
 
 # ===================== 数据模型 =====================
@@ -111,11 +109,15 @@ class ConversationManager:
     """
     会话管理器 — 管理多个对话 session 的生命周期
 
-    - 内存 + 磁盘双写
-    - follow-up 调用: 注入原始新闻 + 分析结果 + 最近消息 → LLM
+    - 内存 + 磁盘双写（默认落 config.state_dir/conversations，跟随 KB 分层）
+    - 历史消息 + 压缩摘要，供 answer_followup 工具组装 LLM 上下文
     """
 
-    def __init__(self, conv_dir: str = _CONV_DIR):
+    def __init__(self, conv_dir: Optional[str] = None):
+        if conv_dir is None:
+            # 惰性读 config：会话属运行状态层（state），与 KB 分层重构对齐
+            from financial_rag.config import config
+            conv_dir = os.path.join(config.state_dir, "conversations")
         self._conv_dir = conv_dir
         self._sessions: Dict[str, ConversationSession] = {}
         self._load_all()
@@ -186,108 +188,17 @@ class ConversationManager:
         self._save_session(session)
         return msg
 
-    # ---- Follow-up LLM ----
+    # ---- 历史消息组装（供 answer_followup 工具调用） ----
 
-    def followup(self, session_id: str, user_message: str, llm) -> Dict[str, Any]:
-        """
-        追问: 注入会话上下文 + 消息历史 → LLM 生成回答
+    def _build_messages(self, session: ConversationSession, new_question: str,
+                        llm=None) -> List[Dict]:
+        """构建 LLM messages 列表 — 压缩摘要 + 最近 N 轮 + 新问题
 
         Args:
-            session_id: 会话 ID
-            user_message: 用户追问内容
-            llm: DashScopeLLM 实例
-
-        Returns:
-            {"answer": str, "elapsed_ms": float}
+            llm: 可选 LLM 实例，用于历史压缩；None 时压缩走提取式回退
         """
-        session = self._sessions.get(session_id)
-        if not session:
-            return {"answer": "会话不存在", "error": True}
-
-        # 保存用户消息
-        self.add_message(session_id, "user", user_message)
-
-        # 构建 LLM 上下文
-        import time
-        from financial_rag.llm.caller import LLMCaller
-
-        t0 = time.time()
-
-        system_prompt = self._build_system_prompt(session, user_message)
-        messages = self._build_messages(session, user_message)
-
-        caller = LLMCaller(llm)
-        try:
-            resp = caller.call(
-                messages=messages,
-                system=system_prompt,
-                max_tokens=1024,
-                temperature=0.3,
-            )
-            answer = resp.content
-        except Exception as e:
-            logger.error(f"[Conversation] followup LLM 失败: {e}")
-            answer = f"抱歉，分析过程中出现错误: {e}"
-
-        elapsed_ms = (time.time() - t0) * 1000
-
-        # 保存助手回答
-        self.add_message(session_id, "assistant", answer,
-                         metadata={"elapsed_ms": round(elapsed_ms)})
-
-        return {"answer": answer, "elapsed_ms": round(elapsed_ms)}
-
-    def _build_system_prompt(self, session: ConversationSession, question: str = "") -> str:
-        """构建 follow-up 的 system prompt (XML 结构)，带上下文预算裁剪"""
-        ctx = self._prune_context(session.context, question)
-
-        context_parts = []
-        news_text = ctx.get("news_text", "")
-        if news_text:
-            context_parts.append(f"<original_news>\n{news_text}\n</original_news>")
-
-        structured = ctx.get("structured", "")
-        if structured:
-            context_parts.append(f"<analysis_result>\n{structured}\n</analysis_result>")
-
-        metrics = ctx.get("metrics", "")
-        if metrics:
-            context_parts.append(f"<extracted_metrics>\n{metrics}\n</extracted_metrics>")
-
-        entities = ctx.get("entities", "")
-        if entities:
-            context_parts.append(f"<extracted_entities>\n{entities}\n</extracted_entities>")
-
-        kb_text = ctx.get("kb_sources", "")
-        if kb_text:
-            context_parts.append(f"<kb_context>\n{kb_text}\n</kb_context>")
-
-        context_block = "\n\n".join(context_parts) if context_parts else "(无原始上下文)"
-
-        return f"""你是一位专业的 AI/科技/金融行业分析师。你之前已经对用户提供的新闻或话题进行了深度分析。
-现在用户想基于之前的分析结果，追问更多细节或相关问题。
-
-{context_block}
-
-<rules>
-1. 基于上面提供的原始新闻和分析结果回答追问，不要编造数据或数字
-2. 如果追问的内容在已有信息中找不到依据，明确说明"根据已有信息无法判断"
-3. 回答要有具体数据和因果推理，避免"可能""或许"等模糊表述
-4. 如果用户问的是相关公司或行业，结合 extracted_entities 和 KB 背景回答
-5. 保持专业客观，不做投资建议
-</rules>
-
-<output_format>
-- 用 Markdown 格式回答
-- 关键数据加粗
-- 重要结论用 > 引用块
-- 如涉及多维度，用列表或表格组织
-</output_format>"""
-
-    def _build_messages(self, session: ConversationSession, new_question: str) -> List[Dict]:
-        """构建 LLM messages 列表 — 压缩摘要 + 最近 N 轮 + 新问题"""
         # 触发压缩: 消息超过阈值时，压缩旧消息为摘要
-        self._maybe_compress(session)
+        self._maybe_compress(session, llm=llm)
 
         messages = []
 
@@ -314,7 +225,7 @@ class ConversationManager:
     _COMPRESS_THRESHOLD = 10   # 消息数 >= 此值时触发压缩
     _KEEP_RECENT_TURNS = 4     # 保留最近 N 轮 (2N 条消息)
 
-    def _maybe_compress(self, session: ConversationSession):
+    def _maybe_compress(self, session: ConversationSession, llm=None):
         """当消息超过阈值时，压缩旧消息为摘要"""
         total = len(session.messages)
         if total < self._COMPRESS_THRESHOLD:
@@ -335,7 +246,7 @@ class ConversationManager:
 
         # 如果已有旧摘要，合并进去
         existing = session.compressed_summary
-        new_summary = self._summarize_pairs(pairs, existing)
+        new_summary = self._summarize_pairs(pairs, existing, llm=llm)
         if new_summary:
             session.compressed_summary = new_summary
             self._save_session(session)
@@ -360,14 +271,13 @@ class ConversationManager:
             i += 1
         return pairs
 
-    def _summarize_pairs(self, pairs: List[Dict], existing_summary: str = "") -> str:
-        """将 Q/A 对压缩为摘要文本 (LLM 优先，规则回退)"""
-        # 尝试 LLM 压缩
-        try:
-            from financial_rag.llm.caller import LLMCaller
-            from financial_rag.llm import get_llm
-            llm = get_llm()
-            if llm:
+    def _summarize_pairs(self, pairs: List[Dict], existing_summary: str = "",
+                         llm=None) -> str:
+        """将 Q/A 对压缩为摘要文本 (注入 llm 优先，无 llm 规则回退)"""
+        # 尝试 LLM 压缩（仅使用注入实例，不另起全局 get_llm，避免 mock/测试行为分裂）
+        if llm is not None:
+            try:
+                from financial_rag.llm.caller import LLMCaller
                 caller = LLMCaller(llm)
                 pair_text = "\n".join(
                     f"Q: {p['q']}\nA: {p['a'][:300]}" for p in pairs
@@ -386,8 +296,8 @@ class ConversationManager:
                     temperature=0.1,
                 )
                 return resp.content.strip()
-        except Exception as e:
-            logger.debug(f"[Conversation] LLM 压缩失败，使用规则回退: {e}")
+            except Exception as e:
+                logger.debug(f"[Conversation] LLM 压缩失败，使用规则回退: {e}")
 
         # 规则回退: 提取式摘要
         return self._extractive_summary(pairs, existing_summary)
@@ -417,52 +327,6 @@ class ConversationManager:
             for m in recent
             if m.role in ("user", "assistant")
         ]
-
-    # ---- 上下文裁剪 ----
-
-    def _prune_context(self, ctx: Dict[str, Any], question: str = "") -> Dict[str, Any]:
-        """按预算裁剪 system prompt 中的上下文数据"""
-        pruned = {}
-
-        # 各段预算 (字符数)
-        news_budget = 1500
-        struct_budget = 1000
-        metrics_budget = 500
-        entities_budget = 500
-        kb_budget = 500
-
-        news_text = ctx.get("news_text", "")
-        if news_text:
-            pruned["news_text"] = news_text[:news_budget]
-
-        structured = ctx.get("structured", {})
-        if structured:
-            text = json.dumps(structured, ensure_ascii=False, indent=2)
-            pruned["structured"] = text[:struct_budget]
-
-        metrics = ctx.get("metrics", {})
-        if metrics:
-            text = json.dumps(metrics, ensure_ascii=False, indent=2)
-            pruned["metrics"] = text[:metrics_budget]
-
-        entities = ctx.get("entities", {})
-        if entities:
-            text = json.dumps(entities, ensure_ascii=False, indent=2)
-            pruned["entities"] = text[:entities_budget]
-
-        kb_sources = ctx.get("kb_sources", [])
-        if kb_sources:
-            lines = []
-            total = 0
-            for s in kb_sources[:5]:
-                line = f"  - [{s.get('source', '?')}] {s.get('text', '')[:200]}"
-                if total + len(line) > kb_budget:
-                    break
-                lines.append(line)
-                total += len(line)
-            pruned["kb_sources"] = "\n".join(lines)
-
-        return pruned
 
     # ---- 持久化 ----
 

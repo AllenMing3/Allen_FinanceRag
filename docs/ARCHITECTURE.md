@@ -33,7 +33,7 @@
 │  Agent 只做编排，重活全部 call_tool() 委托                    │
 └──────────────────────────┬───────────────────────────────────┘
 ┌─ 工具层 (tools/) ────────▼───────────────────────────────────┐
-│  FunctionRegistry: 37 tools / 11 模块 / 5 分类               │
+│  FunctionRegistry: 38 tools / 12 模块 / 5 分类               │
 └──────────────────────────┬───────────────────────────────────┘
 ┌─ 基础设施 ───────────────▼───────────────────────────────────┐
 │  retrievers/ 混合检索(BM25 FTS5+Chroma+RRF+Rerank+扩词)      │
@@ -67,7 +67,7 @@ graph TD
 
     subgraph CAP["③ 能力层"]
         AGENTS["3 Agent 链<br/>Ingestion → Analysis → Scoring"]
-        TOOLS["37 工具 (tools/)<br/>分析·数据·KB·抽取·检索"]
+        TOOLS["38 工具 (tools/)<br/>分析·数据·KB·抽取·检索"]
     end
 
     subgraph INFRA["④ 基础设施"]
@@ -107,7 +107,7 @@ graph TD
     class A p0;
 ```
 
-> **看图说话**：5 条业务通路从 API 入口进来 → 调度层决定走哪条 Agent 链 → 3 Agent 顺序执行、把重活委托给 37 工具 → 工具落在检索/LLM/防幻觉/KB 基础设施上 → 产出结构化结论+评分+防幻觉报告。
+> **看图说话**：5 条业务通路从 API 入口进来 → 调度层决定走哪条 Agent 链 → 3 Agent 顺序执行、把重活委托给 38 工具 → 工具落在检索/LLM/防幻觉/KB 基础设施上 → 产出结构化结论+评分+防幻觉报告。
 > ⭐ **A 新闻解读是 P0**（红框）；实线=走 Orchestrator 编排，虚线=旁路（KB问答直连检索、K线直连 AnalysisAgent）；深度研究(Bp) 独有 5 阶段 Pipeline。
 
 ### 通路 A：新闻解读 ⭐ 最高优先级
@@ -203,11 +203,11 @@ AnalysisAgent 内部工具链分发（`_run_kline_chain` / `_run_event_chain` /
 
 （‖ = ThreadPoolExecutor 并行调用）
 
-## 6. 工具清单（37 个 / 11 模块 / 5 分类，tools/）
+## 6. 工具清单（38 个 / 12 模块 / 5 分类，tools/）
 
 | 分类 | 数量 | 工具 |
 |------|------|------|
-| analysis | 13 | analyze_news_deep, analyze_topic_deep, analyze_kline, generate_kline_analysis, assess_event_impact, synthesize_report, calculate_growth_rate, calculate_financial_ratio, compare_metrics, summarize_financials, evaluate_pipeline_quality, check_hallucination, generate_score_report |
+| analysis | 14 | analyze_news_deep, analyze_topic_deep, analyze_kline, generate_kline_analysis, assess_event_impact, synthesize_report, calculate_growth_rate, calculate_financial_ratio, compare_metrics, summarize_financials, evaluate_pipeline_quality, check_hallucination, generate_score_report, answer_followup |
 | data | 9 | fetch_stock_news, fetch_financial_news, fetch_announcements, fetch_news_report, fetch_date_events, fetch_kline_context, fetch_kline_report, parse_pdf_file, describe_image_file |
 | kb | 7 | kb_load, kb_save, kb_add, kb_remove, kb_stats, chunk_document, chunk_documents_batch |
 | extraction | 5 | extract_document_metadata, detect_document_type, extract_financial_metrics, extract_entities, generate_search_queries |
@@ -215,7 +215,7 @@ AnalysisAgent 内部工具链分发（`_run_kline_chain` / `_run_event_chain` /
 
 模块文件：core / analysis_tools / news_tools / kline_tools / event_impact_tools /
 kb_tools / chunk_tools / extraction_tools / document_parse_tools / report_tools /
-scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
+scoring_tools / graph_tools / conversation_tools（LLM 依赖经 inject_* 函数注入）。
 
 ## 7. 基础设施
 
@@ -256,7 +256,7 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
 16. 同步+线程池架构 → async 化；verbose print → logger。
 17. IngestionAgent EXPECTED_METADATA_FIELDS 与 DocMetadata schema 脱节（fiscal_period/currency 财报时代残留）。
 18. AgentRouter 关键词正则分类 → LLM/Planner 路由；公司名硬编码正则与 STOCK_MAP 双份维护。
-19. 测试套件对齐：旧架构约 594 用例全量套已废弃，替换为护栏驱动按 RAG 流水线步骤测试（当前 295，覆盖预处理/入库/查询解析/召回/RRF融合/过滤门控/生成有据化 + 上下文组装 + L1检索评估 + L2输出评估 + L3 LLM-as-judge(RAGAS) + 可观测性埋点，Step 0-7 已闭环，详见 README）；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁手动触发。
+19. 测试套件对齐：旧架构约 594 用例全量套已废弃，替换为护栏驱动按 RAG 流水线步骤测试（当前 314，覆盖预处理/入库/查询解析/召回/RRF融合/过滤门控/生成有据化 + 上下文组装 + 追问质量闭环 + L1检索评估 + L2输出评估 + L3 LLM-as-judge(RAGAS) + 可观测性埋点，Step 0-7 已闭环，详见 README）；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁手动触发。
 20. 可观测性：Phoenix 选型已定（OpenInference/OTel，独立 `.venv-obs` + 主应用 OTLP/HTTP 外推，默认关闭）；第一期核心 RAG 链路（LLM/检索/embedding/rerank）已落地，第二期（Agent 链/Pipeline 5 阶段/工具调用/护栏）尚未埋点。
 21. 依赖治理：已迁移 uv + PEP 621 `pyproject.toml`（单一真相源）+ `uv.lock`（可复现）；移除全项目 0 引用的 `llama-index`（曾拖进 openai<3 生态、与 Phoenix 冲突）；分 core/dev/observability 三组 extras；`arize-phoenix` 隔离独立 `.venv-obs`；`requirements.txt` 为 `uv export` 锁定产物；CI 用 setup-uv + `uv sync --frozen`。
 22. **RAGAS LLM-as-judge 辅助观测**（六层防护退役后新增，用户 2026-11 拍板降级为辅助观测）：① **judge 区分度已修复**——原默认英文 prompt 致中文声明翻译扭曲（主语错绑/过度拆分）、good−defect mean-gap 仅 0.04-0.06（远低于 0.15）；中文化两步 prompt 后 gap 抬到 **0.18 越过 0.15 阈值**（good_mean 0.87/defect_mean 0.68，两次复现，见 `eval/ragas_judge.py` `_build_cn_faithfulness_prompts`）。仍定位辅助观测（跑通 exit 0、区分度仅报告不阻断），主门禁靠 L1/L2 规则尺子 + step7。② **golden 集单一**——`output_news_brief.jsonl` 11 case 全部共用 1 篇源文档 `d_sensetime_long`，L2/L3 尺子判别力/泛化性受限、有过拟合风险。③ `extract_brief_claims` 只适配 NEWS_BRIEF 模板，deep_analysis/quick_qa 走不通。④ RAGAS 需 API key+重依赖、不进 CI、在线评判无回归保护。方向：扩 golden 到多源/多模板 + gap 在线波动取多次均值 + 查 compute_03 中文化后退步(1.0→0.667)。
@@ -267,7 +267,7 @@ scoring_tools / graph_tools（LLM 依赖经 inject_* 函数注入）。
 uv sync --extra dev                       # 建 .venv，按 uv.lock 精确复现
 .venv\Scripts\activate.bat
 python -m financial_rag.main web        # Web UI: http://127.0.0.1:8000
-pytest tests -q                          # 295 用例, 护栏驱动按流水线步骤, 离线 <7s
+pytest tests -q                          # 314 用例, 护栏驱动按流水线步骤, 离线 <7s
 ```
 
 Mock 约定：只 mock 数据源 API（Tushare/RSS）；conftest 的 autouse fixture `_force_local_retrieval` 删除 DASHSCOPE_API_KEY，强制检索走本地（BM25+Jaccard），保证确定性、离线、可复现。LLM/Embedding/Rerank 仅在测试显式调用时才真实。

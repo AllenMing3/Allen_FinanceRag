@@ -763,6 +763,13 @@ def create_financial_registry(retriever=None, llm=None, lightrag_adapter=None) -
     for tool_def in ANALYSIS_TOOLS:
         registry.add(tool_def)
 
+    # ---- 追问问答工具（新闻解读/话题调研后的持续对话）----
+    # cm 在 app_state 中晚于本工厂创建，届时需二次全量注入
+    from financial_rag.tools.conversation_tools import CONVERSATION_TOOLS, inject_conversation_deps
+    inject_conversation_deps(llm=llm, retriever=retriever, kb_built=retriever is not None)
+    for tool_def in CONVERSATION_TOOLS:
+        registry.add(tool_def)
+
     # ---- 文档解析工具（PDF + 图片多模态）----
     from financial_rag.tools.document_parse_tools import DOCUMENT_PARSE_TOOLS, inject_document_parse_llm
     if llm:

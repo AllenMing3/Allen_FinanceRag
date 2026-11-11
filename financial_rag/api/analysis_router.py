@@ -293,7 +293,7 @@ async def api_analyze_news(req: AnalyzeNewsRequest):
     if cm:
         result["session_id"] = cm.create_session(
             session_type="news", title=session_topic[:50],
-            initial_analysis=result.get("analysis", ""),
+            initial_analysis=_build_full_analysis_text(result),
             context={
                 "news_text": text, "structured": result.get("structured", {}),
                 "metrics": result.get("metrics", {}), "entities": result.get("entities", {}),
@@ -360,7 +360,7 @@ async def api_analyze_topic(req: AnalyzeTopicRequest):
     if cm:
         result["session_id"] = cm.create_session(
             session_type="topic", title=topic[:50],
-            initial_analysis=result.get("analysis", ""),
+            initial_analysis=_build_full_analysis_text(result),
             context={
                 "topic": topic, "structured": result.get("structured", {}),
                 "metrics": result.get("metrics", {}), "entities": result.get("entities", {}),
@@ -585,5 +585,11 @@ async def api_chat_followup(req: ChatFollowupRequest):
         raise HTTPException(404, f"会话不存在: {req.session_id}")
 
     logger.info(f"[API] /chat/followup: session={req.session_id}, message={req.message[:80]!r}")
-    result = cm.followup(req.session_id, req.message, _state["llm"])
+    # 委托注册工具（开卷追问: KB 检索 + 档案组装 + LLM + L1-L4 Guard）
+    registry = _state.get("registry")
+    tool = registry.get("answer_followup") if registry else None
+    if not tool:
+        raise HTTPException(500, "answer_followup 工具未注册")
+    result = await asyncio.to_thread(
+        tool.callback, session_id=req.session_id, message=req.message)
     return result
