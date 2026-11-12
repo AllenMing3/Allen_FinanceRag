@@ -217,7 +217,10 @@ class TestObservability:
     def test_serializer_whitelist_and_no_raw_leak(self):
         result = HallucinationGuard().check(GROUNDED_ANSWER, _sources())
         api = serialize_guard_result(result)
-        assert set(api) == {"overall_score", "risk", "passed", "layers"}
+        # skipped/skip_reason 为 P1-2 显式未校验契约键（正常路径恒 False/""）
+        assert set(api) == {"overall_score", "risk", "passed", "layers",
+                            "skipped", "skip_reason"}
+        assert api["skipped"] is False
         assert set(api["layers"]) == {
             "L1_source_grounding", "L2_numerical_fidelity",
             "L3_citation_integrity", "L4_structure_compliance",

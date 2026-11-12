@@ -87,6 +87,20 @@ class TestSampleMapping:
         with pytest.raises(ValueError, match="声明型字段"):
             extract_brief_claims("一段没有模板结构的普通文本")
 
+    def test_multi_template_real_claims_not_headings(self):
+        """P0-1：quick_qa/deep_analysis 必须提取真实声明，不得只喂标题。
+
+        旧实现标题正则把 '### 回答' 截成 '# 回答'、deep 只拿 '深度分析报告'，
+        judge 评的是空标题 —— 静默正确性漏洞，与 L2 尺子同源修复。
+        """
+        samples = {s["case_id"]: s for s in build_ragas_samples(load_cases())}
+        qq = samples["qq_pos_zhipu_funding_01"]["answer"]
+        assert "融资金额超50亿元" in qq, f"quick_qa 真实声明丢失: {qq!r}"
+        assert "#" not in qq, f"quick_qa 标题脚手架未剥离: {qq!r}"
+        da = samples["da_pos_cambricon_01"]["answer"]
+        assert "11.74亿" in da and "4.43亿" in da, f"deep 段落声明丢失: {da!r}"
+        assert "深度分析报告" not in da, f"deep 报告标题未剥离: {da!r}"
+
     def test_contexts_come_from_source_docs(self):
         """contexts 必须取自 golden source_docs 的 text（与 Guard l1/l2 的 sources 同源）。"""
         cases = load_cases()
@@ -141,8 +155,13 @@ class TestCalibration:
         calib = calibrate(samples, _synthetic_scores(samples))
         assert calib["gap_ok"] is True and calib["fabnum_ok"] is True
         assert calib["violations"] == []
-        # gap = good − 缺陷子集(2 fabnum@0.20 + 2 ungrounded@0.40)，missfield 正交不参与
-        assert calib["gap"] == pytest.approx(0.95 - (0.20 * 2 + 0.40 * 2) / 4, abs=1e-4)
+        # gap = good − 缺陷子集(fabnum@0.20 + ungrounded@0.40)，missfield 正交不参与。
+        # 子集大小按 tag 动态统计，不硬编码 golden 构成（P0-1 多源扩容后自动适配）。
+        n_fab = sum("fabricated_number" in s["tags"] for s in samples)
+        n_ung = sum("ungrounded_claim" in s["tags"] for s in samples)
+        assert n_fab > 0 and n_ung > 0, "缺陷子集不得为空"
+        expected_gap = 0.95 - (0.20 * n_fab + 0.40 * n_ung) / (n_fab + n_ung)
+        assert calib["gap"] == pytest.approx(expected_gap, abs=1e-4)
         assert calib["missfield_mean"] == pytest.approx(0.40, abs=1e-4)
 
     def test_no_separation_violates(self):

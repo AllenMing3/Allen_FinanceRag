@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from financial_rag.templates import SlottedTemplate
     from financial_rag.slot_filler import SlotFiller
     from financial_rag.core.scorer import PipelineScoreCard
-    from financial_rag.guard.reflector import HallucinationGuard
     from financial_rag.retrievers import HybridRetriever
     from financial_rag.core.agent_router import RoutingDecision
 
@@ -531,7 +530,7 @@ class PipelineScheduler:
 
         try:
             from financial_rag.core.scorer import PipelineScoreCard
-            from financial_rag.guard.reflector import HallucinationGuard
+            from financial_rag.guard.service import ReliabilityService
 
             card = PipelineScoreCard(query=result.query)
             result.scorecard = card
@@ -576,12 +575,10 @@ class PipelineScheduler:
                     details={"template": result.fill_stats.template_name},
                 )
 
-            # 防幻觉校验（L1-L4 规则层，确定性）
-            if result.final_output:
-                guard = HallucinationGuard()
-                raw_items = result.retrieved_items or []
-                check = guard.check(result.final_output, raw_items)
-                result.hallucination_check = check
+            # 防幻觉校验（L1-L4 规则层，确定性）— 统一入口，空输入显式 skipped
+            check = ReliabilityService().check(result.final_output, result.retrieved_items)
+            result.hallucination_check = check
+            if not check.get("skipped"):
                 card.record(
                     "hallucination",
                     "防幻觉校验",

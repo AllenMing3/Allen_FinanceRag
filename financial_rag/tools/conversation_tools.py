@@ -74,11 +74,14 @@ def assemble_followup_context(session_context: Dict[str, Any],
 
 
 def check_followup_answer(answer: str, assembled) -> Dict[str, Any]:
-    """对追问回答跑 L1-L4 Guard（与 LLM 证据同源），返回序列化报告。"""
-    from financial_rag.guard.reflector import HallucinationGuard
+    """对追问回答跑 L1-L4 Guard（与 LLM 证据同源），返回序列化报告。
+
+    统一走 ReliabilityService：空回答/空证据 → 显式 skipped（未校验）。
+    """
+    from financial_rag.guard.service import ReliabilityService
     from financial_rag.guard.serializer import serialize_guard_result
 
-    guard_result = HallucinationGuard().check(
+    guard_result = ReliabilityService().check(
         answer, assembled.source_items, mode="rag")
     return serialize_guard_result(guard_result)
 
@@ -159,12 +162,13 @@ def _followup_impl(cm, session, session_id: str, message: str) -> Dict[str, Any]
     logger.info(f"[followup] 完成: {elapsed_ms}ms, "
                 f"guard risk={hallucination.get('risk')}")
 
-    # 6. 助手回答落盘（带诊断摘要）
+    # 6. 助手回答落盘（带诊断摘要 + 完整证据，供 eval/backflow 回流取样）
     cm.add_message(session_id, "assistant", answer, metadata={
         "elapsed_ms": elapsed_ms,
-        "guard_risk": hallucination.get("risk", ""),
+        "guard_risk": "skipped" if hallucination.get("skipped") else hallucination.get("risk", ""),
         "guard_score": hallucination.get("overall_score", 0),
         "source_count": len(assembled.source_items),
+        "sources": assembled.source_items,
     })
 
     return {

@@ -256,10 +256,10 @@ scoring_tools / graph_tools / conversation_tools（LLM 依赖经 inject_* 函数
 16. 同步+线程池架构 → async 化；verbose print → logger。
 17. IngestionAgent EXPECTED_METADATA_FIELDS 与 DocMetadata schema 脱节（fiscal_period/currency 财报时代残留）。
 18. AgentRouter 关键词正则分类 → LLM/Planner 路由；公司名硬编码正则与 STOCK_MAP 双份维护。
-19. 测试套件对齐：旧架构约 594 用例全量套已废弃，替换为护栏驱动按 RAG 流水线步骤测试（当前 372，覆盖预处理/入库/查询解析/召回/RRF融合/过滤门控/生成有据化 + 上下文组装 + 追问质量闭环 + Prompt契约锁 + 槽位输出引擎 + 导入状态可观测性 + L1检索评估 + L2输出评估 + L3 LLM-as-judge(RAGAS) + 可观测性埋点，Step 0-7 已闭环，详见 README）；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁手动触发。
+19. 测试套件对齐：旧架构约 594 用例全量套已废弃，替换为护栏驱动按 RAG 流水线步骤测试（当前 420，覆盖预处理/入库/查询解析/召回/RRF融合/过滤门控/生成有据化 + 上下文组装 + 追问质量闭环 + Prompt契约锁 + 槽位输出引擎 + 导入状态可观测性 + 护栏统一入口(ReliabilityService) + L1检索评估 + L2输出评估(多源多模板 golden + per-case 关键用例锁) + L3 LLM-as-judge(RAGAS) + bad-case 回流通道 + 可观测性埋点，Step 0-7 已闭环，详见 README）；仍待按 5 条业务通路对齐端到端；加固期 CI 门禁手动触发。
 20. 可观测性：Phoenix 选型已定（OpenInference/OTel，独立 `.venv-obs` + 主应用 OTLP/HTTP 外推，默认关闭）；第一期核心 RAG 链路（LLM/检索/embedding/rerank）已落地，第二期（Agent 链/Pipeline 5 阶段/工具调用/护栏）尚未埋点。
 21. 依赖治理：已迁移 uv + PEP 621 `pyproject.toml`（单一真相源）+ `uv.lock`（可复现）；移除全项目 0 引用的 `llama-index`（曾拖进 openai<3 生态、与 Phoenix 冲突）；分 core/dev/observability 三组 extras；`arize-phoenix` 隔离独立 `.venv-obs`；`requirements.txt` 为 `uv export` 锁定产物；CI 用 setup-uv + `uv sync --frozen`。
-22. **RAGAS LLM-as-judge 辅助观测**（六层防护退役后新增，用户 2026-11 拍板降级为辅助观测）：① **judge 区分度已修复**——原默认英文 prompt 致中文声明翻译扭曲（主语错绑/过度拆分）、good−defect mean-gap 仅 0.04-0.06（远低于 0.15）；中文化两步 prompt 后 gap 抬到 **0.18 越过 0.15 阈值**（good_mean 0.87/defect_mean 0.68，两次复现，见 `eval/ragas_judge.py` `_build_cn_faithfulness_prompts`）。仍定位辅助观测（跑通 exit 0、区分度仅报告不阻断），主门禁靠 L1/L2 规则尺子 + step7。② **golden 集单一**——`output_news_brief.jsonl` 11 case 全部共用 1 篇源文档 `d_sensetime_long`，L2/L3 尺子判别力/泛化性受限、有过拟合风险。③ `extract_brief_claims` 只适配 NEWS_BRIEF 模板，deep_analysis/quick_qa 走不通。④ RAGAS 需 API key+重依赖、不进 CI、在线评判无回归保护。方向：扩 golden 到多源/多模板 + gap 在线波动取多次均值 + 查 compute_03 中文化后退步(1.0→0.667)。
+22. **RAGAS LLM-as-judge 辅助观测**（六层防护退役后新增，用户 2026-11 拍板降级为辅助观测）：① **judge 区分度已修复**——原默认英文 prompt 致中文声明翻译扭曲（主语错绑/过度拆分）、good−defect mean-gap 仅 0.04-0.06（远低于 0.15）；中文化两步 prompt 后 gap 抬到 **0.18 越过 0.15 阈值**（good_mean 0.87/defect_mean 0.68，两次复现，见 `eval/ragas_judge.py` `_build_cn_faithfulness_prompts`）。仍定位辅助观测（跑通 exit 0、区分度仅报告不阻断），主门禁靠 L1/L2 规则尺子 + step7。② **golden 集已扩多源多模板**（P0-1 已修）——`output_news_brief.jsonl` 22 case（9 正 13 负）覆盖 3 源（d_sensetime_long/d_cambricon_2024/d_zhipu_funding）× 3 模板（news_brief/quick_qa/deep_analysis），L2 尺子按 `_TEMPLATE_SPECS` 注册表分模板评估；baseline 另锁 critical_cases 逐 case 下界（P0-2，9 正例 pin 0.95）；线上坏 case 经 `eval/backflow.py` 回流 golden_candidate.jsonl 待标注（P0-3）。③ `extract_brief_claims` 已按模板提取声明（与 L2 尺子字段规格同源），quick_qa 取回答/数据支撑、deep_analysis 取全部段落。④ RAGAS 需 API key+重依赖、不进 CI、在线评判无回归保护。方向：gap 在线波动取多次均值 + 查 compute_03 中文化后退步(1.0→0.667)。
 
 ## 9. 测试与运行
 
@@ -267,7 +267,7 @@ scoring_tools / graph_tools / conversation_tools（LLM 依赖经 inject_* 函数
 uv sync --extra dev                       # 建 .venv，按 uv.lock 精确复现
 .venv\Scripts\activate.bat
 python -m financial_rag.main web        # Web UI: http://127.0.0.1:8000
-pytest tests -q                          # 372 用例, 护栏驱动按流水线步骤, 离线 <7s
+pytest tests -q                          # 420 用例, 护栏驱动按流水线步骤, 离线 <7s
 ```
 
 Mock 约定：只 mock 数据源 API（Tushare/RSS）；conftest 的 autouse fixture `_force_local_retrieval` 删除 DASHSCOPE_API_KEY，强制检索走本地（BM25+Jaccard），保证确定性、离线、可复现。LLM/Embedding/Rerank 仅在测试显式调用时才真实。

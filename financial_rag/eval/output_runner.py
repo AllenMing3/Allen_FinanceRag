@@ -7,9 +7,12 @@ L2 输出层离线评估运行器 — 对称 runner.py（L1 检索层）。
 设计原则（对称 L1，但更简）：
 - 纯离线确定、免 API、不跑检索器/LLM —— 评估对象是预制 golden 输出样本，
   同输入必同输出，CLI 与 pytest 两种入口结果一致。
-- 回归锁双维度：① 各质量指标 macro 回退超阈值；② separation_gap（正例均分−负例均分）
-  回退超阈值（区分度是输出评估器的命脉，掉下去说明评估器失去分辨力）。
-- baseline 只存 macro/per_tier/per_tag/gap/counts（不含 per_case 明细，保证精简可比）。
+- 回归锁三维度：① 各质量指标 macro 回退超阈值；② separation_gap（正例均分−负例均分）
+  回退超阈值（区分度是输出评估器的命脉，掉下去说明评估器失去分辨力）；
+  ③ critical_cases 逐 case 下界（P0-2：单 case 0.9→0.3 会被 macro 均值冲淡，
+  手工 pin 的关键正例必须单独锁，掉破下界或 case 消失都报警）。
+- baseline 只存 macro/per_tier/per_tag/gap/counts + critical_cases（不含 per_case 明细）；
+  critical_cases 为手工 curated 段，--update-baseline 重生成时保留不覆盖。
 
 CLI: python -m financial_rag.eval.output_runner
 """
@@ -47,7 +50,7 @@ def _load_jsonl(path: Path) -> List[Dict]:
 
 
 def load_cases() -> List[Dict]:
-    """加载 NEWS_BRIEF 输出测评 golden（正例 + 三类负例）。"""
+    """加载输出测评 golden（正例 + 三类负例，多模板：news_brief/quick_qa/deep_analysis）。"""
     return _load_jsonl(_GOLDEN_OUTPUT)
 
 
@@ -90,7 +93,10 @@ def evaluate() -> OutputReport:
     """加载 golden → 逐 case 跑 evaluate_case → macro/per_tier/per_tag 汇总 + 区分度 gap。"""
     cases = load_cases()
     per_case: Dict[str, Dict] = {
-        c["case_id"]: evaluate_case(c["brief_output"], c["source_docs"]) for c in cases
+        c["case_id"]: evaluate_case(
+            c["brief_output"], c["source_docs"],
+            template=c.get("template", "news_brief"))
+        for c in cases
     }
 
     macro = {m: _mean(per_case[cid][m] for cid in per_case) for m in METRIC_NAMES}
@@ -147,10 +153,17 @@ def format_report(report: OutputReport) -> str:
 # ===================== 基线对比 =====================
 
 def save_baseline(report: OutputReport, path: Path = BASELINE_PATH) -> None:
-    """写入 output_baseline.json（macro/per_tier/per_tag/gap/counts；不含 per_case，保证可比、确定）。"""
+    """写入 output_baseline.json（macro/per_tier/per_tag/gap/counts；不含 per_case）。
+
+    critical_cases 是手工 curated 的关键用例下界段，重生成时保留旧值不覆盖
+    （首次生成无旧段则不写，需手工 pin）。
+    """
+    payload = report.to_dict(with_per_case=False)
+    old = load_baseline(path)
+    if old and old.get("critical_cases"):
+        payload["critical_cases"] = old["critical_cases"]
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(report.to_dict(with_per_case=False), f,
-                  ensure_ascii=False, indent=2, sort_keys=True)
+        json.dump(payload, f, ensure_ascii=False, indent=2, sort_keys=True)
 
 
 def load_baseline(path: Path = BASELINE_PATH) -> Optional[Dict]:
@@ -174,7 +187,7 @@ class Comparison:
 
 
 def compare(report: OutputReport, baseline: Dict, tol: float = DEFAULT_TOL) -> Comparison:
-    """对比当前 report 与 baseline：锁定各质量指标 macro 回退 + 区分度 gap 回退。"""
+    """对比当前 report 与 baseline：macro 回退 + 区分度 gap 回退 + 关键用例逐 case 下界。"""
     deltas: Dict[str, float] = {}
     regressions: List[Dict] = []
     base_macro = baseline.get("macro", {})
@@ -199,6 +212,23 @@ def compare(report: OutputReport, baseline: Dict, tol: float = DEFAULT_TOL) -> C
             "delta": round(gap_delta, 4),
         })
 
+    # P0-2 关键用例锁：pin 下界是 curated 硬约束，不吃 tol（掉破即报警）；
+    # case 消失同样报警 —— 删样本绕过回归锁是静默正确性漏洞。
+    for cid, floor in baseline.get("critical_cases", {}).items():
+        if cid not in report.per_case:
+            regressions.append({
+                "scope": "case", "metric": cid,
+                "baseline": floor, "current": None, "delta": None,
+            })
+            continue
+        cur = report.per_case[cid]["output_quality"]
+        if cur < floor:
+            regressions.append({
+                "scope": "case", "metric": cid,
+                "baseline": floor, "current": round(cur, 4),
+                "delta": round(cur - floor, 4),
+            })
+
     return Comparison(deltas=deltas, gap_delta=gap_delta,
                       regressions=regressions, tol=tol)
 
@@ -213,12 +243,16 @@ def format_comparison(cmp: Comparison) -> str:
         "", f"区分度 gap delta: {cmp.gap_delta:+.4f}",
     ]
     if cmp.regressions:
-        lines.append("回归告警（核心指标 / 区分度回退超阈值）：")
+        lines.append("回归告警（核心指标 / 区分度 / 关键用例回退超阈值）：")
         for r in cmp.regressions:
-            lines.append(f"  [{r['scope']}] {r['metric']}: "
-                         f"{r['baseline']} -> {r['current']} (delta {r['delta']})")
+            if r["current"] is None:
+                lines.append(f"  [{r['scope']}] {r['metric']}: "
+                             f"关键用例消失（下界 {r['baseline']}）")
+            else:
+                lines.append(f"  [{r['scope']}] {r['metric']}: "
+                             f"{r['baseline']} -> {r['current']} (delta {r['delta']})")
     else:
-        lines.append("无回归：质量指标 macro 与区分度 gap 均未回退超阈值。")
+        lines.append("无回归：质量指标 macro、区分度 gap 与关键用例下界均未回退。")
     return "\n".join(lines)
 
 
@@ -232,11 +266,11 @@ def main(argv=None) -> int:
 
     ap = argparse.ArgumentParser(
         prog="python -m financial_rag.eval.output_runner",
-        description="L2 输出层离线评估（NEWS_BRIEF 质量指标 + 区分度 + 基线对比）")
+        description="L2 输出层离线评估（多模板质量指标 + 区分度 + 关键用例锁 + 基线对比）")
     ap.add_argument("--tol", type=float, default=DEFAULT_TOL,
-                    help="核心指标 / 区分度回退容忍阈值（默认 0.02）")
+                    help="核心指标 / 区分度回退容忍阈值（默认 0.02；关键用例下界不吃 tol）")
     ap.add_argument("--update-baseline", action="store_true",
-                    help="用本次结果覆盖生成 output_baseline.json")
+                    help="用本次结果覆盖生成 output_baseline.json（保留手工 critical_cases）")
     args = ap.parse_args(argv)
 
     report = evaluate()

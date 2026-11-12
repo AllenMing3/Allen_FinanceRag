@@ -130,7 +130,7 @@ async def api_kb_query(req: QueryRequest):
     await asyncio.to_thread(_ensure_init)
     logger.info(f"[API] /kb-query: query={req.query!r}, top_k={req.top_k}")
     from financial_rag.core.scorer import PipelineScoreCard, ScoreGrade
-    from financial_rag.guard.reflector import HallucinationGuard
+    from financial_rag.guard.service import ReliabilityService
     from financial_rag.guard.serializer import serialize_guard_result
 
     if not _state.get("kb_built"):
@@ -193,21 +193,21 @@ async def api_kb_query(req: QueryRequest):
 
     # Hallucination guard: L1-L4 rule layers (确定性规则层，无 LLM 调用；
     # 深度语义评判由离线 RAGAS faithfulness 承担: eval/ragas_judge.py)
+    # 统一走 ReliabilityService：空 answer/空检索 → 显式 skipped（未校验），不静默消失
     hallucination = None
-    if answer and retrieval:
-        try:
-            guard = HallucinationGuard()
-            guard_sources = [{"text": it["text"]} for it in retrieval]
-            guard_result = guard.check(answer, guard_sources)
+    try:
+        guard_sources = [{"text": it["text"]} for it in retrieval]
+        guard_result = ReliabilityService().check(answer, guard_sources)
+        if not guard_result.get("skipped"):
             card.record_hallucination(
                 overall_score=guard_result["overall_score"],
                 layer_scores={k: v.get("score", 0) for k, v in guard_result.get("checks", {}).items()
                               if k != "overall" and isinstance(v, dict)},
                 risk=guard_result["risk"],
             )
-            hallucination = serialize_guard_result(guard_result)
-        except Exception as e:
-            logger.warning(f"HallucinationGuard check failed: {e}")
+        hallucination = serialize_guard_result(guard_result)
+    except Exception as e:
+        logger.warning(f"HallucinationGuard check failed: {e}")
 
     # Scorecard
     sc = {

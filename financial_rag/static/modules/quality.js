@@ -14,6 +14,10 @@ const RISK_MAP = {
   low: ['低风险', 'var(--ok)'], medium: ['中风险', 'var(--warn)'], high: ['高风险', 'var(--danger)'],
 };
 
+// 显式未校验（ReliabilityService skipped 契约）：未校验 ≠ 0 分，必须可区分
+const SKIP_REASONS = { empty_answer: '无输出文本', no_sources: '无检索来源' };
+const SKIPPED_BADGE = '<span class="fuq-badge" style="color:var(--text3);border-color:var(--border);background:var(--surface2)">⚪ 未校验</span>';
+
 // ── Guard 层得分条（评分卡与追问详情共用）──
 
 export function renderGuardLayers(hal) {
@@ -33,6 +37,12 @@ export function renderGuardLayers(hal) {
 
 export function renderHallucinationCard(hal) {
   if (!hal) return '';
+  if (hal.skipped) {
+    const reason = SKIP_REASONS[hal.skip_reason] || hal.skip_reason || '';
+    return `<div class="quality-scorecard" style="margin-bottom:14px"><div class="qs-top" style="grid-template-columns:1fr">
+      <div class="qs-cell"><div class="qs-label">幻觉风险</div><div class="qs-value" style="font-size:14px;color:var(--text3)">⚪ 未校验${reason ? `（${escHtml(reason)}）` : ''}</div></div>
+    </div></div>`;
+  }
   const pct = ((hal.overall_score || 0) * 100).toFixed(0);
   const [riskLabel, riskColor] = RISK_MAP[hal.risk] || ['—', 'var(--text3)'];
   let h = '<div class="quality-scorecard" style="margin-bottom:14px">';
@@ -49,6 +59,7 @@ export function renderHallucinationCard(hal) {
 
 export function guardBadge(hal) {
   if (!hal) return '';
+  if (hal.skipped) return SKIPPED_BADGE;
   const [label, color] = RISK_MAP[hal.risk] || ['—', 'var(--text3)'];
   const pct = ((hal.overall_score || 0) * 100).toFixed(0);
   return `<span class="fuq-badge" style="color:${color};border-color:${color}44;background:${color}14">🛡️ ${label} ${pct}%</span>`;
@@ -57,6 +68,7 @@ export function guardBadge(hal) {
 // 历史消息只存了 risk + score 摘要（无完整 layers），用轻量徽章还原
 export function guardBadgeLite(risk, score) {
   if (!risk) return '';
+  if (risk === 'skipped') return SKIPPED_BADGE;
   const [label, color] = RISK_MAP[risk] || ['—', 'var(--text3)'];
   const pct = ((score || 0) * 100).toFixed(0);
   return `<span class="fuq-badge fuq-badge-sm" style="color:${color};border-color:${color}44;background:${color}14">🛡️ ${label} ${pct}%</span>`;

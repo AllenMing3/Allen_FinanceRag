@@ -127,3 +127,161 @@ class TestEvaluateCaseShape:
                     "field_completeness", "output_quality",
                     "unmatched_numbers", "missing_fields", "unanchored"):
             assert key in r, f"evaluate_case 缺返回键: {key}"
+
+
+# ===================== 多模板支持（P0-1：尺子不再只适配 NEWS_BRIEF） =====================
+
+GOOD_QA = """### 回答
+智谱AI完成B+轮融资，融资金额超50亿元[1]。
+
+**数据支撑**: 融资金额超50亿元，投后估值超200亿元
+**来源**: 来源：融资快讯
+**可信度**: 高，官方宣布
+"""
+
+QA_SOURCE = [{"doc_id": "d_zhipu", "text":
+              "智谱AI宣布完成B+轮融资，融资金额超50亿元，投后估值超200亿元。"
+              "本轮融资由社保基金、北京市政府引导基金等联合投资。"}]
+
+GOOD_DEEP = """## 深度分析报告
+
+### 摘要
+寒武纪2024年营收11.74亿元，同比增长65.56%，净亏损同比收窄。
+
+### 盈利能力
+公司尚未盈利，全年净亏损4.43亿元，同比收窄47.8%。
+
+### 成长性
+营业收入11.74亿元，同比增长65.56%，云端产品线为收入主力。
+
+### 财务健康度
+经营活动现金流净额为-2.15亿元，存货账面价值3.87亿元。
+
+### 估值参考
+研发投入10.72亿元，占营收比例91.3%，估值需关注盈利拐点。
+
+### 投资建议
+持有：云端芯片放量但尚未盈利，关注思元690发布节奏。
+"""
+
+DEEP_SOURCE = [{"doc_id": "d_cambricon", "text":
+                "寒武纪科技股份有限公司2024年年度报告。2024年度，寒武纪实现营业收入11.74亿元，"
+                "同比增长65.56%。其中，云端产品线收入11.66亿元，占总营收99.3%。"
+                "全年净亏损4.43亿元，同比收窄47.8%。研发投入10.72亿元，占营收比例91.3%。"
+                "公司尚未实现盈利，经营活动现金流净额为-2.15亿元。存货账面价值3.87亿元。"
+                "新一代思元690已完成流片，预计2025年Q2发布。"}]
+
+
+@pytest.mark.unit
+class TestTemplateSpecs:
+    def test_quick_qa_all_fields_filled(self):
+        r = field_completeness(GOOD_QA, template="quick_qa")
+        assert r["score"] == 1.0
+        assert r["total"] == 4
+        assert r["missing_fields"] == []
+
+    def test_quick_qa_placeholder_counts_as_missing(self):
+        qa = GOOD_QA.replace("融资金额超50亿元，投后估值超200亿元", "（支撑数据暂缺）", 1)
+        # 只替换数据支撑字段值（回答行不含该串，首个匹配在**数据支撑**行）
+        r = field_completeness(qa, template="quick_qa")
+        assert "supporting_data" in r["missing_fields"]
+        assert r["score"] == pytest.approx(3 / 4)
+
+    def test_deep_analysis_all_sections_filled(self):
+        r = field_completeness(GOOD_DEEP, template="deep_analysis")
+        assert r["score"] == 1.0
+        assert r["total"] == 6
+        assert r["missing_fields"] == []
+
+    def test_deep_analysis_missing_section_detected(self):
+        deep = GOOD_DEEP.replace("### 估值参考\n研发投入10.72亿元，占营收比例91.3%，估值需关注盈利拐点。\n\n", "")
+        r = field_completeness(deep, template="deep_analysis")
+        assert "valuation_hint" in r["missing_fields"]
+        assert r["score"] == pytest.approx(5 / 6)
+
+    def test_unknown_template_raises(self):
+        with pytest.raises(ValueError, match="未知模板"):
+            evaluate_case(GOOD_BRIEF, SOURCE, template="no_such_template")
+
+    def test_default_template_backward_compatible(self):
+        assert evaluate_case(GOOD_BRIEF, SOURCE) == evaluate_case(
+            GOOD_BRIEF, SOURCE, template="news_brief")
+
+    def test_quick_qa_scaffolding_stripped(self):
+        """quick_qa 模板标签（**数据支撑** 等）不是声明，不得计入 unanchored。"""
+        r = evaluate_case(GOOD_QA, QA_SOURCE, template="quick_qa")
+        assert all("数据支撑" not in u for u in r["unanchored"])
+        assert r["source_grounding"] == 1.0
+        assert r["output_quality"] == pytest.approx(1.0)
+
+
+# ===================== per-case 关键用例锁（P0-2：单 case 掉分不再被均值冲淡） =====================
+
+from financial_rag.eval.output_runner import (
+    OutputReport,
+    compare,
+    format_comparison,
+    load_baseline,
+    save_baseline,
+)
+
+
+def _mk_report(per_case):
+    """构造最小 OutputReport：macro/gap 与 baseline 对齐，只变 per_case。"""
+    return OutputReport(
+        case_count=len(per_case), good_count=len(per_case), bad_count=0,
+        macro={m: 1.0 for m in ("numerical_fidelity", "source_grounding",
+                                 "field_completeness", "output_quality")},
+        per_tier={}, per_tag={}, separation_gap=0.1, per_case=per_case,
+    )
+
+
+def _mk_baseline(per_case, critical=None):
+    b = {"macro": {m: 1.0 for m in ("numerical_fidelity", "source_grounding",
+                                     "field_completeness", "output_quality")},
+         "separation_gap": 0.1}
+    if critical is not None:
+        b["critical_cases"] = critical
+    return b
+
+
+@pytest.mark.unit
+class TestCriticalCaseLock:
+    def test_single_case_drop_alerts(self):
+        """单 case 0.9→0.3 被 macro 均值冲淡的场景：pin 下界必须单独报警。"""
+        report = _mk_report({"c1": {"output_quality": 0.3}})
+        cmp = compare(report, _mk_baseline({"c1": {"output_quality": 1.0}},
+                                           critical={"c1": 0.95}))
+        assert not cmp.ok
+        hits = [r for r in cmp.regressions if r["scope"] == "case"]
+        assert len(hits) == 1 and hits[0]["metric"] == "c1"
+        assert hits[0]["baseline"] == 0.95 and hits[0]["current"] == 0.3
+        assert "c1" in format_comparison(cmp)
+
+    def test_critical_case_missing_alerts(self):
+        """pin 的关键 case 从 golden 消失 → 回归告警，不得静默通过。"""
+        report = _mk_report({"c2": {"output_quality": 1.0}})
+        cmp = compare(report, _mk_baseline({}, critical={"c1": 0.95}))
+        assert not cmp.ok
+        hits = [r for r in cmp.regressions if r["scope"] == "case"]
+        assert len(hits) == 1 and hits[0]["metric"] == "c1"
+        assert "消失" in format_comparison(cmp)
+
+    def test_update_baseline_preserves_pins(self, tmp_path):
+        """--update-baseline 重生成不得覆盖手工 curated 的 critical_cases。"""
+        import json
+        path = tmp_path / "baseline.json"
+        path.write_text(json.dumps(_mk_baseline({}, critical={"c1": 0.95})),
+                        encoding="utf-8")
+        save_baseline(_mk_report({"c1": {"output_quality": 1.0}}), path)
+        saved = load_baseline(path)
+        assert saved["critical_cases"] == {"c1": 0.95}
+        assert saved["case_count"] == 1  # macro/counts 确实被重生成了
+
+    def test_critical_case_met_no_false_alarm(self):
+        """达标（≥下界）不误报；无 critical_cases 段的旧 baseline 行为不变。"""
+        report = _mk_report({"c1": {"output_quality": 0.96}})
+        cmp = compare(report, _mk_baseline({}, critical={"c1": 0.95}))
+        assert cmp.ok and cmp.regressions == []
+        cmp2 = compare(report, _mk_baseline({}))
+        assert cmp2.ok

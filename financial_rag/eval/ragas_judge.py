@@ -12,8 +12,9 @@ L3 LLM-as-judge 在线评估（辅助观测）— RAGAS faithfulness（claim 分
 - 因此 calibrate 的区分度信号仅报告、不作为硬门禁：跑通产出得分即 exit 0。
 
 评估对象与 output_runner（L2 离线规则指标）同一份 golden：
-    eval/golden/output_news_brief.jsonl（5 正例 + 6 负例，负例三类缺陷标签）
-每 case 只提取声明型字段(title/市场/展望) 映射为 Faithfulness.ascore 输入。
+    eval/golden/output_news_brief.jsonl（9 正例 + 13 负例，多源多模板，负例三类缺陷标签）
+每 case 按模板提取声明型字段（与 L2 尺子 _TEMPLATE_SPECS 同源）：
+NEWS_BRIEF 取 title/市场/展望，quick_qa 取回答/数据支撑，deep_analysis 取全部段落。
 
 区分度信号（对称 output_runner 的 separation_gap 思路，报告用、不阻断）：
 1. good tier faithfulness 均值 − 缺陷子集均值（gap）
@@ -40,6 +41,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from financial_rag.eval.output_metrics import _get_template_spec
+
 logger = logging.getLogger(__name__)
 
 _EVAL_DIR = Path(__file__).resolve().parent
@@ -64,40 +67,51 @@ _JUDGE_MODEL = os.getenv("RAGAS_JUDGE_MODEL", "qwen-plus")
 
 # ===================== golden → RAGAS 样本映射（纯函数，离线可测） =====================
 
-# NEWS_BRIEF 声明型字段提取（对应 templates.NEWS_BRIEF_RENDER）。
-# 7 字段中仅 title/市场(market_reaction)/展望(outlook) 是可验证声明；
-# 时间(event_date)/影响(impact_level)/涉及(key_players)/行业(sector_impact)
-# 是分类元数据（日期、影响级别词、主体列表、行业标签），喂 faithfulness judge
+# 声明型字段提取：复用 L2 尺子的模板字段规格（output_metrics._TEMPLATE_SPECS），
+# 保证 judge 与规则层评的是同一份声明内容。分类元数据字段（日期/影响级别/
+# 主体列表/行业标签/来源标注/可信度自评）不是可验证声明，喂 faithfulness judge
 # 会被当作无据声明扣分 —— 实测 good 档 auto_04 三条真实声明全部有据却只得 0.6，
-# gap 被压到贴阈值边缘。故只提取声明型字段。
-_BRIEF_TITLE_RE = re.compile(r"^##\s*(?:\U0001F4F0\s*)?(.+?)\s*$", re.MULTILINE)
-_BRIEF_CLAIM_FIELD_RE = re.compile(
-    r"\*\*(?:市场|展望)\*\*\s*[:：]\s*(.+?)\s*$", re.MULTILINE)
+# gap 被压到贴阈值边缘。故按模板只提取声明型字段。
+_CLAIM_META_FIELDS = {
+    "news_brief": {"event_date", "impact_level", "key_players", "sector_impact"},
+    "quick_qa": {"source_note", "confidence_note"},
+    "deep_analysis": set(),
+}
 # 占位符（未有效填充）不作为声明
 _BRIEF_PLACEHOLDER_RE = re.compile(r"^（.*暂缺）$|^无$")
 
 
-def extract_brief_claims(brief_output: str) -> str:
-    """从 NEWS_BRIEF 渲染文本提取声明型字段（title + 市场 + 展望），丢弃分类元数据。
+def extract_brief_claims(brief_output: str, template: str = "news_brief") -> str:
+    """按模板提取声明型字段，丢弃分类元数据（与 L2 尺子字段规格同源）。
 
-    faithfulness = supported_claims / total_claims；若把时间/影响/涉及/行业等
-    元数据碎片也当声明，单个编造数字会被大量样板行稀释（缺陷档得分虚高），
-    同时 good 档因元数据无法溯源被误扣。只喂真实声明可显著拉开区分度。
+    faithfulness = supported_claims / total_claims；若把元数据碎片也当声明，
+    单个编造数字会被大量样板行稀释（缺陷档得分虚高），同时 good 档因元数据
+    无法溯源被误扣。只喂真实声明可显著拉开区分度。
+
+    多模板（P0-1）：news_brief 取 title/市场/展望；quick_qa 取回答/数据支撑；
+    deep_analysis 取全部 6 段落。旧实现只适配 NEWS_BRIEF，quick_qa/deep 会被
+    标题正则截成空标题（'# 回答'/'深度分析报告'）喂 judge —— 已修复。
 
     Raises:
         ValueError: 提取不到任何声明字段 —— brief 格式异常，显式报错而非喂空文本。
     """
     text = brief_output or ""
+    spec = _get_template_spec(template)
+    meta = _CLAIM_META_FIELDS.get(template, set())
     claims: List[str] = []
-    m = _BRIEF_TITLE_RE.search(text)
-    if m:
-        claims.append(m.group(1).strip())
-    claims.extend(f.strip() for f in _BRIEF_CLAIM_FIELD_RE.findall(text))
-    claims = [c for c in claims if c and not _BRIEF_PLACEHOLDER_RE.match(c)]
+    for key, pat in spec["fields"]:
+        if key in meta:
+            continue
+        m = pat.search(text)
+        if not m:
+            continue
+        v = m.group(1).strip()
+        if v and not _BRIEF_PLACEHOLDER_RE.match(v):
+            claims.append(v)
     if not claims:
         raise ValueError(
-            f"无法从 brief_output 提取声明型字段(title/市场/展望)，"
-            f"格式可能非 NEWS_BRIEF 模板: {text[:60]!r}"
+            f"无法从 brief_output 提取声明型字段(template={template})，"
+            f"格式可能不匹配模板: {text[:60]!r}"
         )
     return "\n".join(claims)
 
@@ -119,9 +133,9 @@ def build_ragas_samples(cases: List[Dict]) -> List[Dict]:
     faithfulness 只消费 answer + contexts；question 一并携带供报告展示。
     contexts = source_docs 的 text 列表（与 Guard l1/l2 的 sources 同源）。
 
-    brief_output 喂 judge 前用 extract_brief_claims 只提取声明型字段
-    (title/市场/展望)，丢弃时间/影响/涉及/行业分类元数据 —— 元数据碎片会被
-    judge 当作无据声明扣分，实测把 good 档压到 0.6、gap 贴阈值边缘。
+    brief_output 喂 judge 前用 extract_brief_claims 按模板只提取声明型字段，
+    丢弃分类元数据 —— 元数据碎片会被 judge 当作无据声明扣分，实测把 good 档
+    压到 0.6、gap 贴阈值边缘。
 
     Raises:
         ValueError: case 缺 answer 或 contexts 为空 —— faithfulness 无法评判，
@@ -130,7 +144,9 @@ def build_ragas_samples(cases: List[Dict]) -> List[Dict]:
     samples = []
     for c in cases:
         contexts = [d["text"] for d in c.get("source_docs", []) if d.get("text")]
-        answer = extract_brief_claims(c.get("brief_output") or "").strip()
+        answer = extract_brief_claims(
+            c.get("brief_output") or "",
+            template=c.get("template", "news_brief")).strip()
         question = (c.get("query") or "").strip()
         if not question:
             raise ValueError(f"case {c.get('case_id', '?')} 的 query 为空，"

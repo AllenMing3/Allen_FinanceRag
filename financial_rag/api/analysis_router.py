@@ -28,7 +28,7 @@ from financial_rag.api.models import (
 )
 from financial_rag.api.kb_router import _save_analysis_to_kb
 from financial_rag.core.base import AgentContext
-from financial_rag.guard.reflector import HallucinationGuard
+from financial_rag.guard.service import ReliabilityService
 from financial_rag.guard.serializer import serialize_guard_result
 
 logger = logging.getLogger(__name__)
@@ -108,18 +108,15 @@ def _build_full_analysis_text(result: dict) -> str:
 
 
 def _run_hallucination_check(result: dict, extra_sources: list = None):
-    """Run HallucinationGuard (L1-L4 rule layers) on analysis result and inject 'hallucination' key.
+    """Run reliability check (L1-L4 rule layers) on analysis result and inject 'hallucination' key.
 
     Uses kb_sources + extra_sources (news text / topic text) as grounding material.
     Builds comprehensive text from structured output so Guard checks match what user sees.
-    Silently skips if no analysis text or guard fails.
+    统一走 ReliabilityService：空文本/空来源不再静默 return，恒注入显式 skipped 标记。
     """
     analysis_text = result.get("analysis", "")
-    if not analysis_text:
-        return
-
     # Build full text from structured output (mirrors what user sees on screen)
-    full_text = _build_full_analysis_text(result)
+    full_text = _build_full_analysis_text(result) if analysis_text else ""
 
     guard_sources = []
     if extra_sources:
@@ -129,13 +126,9 @@ def _run_hallucination_check(result: dict, extra_sources: list = None):
         if kb.get("text"):
             guard_sources.append({"text": kb["text"]})
 
-    if not guard_sources:
-        return
-
     try:
-        guard = HallucinationGuard()
-        guard_result = guard.check(full_text, guard_sources, mode="analysis")
-        result["hallucination"] = serialize_guard_result(guard_result)
+        outcome = ReliabilityService().check(full_text, guard_sources, mode="analysis")
+        result["hallucination"] = serialize_guard_result(outcome)
     except Exception as e:
         logger.warning(f"HallucinationGuard check failed: {e}")
 

@@ -138,7 +138,7 @@ class CommandRouter:
             NEWS_BRIEF_TEMPLATE, DEEP_ANALYSIS_TEMPLATE,
         )
         from financial_rag.core.scorer import PipelineScoreCard
-        from financial_rag.guard.reflector import HallucinationGuard
+        from financial_rag.guard.service import ReliabilityService
 
         print("=" * 60)
         print("Financial RAG — 财报/经济新闻智能分析 (阿里百炼)")
@@ -191,13 +191,13 @@ class CommandRouter:
                                 model=self._cfg.llm.model, elapsed_ms=fill_elapsed,
                             )
 
-                            guard = HallucinationGuard()
-                            check = guard.check(final_output, results)
-                            card.record_hallucination(
-                                overall_score=check['overall_score'],
-                                layer_scores={k: v.get("score", 0) for k, v in check.get('checks', {}).items()},
-                                risk=check['risk'],
-                            )
+                            check = ReliabilityService().check(final_output, results)
+                            if not check.get("skipped"):
+                                card.record_hallucination(
+                                    overall_score=check['overall_score'],
+                                    layer_scores={k: v.get("score", 0) for k, v in check.get('checks', {}).items()},
+                                    risk=check['risk'],
+                                )
 
                             print(f"\n[模板] {current_template.description}")
                             print(f"[结果]")

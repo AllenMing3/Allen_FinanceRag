@@ -197,9 +197,15 @@ class EmbeddingCache:
 
     @staticmethod
     def _hash(text: str) -> str:
-        """内容 hash — 取前 500 字符计算 MD5（平衡速度和唯一性）"""
+        """内容 hash — 全文 MD5。
+
+        曾取 text[:500] 平衡速度，但前 500 字相同的 chunk 会撞键互相污染向量
+        （金融文档开头高度模板化，高频触发）。MD5 全文计算本身足够快，截断无收益。
+        兼容性：≤500 字文本新旧 key 一致（旧缓存仍有效）；>500 字文本新 key
+        与旧截断 key 不同 → 旧污染条目永不命中，随 LRU 自然淘汰。
+        """
         return hashlib.md5(
-            text[:500].encode("utf-8", errors="replace")
+            text.encode("utf-8", errors="replace")
         ).hexdigest()
 
     def _evict_if_needed(self):

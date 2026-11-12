@@ -108,11 +108,9 @@ def check_hallucination(output_text: str, source_items: List = None, mode: str =
         source_items: 源数据列表 [{"text": "...", ...}, ...]
         mode: Guard 模式 — "rag" 期望 [N] 引用 + # Markdown；"analysis" 期望 【关键信号】等括号段落
     """
-    from financial_rag.guard.reflector import HallucinationGuard
+    from financial_rag.guard.service import ReliabilityService
 
-    guard = HallucinationGuard()
-    sources = source_items or []
-    result = guard.check(output_text, sources, mode=mode)
+    result = ReliabilityService().check(output_text, source_items, mode=mode)
 
     return {
         "overall_score": result.get("overall_score", 1.0),
@@ -120,6 +118,8 @@ def check_hallucination(output_text: str, source_items: List = None, mode: str =
         "checks": result.get("checks", {}),
         "report": result.get("report", ""),
         "unverified": result.get("unverified", []),
+        "skipped": result.get("skipped", False),
+        "skip_reason": result.get("skip_reason", ""),
     }
 
 
@@ -152,17 +152,24 @@ def generate_score_report(
 
     # 防幻觉校验 — 直接使用 guard 生成的格式报告
     if hallucination_check:
-        guard_report = hallucination_check.get("report", "")
-        if guard_report:
-            lines.append(guard_report)
+        if hallucination_check.get("skipped"):
+            # 显式未校验：不印 0% 可信度（未校验 ≠ 校验过且很差）
+            from financial_rag.guard.service import SKIP_REASON_LABELS
+            reason = hallucination_check.get("skip_reason", "")
+            label = SKIP_REASON_LABELS.get(reason, reason or "未知原因")
+            lines.append(f"\n### 防幻觉校验\n⚪ 未校验（{label}）")
         else:
-            # fallback: 旧格式
-            lines.append("\n### 防幻觉校验")
-            risk = hallucination_check.get("risk", "unknown")
-            risk_emoji = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(risk, "❓")
-            lines.append(f"风险等级: {risk_emoji} {risk}")
-            score = hallucination_check.get("overall_score", 1.0)
-            lines.append(f"可信度: {score:.0%}")
+            guard_report = hallucination_check.get("report", "")
+            if guard_report:
+                lines.append(guard_report)
+            else:
+                # fallback: 旧格式
+                lines.append("\n### 防幻觉校验")
+                risk = hallucination_check.get("risk", "unknown")
+                risk_emoji = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(risk, "❓")
+                lines.append(f"风险等级: {risk_emoji} {risk}")
+                score = hallucination_check.get("overall_score", 1.0)
+                lines.append(f"可信度: {score:.0%}")
 
     report_text = "\n".join(lines)
     return {"report": report_text, "pipeline_scores": pipeline_scores, "hallucination_check": hallucination_check}

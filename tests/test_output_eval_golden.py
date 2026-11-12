@@ -50,8 +50,14 @@ def cases():
 
 @pytest.fixture(scope="module")
 def scored(cases):
-    """[(case, evaluate_case 结果)] — module 级缓存，只跑一遍。"""
-    return [(c, evaluate_case(c["brief_output"], c["source_docs"])) for c in cases]
+    """[(case, evaluate_case 结果)] — module 级缓存，只跑一遍。
+
+    template 透传：多模板 case 必须用对应尺子评估，否则 quick_qa/deep_analysis
+    会被 news_brief 字段规格误判全缺（P0-1 修复点）。
+    """
+    return [(c, evaluate_case(c["brief_output"], c["source_docs"],
+                              template=c.get("template", "news_brief")))
+            for c in cases]
 
 
 def _by_tier(cases, tier):
@@ -104,6 +110,17 @@ class TestCoverage:
         covered = {c["expected"].get("defect_type") for c in _by_tier(cases, "bad")}
         assert _DEFECT_TYPES <= covered, \
             f"三类缺陷未全覆盖，缺: {_DEFECT_TYPES - covered}"
+
+    def test_multi_template_covered(self, cases):
+        """P0-1：尺子不得只适配单模板 —— 三种渲染模板都要有样本。"""
+        covered = {c.get("template", "news_brief") for c in cases}
+        required = {"news_brief", "quick_qa", "deep_analysis"}
+        assert required <= covered, f"模板覆盖不全，缺: {required - covered}"
+
+    def test_multi_source_covered(self, cases):
+        """P0-1：不得全部 case 共用单一源文档。"""
+        doc_ids = {d["doc_id"] for c in cases for d in c["source_docs"]}
+        assert len(doc_ids) >= 3, f"源文档覆盖不足: {doc_ids}"
 
 
 @pytest.mark.unit

@@ -49,8 +49,12 @@ class ScoringAgent(BaseAgent):
         )
 
     def can_handle(self, context: AgentContext) -> bool:
-        """有 final_answer 或中间结果时进行评分"""
-        return bool(context.final_answer or context.intermediate_findings)
+        """恒 True 兜底：空输入也运行评分，产出显式「未校验」标记。
+
+        曾按 final_answer/intermediate_findings 判断 → 上游忘写回 final_answer 时
+        orchestrator 静默 continue，整层评分+防幻觉无痕消失（P1-2 静默跳过）。
+        """
+        return True
 
     def process(self, context: AgentContext) -> AgentResult:
         """执行全链路评分 — 全部委托给工具
@@ -98,8 +102,7 @@ class ScoringAgent(BaseAgent):
             )
 
         def _check_hallucination():
-            if not check_text:
-                return {}
+            # 空文本不在此拦截：工具/ReliabilityService 会返回显式 skipped 标记
             return self.call_tool(
                 "check_hallucination",
                 output_text=check_text,
