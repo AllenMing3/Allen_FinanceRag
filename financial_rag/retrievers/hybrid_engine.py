@@ -630,18 +630,17 @@ class HybridRetriever:
         self.vector_weight = cfg.get("vector_weight", self.vector_weight)
         self._bm25.build(self.documents)
 
-        # 如果 Chroma 已有持久化数据，会自动加载
-        # 否则，如果有 embedder，重新计算 embedding 并索引到 Chroma（走缓存）
-        if self._vector.has_embedding and not self._vector._chroma_indexed:
+        # Chroma 持久化数据不再盲信（count>0 不代表与当前文档集一致）：
+        # 有 embedder 时走缓存算向量 + ensure_consistent 校验，失配自动重建；
+        # 无 embedder 时维持原行为（Jaccard 通道不依赖 Chroma）。
+        if self._vector.has_embedding:
             texts = [d.get("text", "") for d in self.documents]
             if texts:
-                logger.debug(f"加载后重建 Chroma 索引: {len(texts)} 篇文档...")
                 all_embeddings = self._emb_cache.embed_texts(texts, self.embedder)
                 self.doc_embeddings = all_embeddings
-                self._vector.index(self.documents, all_embeddings)
-                logger.debug(f"Chroma 索引重建完成，维度: {len(all_embeddings[0]) if all_embeddings else 0}")
+                if self._vector.ensure_consistent(self.documents, all_embeddings):
+                    logger.debug(f"Chroma 索引重建完成，维度: {len(all_embeddings[0])}")
         else:
-            # Chroma 自动加载了向量，不需要 doc_embeddings
             self.doc_embeddings = data.get("doc_embeddings")
 
 

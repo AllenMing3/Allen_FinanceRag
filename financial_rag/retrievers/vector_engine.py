@@ -119,11 +119,18 @@ class VectorEngine:
             self._chroma_client = None
 
     def _doc_id(self, doc_or_text) -> str:
-        """Generate stable Chroma ID from text + source (aligned with make_doc_id)."""
+        """Generate stable Chroma ID from source + chunk_id + text prefix.
+
+        chunk_id 入键：同源同前缀的不同 chunk 不撞键（否则被 dedup 静默丢数据）。
+        入库与查询映射必须都走 dict 分支，保证 ID 同源。
+        """
         if isinstance(doc_or_text, dict):
             text = doc_or_text.get("text", "")[:200]
-            source = doc_or_text.get("meta", {}).get("source", "unknown")
-            key = f"{source}|{text}"
+            meta = doc_or_text.get("meta", {})
+            source = meta.get("source", "unknown")
+            chunk_id = meta.get("chunk_id")
+            key = (f"{source}|{chunk_id}|{text}" if chunk_id is not None
+                   else f"{source}|{text}")
         else:
             key = doc_or_text[:200]
         return hashlib.md5(key.encode("utf-8", errors="replace")).hexdigest()[:16]
@@ -219,7 +226,8 @@ class VectorEngine:
         for i in range(0, len(ids), batch_size):
             end = min(i + batch_size, len(ids))
             batch_kwargs = {k: v[i:end] for k, v in kwargs.items()}
-            self._collection.add(**batch_kwargs)
+            # upsert：同 ID 重入库覆盖旧向量（add 重复 ID 不报错但静默留旧）
+            self._collection.upsert(**batch_kwargs)
 
         logger.debug(f"Chroma: 增量添加 {len(documents)} 篇文档")
 
@@ -248,6 +256,26 @@ class VectorEngine:
                 self._collection.delete(ids=all_ids)
         self._chroma_indexed = False
         logger.debug("Chroma: 集合已清空")
+
+    def ensure_consistent(self, documents: List[Dict],
+                          embeddings: Optional[List[List[float]]] = None) -> bool:
+        """校验 Chroma ID 集合与当前文档集一致，失配则用传入向量全量重建。
+
+        覆盖两类失配：ID 方案迁移后的旧持久化数据、库与索引文件不同步。
+        Chroma 属派生索引层（可重建），重建不丢数据。一致时返回 False（noop）。
+        """
+        self._ensure_chroma()
+        if self._collection is None:
+            return False
+        expected = {self._doc_id(d) for d in documents}
+        stored = set(self._collection.get()["ids"])
+        if stored == expected:
+            return False
+        logger.info(
+            f"Chroma 一致性失配（库 {len(stored)} vs 文档 {len(expected)}），全量重建"
+        )
+        self.index(documents, embeddings)
+        return True
 
     # ===================== 检索 =====================
 
@@ -302,25 +330,40 @@ class VectorEngine:
         ids = results["ids"][0]
         distances = results["distances"][0]
 
-        # 构建文档 ID → 索引映射
+        # 构建文档 ID → 索引映射（必须与入库同走 dict 分支，含 source/chunk_id；
+        # 曾用纯文本分支致 ID 永不相等，ANN 恒返回 0 条，向量通道静默全灭）
         id_to_idx = {}
         for i, doc in enumerate(documents):
-            id_to_idx[self._doc_id(doc.get("text", ""))] = i
+            id_to_idx[self._doc_id(doc)] = i
 
         output = []
+        missed = 0
         for rank, (doc_id, dist) in enumerate(zip(ids, distances)):
             idx = id_to_idx.get(doc_id)
             if idx is None:
+                missed += 1
                 continue
-            # Chroma cosine distance: 0 = identical, 2 = opposite
-            # Convert to similarity score: 1 - distance/2
-            score = max(0.0, 1.0 - dist / 2.0)
+            # 归一化向量（text-embedding-v3 实测 norm=1）：cosine distance =
+            # 1 - cos_sim → similarity = 1 - dist。旧公式 1-dist/2 给正交文档
+            # 0.5 幻影正分，且与暴力余弦路径分数语义不一致。
+            score = max(0.0, 1.0 - dist)
             output.append({
                 **documents[idx],
                 "score": score,
                 "retriever": "vector",
                 "rank": rank + 1,
             })
+
+        if missed:
+            if not output:
+                logger.error(
+                    f"Chroma 库失配：{missed}/{len(ids)} 条命中全部未映射回当前文档集"
+                    "（持久化数据与索引不同步，需重建）"
+                )
+            else:
+                logger.warning(
+                    f"Chroma: {missed}/{len(ids)} 条命中未映射（库含陈旧条目），已跳过"
+                )
 
         return output
 
