@@ -102,6 +102,7 @@ class TestPersistencePathRegression:
     分层重构后会话实际在 state/conversations → 历史会话全部不可见。"""
 
     @pytest.mark.regression
+    @pytest.mark.critical
     def test_default_conv_dir_follows_state_layer(self):
         cm = ConversationManager()
         assert cm._conv_dir == os.path.join(config.state_dir, "conversations"), (
@@ -114,6 +115,7 @@ class TestPersistencePathRegression:
 # ======================================================================
 
 class TestSessionCRUD:
+    pytestmark = pytest.mark.integration  # 会话档案落盘（tmp_path 隔离）
 
     def test_create_stores_initial_analysis_as_assistant(self, cm, session_id):
         s = cm.get_session(session_id)
@@ -155,6 +157,7 @@ class TestSessionCRUD:
 # ======================================================================
 
 class TestHistoryCompression:
+    pytestmark = pytest.mark.integration  # add_message 逐条落盘
 
     def test_compress_triggers_and_keeps_recent(self, cm, session_id):
         # 灌入 12 条消息（超过阈值 10）
@@ -185,7 +188,9 @@ class TestHistoryCompression:
 # ======================================================================
 
 class TestEvidenceAssembly:
+    pytestmark = pytest.mark.unit
 
+    @pytest.mark.critical
     def test_dossier_and_new_results_both_included(self):
         assembled = assemble_followup_context(_dossier_context(), _new_results())
         # 档案新闻排首（score=1.0），新检索与档案 KB 均纳入
@@ -195,6 +200,7 @@ class TestEvidenceAssembly:
         assert "商汤科技" in assembled.grounding_text    # 档案 KB
         assert len(assembled.source_items) == 3
 
+    @pytest.mark.critical
     def test_dedup_by_text(self):
         # 新检索命中档案里已有的同一篇 → 不重复注入
         dup = [{"text": SAMPLE_AI_FINANCIAL_REPORT, "source": "kb_report", "score": 0.95}]
@@ -202,6 +208,7 @@ class TestEvidenceAssembly:
         assert len(assembled.source_items) == 2
         assert assembled.grounding_text.count("商汤科技集团股份有限公司") == 1
 
+    @pytest.mark.critical
     def test_numbering_is_one_based_aligned_with_sources(self):
         """L3 契约 1 <= idx <= n_sources：块标号必须 1-based 且与 source_items 对齐。"""
         assembled = assemble_followup_context(_dossier_context(), _new_results())
@@ -232,7 +239,9 @@ class TestEvidenceAssembly:
 # ======================================================================
 
 class TestGuardSameSource:
+    pytestmark = pytest.mark.unit
 
+    @pytest.mark.critical
     def test_grounded_answer_passes(self):
         assembled = assemble_followup_context(_dossier_context(), _new_results())
         report = check_followup_answer(GROUNDED_FOLLOWUP, assembled)
@@ -240,6 +249,7 @@ class TestGuardSameSource:
         assert report["risk"] == "low"
         assert report["layers"]["L3_citation_integrity"]["invalid"] == 0
 
+    @pytest.mark.critical
     def test_fabricated_sentence_caught(self):
         assembled = assemble_followup_context(_dossier_context(), _new_results())
         report = check_followup_answer(FABRICATED_FOLLOWUP, assembled)
@@ -254,6 +264,7 @@ class TestGuardSameSource:
 # ======================================================================
 
 class TestFollowupTool:
+    pytestmark = pytest.mark.integration  # 用户消息落盘 + 依赖注入接线
 
     def test_missing_session_returns_error(self, cm):
         inject_conversation_deps(llm=None, conversation_manager=cm)
@@ -273,6 +284,7 @@ class TestFollowupTool:
         assert s.messages[-1].role == "user"
         assert s.messages[-1].content == "为什么是利好？"
 
+    @pytest.mark.critical
     def test_offline_retrieval_wiring(self, cm, session_id):
         """纯本地 BM25+Jaccard 检索接线：追问能召回 KB 文档（诊断可观测）。"""
         r = HybridRetriever(embedder=None, reranker=None)
@@ -297,6 +309,7 @@ class TestFollowupTool:
 # ======================================================================
 
 class TestPromptLayering:
+    pytestmark = pytest.mark.unit
 
     def test_followup_prompt_lives_in_prompts_module(self):
         from financial_rag import prompts

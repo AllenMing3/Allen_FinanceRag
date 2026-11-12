@@ -24,6 +24,8 @@ from financial_rag.eval.runner import (
     evaluate, load_baseline, load_filter_cases, load_gate_cases,
 )
 
+pytestmark = pytest.mark.critical  # baseline 锁 + 通道不静默坍塌 + 过滤零泄漏
+
 # bug_scene 绝对达标底线：至少召回一半相关文档，证明修复生效（非仅"未回退"）
 _BUG_SCENE_RECALL_FLOOR = 0.5
 

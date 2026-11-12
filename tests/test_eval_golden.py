@@ -25,6 +25,8 @@ import pytest
 
 from financial_rag.retrievers.chunker import TextChunker
 
+pytestmark = pytest.mark.critical  # golden 自洽 = 评估尺子的数据地基
+
 _GOLDEN_DIR = Path(__file__).resolve().parents[1] / "financial_rag" / "eval" / "golden"
 _EVAL_KB = _GOLDEN_DIR / "eval_kb.jsonl"
 _EVAL_KB_LONG = _GOLDEN_DIR / "eval_kb_long.jsonl"

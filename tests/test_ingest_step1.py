@@ -95,6 +95,7 @@ class TestIngestEffect:
         assert all(len(d["text"]) <= _SKIP_THRESHOLD for d in golden_docs), "前提：golden 应全为短文"
         assert len(indexed_retriever.documents) == len(golden_docs)
 
+    @pytest.mark.critical
     def test_every_doc_id_survives_ingest(self, indexed_retriever, golden_docs):
         # doc_id 是后续检索评估对齐 relevant_doc_ids 的命脉，入库不得丢
         expected = {d["meta"]["doc_id"] for d in golden_docs}
@@ -119,6 +120,7 @@ class TestIngestObservability:
 # ③ 一致性：文本不丢、重复入库结果确定
 # ===========================================================================
 @pytest.mark.integration
+@pytest.mark.critical
 class TestIngestConsistency:
     def test_chunk_text_equals_source(self, indexed_retriever, golden_docs):
         # 短文不切 → chunk 文本应 == 原文(strip 后)，正文零改动
@@ -191,6 +193,7 @@ _LONG_DOC = {
 
 
 @pytest.mark.integration
+@pytest.mark.critical
 class TestIngestDataCompleteness:
     """① 证明效果：入库后数据在 BM25 中实际可检索（不只是 Python 列表）"""
 
@@ -232,6 +235,7 @@ class TestIngestDataCompleteness:
 
 
 @pytest.mark.regression
+@pytest.mark.critical
 class TestLongDocChunkIntegrity:
     """④ 回归锁定：长文档切分后 ALL chunks 在 BM25 中存活。
 
@@ -278,6 +282,7 @@ class TestLongDocChunkIntegrity:
 
 
 @pytest.mark.integration
+@pytest.mark.critical
 class TestIncrementalIngest:
     """③ 一致性：增量 add 后新文档立即可搜索。"""
 

@@ -16,6 +16,8 @@ from financial_rag.eval.backflow import (
     session_to_candidates,
 )
 
+pytestmark = pytest.mark.critical  # 证据忠实 + skipped 语义 + origin 去重（P0-3）
+
 
 def _mk_session(sid="s1", followups=True):
     """构造落盘形状的会话 dict（ConversationSession.to_dict 同构）。"""

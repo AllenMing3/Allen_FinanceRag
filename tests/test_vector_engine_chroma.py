@@ -19,7 +19,7 @@ import pytest
 
 from financial_rag.retrievers.vector_engine import VectorEngine
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.critical]  # Chroma P0 ID 断裂修复回归锁
 
 
 @pytest.fixture

@@ -19,8 +19,12 @@ Test Step 5 过滤 / 质量门控 — 检索交付前的控制层质量验证（
 注：门控「分数分支」的决策测试（低分拦/高分放）需先抽出 decide_quality_gate 纯函数，
     属 L1 扩展 Dim2 工作，本文件先覆盖离线可达的零结果分支 + 放行行为 + 诊断结构。
 """
+import pytest
+
 from financial_rag.retrievers.filters import apply_filters, get_last_stats, FilterStats
 from financial_rag.retrievers.hybrid_engine import HybridRetriever
+
+pytestmark = pytest.mark.unit
 
 
 # ===================== 合成候选文档 =====================
@@ -143,6 +147,7 @@ class TestFilterConsistency:
 #  ④ 回归锁定：日期过滤 no-op BUG（已修复，无 $ 前缀范围过滤转常绿锁）
 # ======================================================================
 
+@pytest.mark.critical
 class TestDateRangeFilterRegression:
     """回归锁：query_parser 产出的无 `$` 范围过滤键必须生效（曾为 no-op BUG）。
 
@@ -195,6 +200,7 @@ class TestKnownLimitations:
 #  ① 证明效果 + ② 可观测：零结果门控（离线可触发分支）
 # ======================================================================
 
+@pytest.mark.critical
 class TestZeroResultGate:
     """空 KB → 检索零结果 → 门控拦截，返回 [] + 结构化诊断（stage=retrieval）。"""
 

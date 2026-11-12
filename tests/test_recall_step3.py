@@ -27,6 +27,8 @@ from financial_rag.retrievers.hybrid_engine import jieba_tokenizer
 from financial_rag.retrievers.chunker import TextChunker
 from financial_rag.retrievers.fusion import _doc_hash, rrf_fusion
 
+pytestmark = pytest.mark.unit
+
 _GOLDEN_KB = (
     Path(__file__).resolve().parents[1]
     / "financial_rag" / "eval" / "golden" / "eval_kb.jsonl"
@@ -122,6 +124,7 @@ def long_doc_chunks(tokenizer):
 # ======================================================================
 
 @pytest.mark.regression
+@pytest.mark.critical
 class TestChunkSurvivalRegression:
     """BUG: 所有 chunk 继承父文档 meta.doc_id → BM25 doc_key 碰撞 →
     _insert_batch 去重只保留最后一个 chunk → 前面的 chunk 静默丢失。
@@ -154,6 +157,7 @@ class TestChunkSurvivalRegression:
 #  ② 可观测：ID 属性可验证
 # ======================================================================
 
+@pytest.mark.critical
 class TestIDObservability:
     """doc_key 的格式、唯一性、确定性均可观测验证。"""
 
@@ -189,6 +193,7 @@ class TestIDObservability:
 #  ③ 一致性：跨通道 + 增量操作
 # ======================================================================
 
+@pytest.mark.critical
 class TestCrossChannelConsistency:
     """两路对同一文档的标识虽不同，但 RRF 融合能正确合并。"""
 

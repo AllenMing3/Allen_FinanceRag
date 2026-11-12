@@ -22,6 +22,38 @@ _config.observability.enable = False
 _tracing._reset_cache()
 
 
+# ===================== 治理门禁（分级体系） =====================
+
+# 执行形态 marker：每个用例必须带至少一个（pytest.ini 注册）。
+# critical 是重要性维度（P0 命脉快跑），slow 是耗时辅助标签，均不替代门禁。
+_EXEC_FORM_MARKERS = ("unit", "integration", "regression", "eval")
+
+
+def find_unmarked(items):
+    """返回缺少执行形态 marker 的用例 nodeid 列表（纯函数，供 meta 测试）。"""
+    return [
+        item.nodeid for item in items
+        if not any(item.get_closest_marker(m) for m in _EXEC_FORM_MARKERS)
+    ]
+
+
+def pytest_collection_modifyitems(config, items):
+    """收集期硬拦截：无执行形态标记的用例直接拒绝（防用例无序膨胀）。
+
+    背景：治理前 216/430（50%）用例无任何标记，无法回答"哪些是命脉"。
+    门禁自身由 tests/test_governance.py 钉死。
+    """
+    bad = find_unmarked(items)
+    if bad:
+        preview = "\n  ".join(bad[:10])
+        more = f"\n  …共 {len(bad)} 个" if len(bad) > 10 else ""
+        raise pytest.UsageError(
+            f"治理门禁：以下用例缺执行形态 marker（unit/integration/regression/eval）："
+            f"\n  {preview}{more}\n"
+            f"补标后重跑；判定标准见 pytest.ini 注释。"
+        )
+
+
 # ===================== AI Sector Sample Texts =====================
 
 SAMPLE_AI_FINANCIAL_REPORT = """

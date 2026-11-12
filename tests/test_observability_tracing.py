@@ -39,6 +39,8 @@ from financial_rag.observability.tracing import (
     SPAN_KIND,
 )
 
+pytestmark = pytest.mark.unit
+
 
 # ===================== Fixtures =====================
 

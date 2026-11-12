@@ -59,6 +59,8 @@ from financial_rag.retrievers.preprocessor import (
 )
 from financial_rag.api.ingest_router import _preprocess_docs
 
+pytestmark = pytest.mark.unit  # 默认纯逻辑；末尾 3 个 _preprocess_docs E2E 用例另带 integration
+
 
 # ===================== Fixtures =====================
 
@@ -104,6 +106,7 @@ IRRELEVANT_LIFE = (
 # A. 保真度（原则 P1：保真优先于去噪）— P0 最高优先级
 # ============================================================
 
+@pytest.mark.critical
 def test_fidelity_preserves_financial_numbers(pp):
     """① 证明效果：清洗后数字/百分比/股票代码全部存活，不被误删。"""
     raw = "商汤科技(00020.HK)2024营收50.3亿元，同比增长36.4%！净亏损收窄28.3%。"
@@ -122,6 +125,7 @@ def test_fidelity_preserves_chinese_terms(pp):
         assert term in out
 
 
+@pytest.mark.critical
 def test_repeated_digit_boundary_not_collapsed(pp):
     """④ 回归锁定（保真边界）：≤4 位重复数字保留（(.)\\1{4,} 需 5 个才折叠）。
 
@@ -133,6 +137,7 @@ def test_repeated_digit_boundary_not_collapsed(pp):
     assert "10000元" in out
 
 
+@pytest.mark.critical
 def test_fidelity_large_amount_not_collapsed(pp):
     """④ 回归锁定（已修复）：大额金额里的连续 0 不被当作"刷屏重复字符"折叠。
 
@@ -178,6 +183,7 @@ def test_removes_urls(pp):
     assert "详情见" in out
 
 
+@pytest.mark.critical
 def test_url_removal_does_not_eat_following_chinese(pp):
     """④ 回归锁定（已修复）：删 URL 不连带吞掉其后紧跟的中文正文。
 
@@ -335,6 +341,7 @@ def test_plain_paragraph_dedup_works(pp):
     assert "para two about model" in out
 
 
+@pytest.mark.critical
 def test_chinese_paragraph_dedup(pp):
     """④ 回归锁定（已修复）：中文标点结尾的重复段能被去重。
 
@@ -458,6 +465,7 @@ def test_classify_empty_returns_other(clf):
 # ============================================================
 
 @pytest.mark.integration
+@pytest.mark.critical
 def test_preprocess_docs_stats_accounting():
     """① 证明效果 + ② 可观测：混合输入的 stats 计数正确且守恒。"""
     raw_docs = [

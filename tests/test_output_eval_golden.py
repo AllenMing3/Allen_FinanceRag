@@ -19,6 +19,8 @@ import pytest
 
 from financial_rag.eval.output_metrics import evaluate_case
 
+pytestmark = pytest.mark.critical  # L2 golden 自洽 + 区分度锁（评估尺子）
+
 _GOLDEN = (
     Path(__file__).resolve().parents[1]
     / "financial_rag" / "eval" / "golden" / "output_news_brief.jsonl"

@@ -22,6 +22,8 @@ from financial_rag.eval.ragas_judge import (
     load_cases,
 )
 
+pytestmark = [pytest.mark.unit, pytest.mark.critical]  # 离线 judge 尺子：映射/校准/禁静默跳过
+
 
 # ===================== golden → RAGAS 样本映射 =====================
 

@@ -12,6 +12,8 @@ from financial_rag.eval.metrics import (
     evaluate_query, dedupe_ranked, relevant_ids, METRIC_NAMES,
 )
 
+pytestmark = pytest.mark.critical  # 手算 oracle：评估尺子本身的数学正确性
+
 
 @pytest.mark.unit
 class TestRelevantIds:

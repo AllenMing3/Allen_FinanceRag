@@ -62,6 +62,8 @@ from financial_rag.eval.runner import (
 )
 from financial_rag.retrievers.fusion import rrf_fusion
 
+pytestmark = pytest.mark.critical  # 融合反坍塌回归锁 + 装配不变量（检索命脉）
+
 
 # ===================== fixtures =====================
 

@@ -26,6 +26,8 @@ from financial_rag import prompts
 from financial_rag.slot_filler import SlotFiller, SlotResult, FillStats
 from financial_rag.templates import SlotDef, SlottedTemplate
 
+pytestmark = pytest.mark.unit
+
 
 # ===================== 确定性 stub（符合 DashScopeLLM.chat 契约） =====================
 
@@ -102,6 +104,7 @@ class TestPhaseMechanics:
 
 # ===================== 评分激励 =====================
 
+@pytest.mark.critical
 class TestScoringIncentives:
     def setup_method(self):
         self.filler = SlotFiller(llm=StubLLM())
@@ -173,6 +176,7 @@ class TestCleaning:
 
 # ===================== 渲染契约 =====================
 
+@pytest.mark.critical
 class TestRenderContract:
     def test_unfilled_placeholder_format(self):
         # （label暂缺）格式被 output_metrics._PLACEHOLDER_PATTERN 依赖

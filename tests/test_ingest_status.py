@@ -10,11 +10,15 @@
 """
 import os
 
+import pytest
+
 from financial_rag.api.ingest_router import (
     _build_kb_file_index,
     _file_ingest_info,
     _build_file_results,
 )
+
+pytestmark = pytest.mark.unit  # 全部为纯函数契约（无 TestClient/无落盘）
 
 
 def _doc(text="正文", source="a.txt", file=None, analyzed=False):
@@ -51,6 +55,7 @@ class TestFileIngestStatus:
         assert info["doc_count"] == 2
         assert info["analyzed_count"] == 1  # 前端据此显示"待分析"
 
+    @pytest.mark.critical
     def test_path_normalization_matches(self):
         # KB 里存的是 ./data/financial\a.txt（未规范化），目录扫描给的是规范化路径
         docs = [_doc(file="./data/financial\\a.txt")]
@@ -58,6 +63,7 @@ class TestFileIngestStatus:
         info = _file_ingest_info("a.txt", os.path.normpath("./data/financial/a.txt"), by_file, by_source)
         assert info["imported"] is True
 
+    @pytest.mark.critical
     def test_source_fallback_for_json_without_file(self):
         # .json 入库只带 source=fname，没有 meta.file → 按 source 兜底匹配
         docs = [_doc(source="reports.json"), _doc(source="reports.json")]
@@ -66,6 +72,7 @@ class TestFileIngestStatus:
         assert info["imported"] is True
         assert info["doc_count"] == 2
 
+    @pytest.mark.critical
     def test_jsonl_custom_source_matched_by_file_not_source(self):
         # jsonl 的 source 可能是原始新闻源（≠文件名），必须靠 meta.file 精确归属，
         # 不能把别的文件的同名 source 文档算到本文件头上
@@ -75,6 +82,7 @@ class TestFileIngestStatus:
         info = _file_ingest_info("news.jsonl", os.path.join("data", "financial", "news.jsonl"), by_file, by_source)
         assert info["doc_count"] == 1
 
+    @pytest.mark.critical
     def test_news_docs_do_not_pollute_file_status(self):
         # 新闻自动入库的 source="news:标题"，不应匹配任何目录文件
         docs = [_doc(source="news:某标题")]
@@ -87,6 +95,7 @@ class TestFileIngestStatus:
 
 
 class TestFileResults:
+    @pytest.mark.critical
     def test_mixed_batch_attribution(self):
         fp_a = os.path.join("data", "x", "a.txt")
         fp_b = os.path.join("data", "x", "b.jsonl")
@@ -129,6 +138,7 @@ class TestFileResults:
         assert results[0]["status"] == "imported"
         assert results[0]["loaded"] == 1
 
+    @pytest.mark.critical
     def test_counts_conservation(self):
         # 守恒：read = loaded + duplicates + rejected（每个文件）
         fp = os.path.join("data", "x", "a.txt")

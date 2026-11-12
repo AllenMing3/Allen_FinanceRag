@@ -16,6 +16,8 @@ from financial_rag.eval.output_metrics import (
     evaluate_case,
 )
 
+pytestmark = pytest.mark.critical  # L2 尺子 oracle + P0-1/P0-2 回归锁
+
 # 规范正例：数字带单位、source 完整 —— 探针验证 L1/L2 均为满分 1.0
 GOOD_BRIEF = """## 📰 商汤2024年营收50.3亿元同比增36.4%
 **时间**: 2024年度 | **影响**: 重大

@@ -18,6 +18,8 @@ from financial_rag.guard.service import (
 )
 from financial_rag.guard.serializer import serialize_guard_result
 
+pytestmark = pytest.mark.critical  # skipped 显式语义（P1-2）：防幻觉契约命脉
+
 SOURCE_TEXT = ("商汤科技2024年实现营业收入50.3亿元，同比增长36.4%。"
                "生成式AI业务收入占比达60%，成为公司核心增长引擎。")
 ANSWER = "商汤科技2024年营收50.3亿元，同比增长36.4%[1]。"

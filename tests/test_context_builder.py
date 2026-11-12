@@ -18,6 +18,8 @@ from tests.conftest import (
     SAMPLE_AI_FUNDING,
 )
 
+pytestmark = pytest.mark.unit
+
 
 def _fake_items():
     """模拟检索召回：5 条真实金融文本，分数递减（均 >150 字、均 ≥0.4 阈值）。"""
@@ -41,6 +43,7 @@ def _fake_items():
 class TestGroundingNotGutted:
     """本次改造要'证明效果'的关键测试。若退回旧的 [:150]*3 固定截断，这里会红。"""
 
+    @pytest.mark.critical
     def test_new_grounding_beats_old_150_truncation(self):
         items = _fake_items()
         # 旧行为（analysis.py 原 L388）：kb_sources[:3] 各 text[:150]
@@ -84,6 +87,7 @@ class TestObservability:
         assert dropped, "预算过小应有项被丢弃"
         assert all(it.reason for it in dropped), "每个丢弃项都必须带原因"
 
+    @pytest.mark.critical
     def test_no_whitespace_only_fragment_fed(self):
         # 回归锁定：样本文本均以 \n 开头，预算耗尽时曾命中开头 \n 产生 1 字垃圾片段。
         # grounding 绝不得包含纯空白内容（否则喂给 LLM/Guard 的是噪音）。
@@ -110,6 +114,7 @@ class TestObservability:
 # 一致性：喂 LLM 的文本 与 喂 Guard 的来源同源
 # ===========================================================================
 class TestConsistency:
+    @pytest.mark.critical
     def test_grounding_text_and_guard_sources_same_source(self):
         ctx = ContextBuilder.for_path("deep_analysis").build(_fake_items())
         # grounding_text（喂 LLM）应完整包含每个 source_item（喂 Guard）的 kept 文本
@@ -140,6 +145,7 @@ class TestWiringIntoDeepAnalysis:
         def search_with_scores(self, query, top_k=5):
             return self._items[:top_k], None
 
+    @pytest.mark.critical
     def test_analyze_news_returns_grounding_and_trace(self):
         from financial_rag.services.analysis import analyze_news_text
 

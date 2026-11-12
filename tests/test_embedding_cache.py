@@ -9,6 +9,8 @@ import pytest
 
 from financial_rag.retrievers.embedding_cache import EmbeddingCache
 
+pytestmark = pytest.mark.critical  # P1 撞键修复回归锁（静默复用向量）
+
 
 @pytest.mark.unit
 class TestHashFullText:

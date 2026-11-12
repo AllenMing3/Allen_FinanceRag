@@ -42,6 +42,8 @@ from tests.conftest import (
     SAMPLE_AI_FUNDING,
 )
 
+pytestmark = pytest.mark.unit
+
 
 # ===================== 共享样本 =====================
 
@@ -82,6 +84,7 @@ TAMPERED_ANSWER = GROUNDED_ANSWER.replace("50.3亿元", "9000亿元").replace("3
 #  ④ 回归锁定：探针抓出的 2 个 live bug（修复后转常绿，退回旧实现即红）
 # ======================================================================
 
+@pytest.mark.critical
 class TestGroundingThresholdRegression:
     """BUG: L1 阈值 0.15 过宽，编造句凭领域共享词锚定成功（探针实测 0.964/low 放行）。"""
 
@@ -119,6 +122,7 @@ class TestGroundingThresholdRegression:
         assert 0.25 < GROUNDING_THRESHOLD <= 0.35
 
 
+@pytest.mark.critical
 class TestCitationNumberRegression:
     """BUG: extract_numbers 把 [N] 引用标记当数字，规范引用反而拖累 L2。"""
 
@@ -145,6 +149,7 @@ class TestCitationNumberRegression:
 #  ① 证明效果：护栏对 4 类幻觉/缺陷的判别力（端到端 check）
 # ======================================================================
 
+@pytest.mark.critical
 class TestGuardDiscrimination:
     """核心保证：有据回答放行，各类缺陷被抓。"""
 
@@ -186,6 +191,7 @@ class TestGuardDiscrimination:
 #  ② 可观测：报告透出诊断 + 序列化白名单 + LLM 层退役钉死
 # ======================================================================
 
+@pytest.mark.critical
 class TestObservability:
     """禁止静默：报告/序列化必须透出诊断；已退役的 L5/L6 不得残留。"""
 
@@ -237,6 +243,7 @@ class TestObservability:
 #  ③ 一致性：同输入同输出 / 跨层同源不变量 / 双模式契约
 # ======================================================================
 
+@pytest.mark.critical
 class TestConsistency:
     def test_deterministic_same_input_same_output(self):
         g = HallucinationGuard()

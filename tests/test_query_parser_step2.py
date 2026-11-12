@@ -127,6 +127,7 @@ class TestParseConsistency:
 # 就永远不进分词 → 静默丢弃 → 这是 Step 3 "大模型融资" MISS、"昇腾"问题的上游根因。
 # ===========================================================================
 @pytest.mark.regression
+@pytest.mark.critical
 class TestCoreWordFidelity:
     @pytest.mark.parametrize("query,core_word", [
         ("大模型融资", "融资"),      # 大模型命中词典，意图词"融资"不得丢
@@ -186,6 +187,7 @@ class TestCoreWordFidelity:
 # 同义词扩展(精确等价)不稀释意图，始终不受门控影响。
 # ===========================================================================
 @pytest.mark.unit
+@pytest.mark.critical
 class TestConceptExpansionGating:
     def test_concept_suppressed_when_specific_intent(self, parser):
         # "大模型融资"：融资 是未登录核心意图词 -> 抑制"大模型"的概念扩展
@@ -212,6 +214,7 @@ class TestConceptExpansionGating:
 # ④ 回归锁定：探针抓出并已修复的 bug，钉死防回退
 # ===========================================================================
 @pytest.mark.regression
+@pytest.mark.critical
 class TestFixedBugLocks:
     def test_eight_digit_date_not_parsed_as_stock(self, parser):
         """回归锁：8 位纯日期只应解析为日期，不得污染 stock_code。
