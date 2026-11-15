@@ -66,8 +66,8 @@ def analyze_news_text(
     metrics_clean = {k: v for k, v in metrics.items() if not k.startswith("_")}
     entities_clean = {k: v for k, v in entities.items() if not k.startswith("_")}
 
-    # 2. KB context retrieval
-    kb_sources, kb_search_info = _search_kb(retriever, query or text[:200], kb_built)
+    # 2. KB context retrieval（自主检索节点：LLM 决策检索词/换词重查，降级单发）
+    kb_sources, kb_search_info = _agentic_search_kb(llm, retriever, query or text[:200], kb_built)
     logger.info(f"[analyze_news] KB 检索: {len(kb_sources)} sources (raw={kb_search_info.get('total_results', 0)})")
 
     # 2b. 统一组装 grounding（唯一真相源：同一份同时喂 LLM 与 Guard，全程可观测）
@@ -152,17 +152,20 @@ def analyze_topic_research(
         for item in items if item.get("title") or item.get("content")
     )[:6000]
 
-    # 3. KB search
+    # 3. KB search（自主路径: LLM 循环内自主定词；降级路径保留关键词抽取）
     logger.info(f"[analyze_topic] 步骤 2/4: KB 检索...")
-    search_query = topic
-    if llm:
-        try:
-            from financial_rag.tools.news_tools import _extract_keywords
-            keywords = _extract_keywords(llm, topic)
-            search_query = keywords[0] if keywords else topic
-        except Exception:
-            pass
-    kb_sources, kb_search_info = _search_kb(retriever, search_query, kb_built)
+    if _agentic_eligible(llm, retriever, kb_built):
+        kb_sources, kb_search_info = _agentic_search_kb(llm, retriever, topic, kb_built)
+    else:
+        search_query = topic
+        if llm:
+            try:
+                from financial_rag.tools.news_tools import _extract_keywords
+                keywords = _extract_keywords(llm, topic)
+                search_query = keywords[0] if keywords else topic
+            except Exception:
+                pass
+        kb_sources, kb_search_info = _search_kb(retriever, search_query, kb_built)
     logger.info(f"[analyze_topic] 步骤 2/4 完成: KB {len(kb_sources)} sources (raw={kb_search_info.get('total_results', 0)}) ({(_time.time()-t1)*1000:.0f}ms)")
 
     # 3b. 统一组装 grounding（唯一真相源 + 全程可观测）
@@ -262,6 +265,144 @@ def _search_kb(retriever, query: str, kb_built: bool, min_score: float = 0.4) ->
         logger.warning(f"KB search failed: {e}")
         info["reason"] = f"检索异常: {e}"
         return [], info
+
+
+def _agentic_eligible(llm, retriever, kb_built: bool) -> bool:
+    """自主检索准入：llm + retriever + kb_built + 非 mock（确定性降级契约）。"""
+    from financial_rag.config import is_mock_enabled
+    return bool(llm and retriever and kb_built) and not is_mock_enabled()
+
+
+def _agentic_search_kb(llm, retriever, query: str, kb_built: bool,
+                       min_score: float = 0.4, max_rounds: int = 3) -> tuple:
+    """Agentic KB 证据收集：LLM 自主决定检索词/观察结果换词重查/收工（限轮数）。
+
+    复用 ToolCallSession + search_financial_data（受限 registry，只装这一个工具）。
+    准入不满足 → _search_kb 单发（输出逐字段一致）；循环异常 → 单发兜底 + trace 标 fallback。
+    返回与 _search_kb 同构: (sources, info)，自主路径 info 额外带 agentic_trace 决策轨迹。
+    """
+    if not _agentic_eligible(llm, retriever, kb_built):
+        return _search_kb(retriever, query, kb_built, min_score)
+
+    import time as _time
+    from financial_rag.prompts import EVIDENCE_GATHER_SYSTEM
+    from financial_rag.tools.core import (
+        FunctionDef, FunctionRegistry, ToolCallSession, ToolExecutor, _make_search_tool,
+    )
+
+    t0 = _time.time()
+
+    class _RoundTrackingExecutor(ToolExecutor):
+        """记录每轮调用数：ToolCallSession 每轮调一次 execute_and_report。"""
+
+        def __init__(self, registry):
+            super().__init__(registry)
+            self.round_sizes = []
+
+        def execute_and_report(self, requests, scorecard=None):
+            self.round_sizes.append(len(requests))
+            return super().execute_and_report(requests, scorecard)
+
+    try:
+        search_fn, set_retriever = _make_search_tool()
+        set_retriever(retriever)
+        registry = FunctionRegistry(name="evidence")
+        registry.add(FunctionDef(
+            name="search_financial_data",
+            description="在知识库中搜索金融背景证据，返回带相关度分数(0-1)的结果。"
+                        "结果为空或分数普遍低于 0.4 时，应更换关键词重查。",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "检索查询，自然语言描述需要的证据"},
+                    "top_k": {"type": "integer", "description": "返回结果数量，默认 5", "default": 5},
+                },
+                "required": ["query"],
+            },
+            callback=search_fn,
+            category="retrieval",
+        ))
+        executor = _RoundTrackingExecutor(registry)
+        session = ToolCallSession(
+            llm=llm, registry=registry, executor=executor,
+            system_prompt=EVIDENCE_GATHER_SYSTEM, max_rounds=max_rounds,
+        )
+        task = (
+            f"分析任务: 为以下内容收集知识库背景证据。\n"
+            f"初始检索词建议: {query[:200]}\n"
+            f"请自主决定检索词与是否重查，证据足够或多次无果时收工。"
+        )
+        stats = session.run(task)
+
+        # 证据收割: 阈值过滤 + 跨轮 text 去重 + 逐轮轨迹
+        sources, seen = [], set()
+        rounds_trace, all_scores = [], []
+        total_raw, idx = 0, 0
+        for rnd, size in enumerate(executor.round_sizes, 1):
+            calls = stats.calls[idx:idx + size]
+            idx += size
+            queries, found, scores, blocked, gate_info = [], 0, [], False, None
+            for c in calls:
+                if c.name != "search_financial_data" or not c.success:
+                    continue
+                res = c.result or {}
+                queries.append(res.get("query", ""))
+                items = res.get("results", [])
+                found += len(items)
+                if res.get("gate_blocked"):
+                    blocked = True
+                    gate_info = res.get("gate_info")
+                for it in items:
+                    sc = it.get("score", 0)
+                    scores.append(sc)
+                    text = it.get("text", "")
+                    if sc >= min_score and text and text not in seen:
+                        seen.add(text)
+                        sources.append({
+                            "text": text,
+                            "source": it.get("source", ""),
+                            "score": round(sc, 4),
+                        })
+            total_raw += found
+            all_scores.extend(scores)
+            rd = {
+                "round": rnd, "queries": queries, "total_found": found,
+                "top_scores": [round(s, 4) for s in sorted(scores, reverse=True)[:5]],
+                "gate_blocked": blocked,
+            }
+            if gate_info:
+                rd["gate_info"] = gate_info
+            rounds_trace.append(rd)
+
+        info = {
+            "query": query[:200],
+            "kb_built": True,
+            "total_results": total_raw,
+            "above_threshold": len(sources),
+            "top_scores": [round(s, 4) for s in sorted(all_scores, reverse=True)[:5]],
+            "threshold": min_score,
+            "agentic_trace": {
+                "enabled": True,
+                "rounds": rounds_trace,
+                "stop_reason": "budget" if stats.rounds >= max_rounds else "llm_stop",
+                "tool_calls": len(stats.calls),
+                "elapsed_ms": round((_time.time() - t0) * 1000, 1),
+            },
+        }
+        logger.info(
+            f"[agentic_kb] 自主检索: {stats.rounds} 轮 / {len(stats.calls)} 次搜索 → "
+            f"{len(sources)} 条证据 (raw={total_raw}), stop={info['agentic_trace']['stop_reason']}"
+        )
+        return sources, info
+    except Exception as e:
+        logger.warning(f"[agentic_kb] 自主检索失败，降级单发: {e}")
+        sources, info = _search_kb(retriever, query, kb_built, min_score)
+        info["agentic_trace"] = {
+            "enabled": True, "rounds": [], "stop_reason": "fallback",
+            "tool_calls": 0, "elapsed_ms": round((_time.time() - t0) * 1000, 1),
+            "error": str(e)[:200],
+        }
+        return sources, info
 
 
 def _parse_verdict(text: str) -> str:

@@ -164,7 +164,10 @@ export function renderKbSearchInfo(info, sources) {
   // 保真率进标题：即便折叠，用户也能一眼看到"喂给 AI 的内容完整度"
   const ct0 = info.context_trace;
   const fidBadge = ct0 ? ` · <span style="color:${ct0.fidelity >= 0.8 ? 'var(--ok)' : ct0.fidelity >= 0.5 ? 'var(--warn)' : 'var(--danger)'};font-weight:700">保真率 ${(ct0.fidelity * 100).toFixed(0)}%</span>` : '';
-  h += `<span>${statusIcon} KB 检索: ${srcCount} 命中 / ${rawCount} 原始${fidBadge}</span>`;
+  // 自主检索徽标：折叠态也能看到“LLM 自主决策了几轮”
+  const at0 = info.agentic_trace;
+  const atBadge = (at0 && at0.enabled) ? ` · <span style="font-weight:700">🤖 自主 ${(at0.rounds || []).length} 轮</span>` : '';
+  h += `<span>${statusIcon} KB 检索: ${srcCount} 命中 / ${rawCount} 原始${fidBadge}${atBadge}</span>`;
   h += '<span class="collapse-arrow">▶</span>';
   h += '</div>';
   h += '<div class="collapsible-body" style="padding:8px 12px;font-size:11px;color:var(--text2);display:none">';
@@ -194,6 +197,19 @@ export function renderKbSearchInfo(info, sources) {
     } else if ((info.above_threshold || 0) === 0) {
       h += `<div style="color:var(--danger);margin-top:4px">💡 ${rawCount} 条结果全部低于阈值 ${info.threshold}，被过滤。尝试降低阈值或丰富 KB 内容</div>`;
     }
+  }
+  // 自主检索决策轨迹：逐轮检索词/命中/分数/收工原因（0 命中也完整展示过程）
+  const at = info.agentic_trace;
+  if (at && at.enabled) {
+    const stopLabel = { llm_stop: 'LLM 自主收工', budget: '轮数预算耗尽', fallback: '异常降级单发' }[at.stop_reason] || at.stop_reason;
+    h += `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)"><strong>🤖 自主检索:</strong> ${(at.rounds || []).length} 轮 / ${at.tool_calls || 0} 次搜索 · ${stopLabel} · ${Math.round(at.elapsed_ms || 0)}ms</div>`;
+    (at.rounds || []).forEach(rd => {
+      const qs = (rd.queries || []).map(q => escHtml(String(q).slice(0, 40))).join(' / ') || '—';
+      h += `<div style="margin-top:3px">第${rd.round}轮: ${qs} → ${rd.total_found} 条原始${rd.gate_blocked ? ' · ⛔ 门控拦截' : ''}`;
+      if (rd.top_scores && rd.top_scores.length) h += ` · top分 ${rd.top_scores.map(s => s.toFixed(3)).join(', ')}`;
+      h += '</div>';
+    });
+    if (at.error) h += `<div style="color:var(--warn);margin-top:3px">⚠️ ${escHtml(at.error)}</div>`;
   }
   h += renderContextTrace(info.context_trace);
   h += '</div></div>';
