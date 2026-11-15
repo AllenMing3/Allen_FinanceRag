@@ -626,8 +626,11 @@ class HybridRetriever:
         self.documents = data["documents"]
         cfg = data.get("config", {})
         self.rrf_k = cfg.get("rrf_k", self.rrf_k)
-        self.bm25_weight = cfg.get("bm25_weight", self.bm25_weight)
-        self.vector_weight = cfg.get("vector_weight", self.vector_weight)
+        # 通道权重是代码级调参（见 __init__ / factory），不从磁盘索引恢复：
+        # 旧索引可能携带过期权重（如已修复的 0.3/0.7 倒挂），且 checksum 只保
+        # 完整性不保时效性——文件完好仍可能语义过期。盲目读回会悄悄覆盖
+        # 代码默认值并使 bm25_weight>=vector_weight 不变量失效。磁盘 config 里
+        # 的权重仅作构建快照供排查，加载时一律以代码为准。
         self._bm25.build(self.documents)
 
         # Chroma 持久化数据不再盲信（count>0 不代表与当前文档集一致）：
