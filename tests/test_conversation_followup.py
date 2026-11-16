@@ -285,9 +285,14 @@ class TestFollowupTool:
         assert s.messages[-1].content == "为什么是利好？"
 
     @pytest.mark.critical
-    def test_offline_retrieval_wiring(self, cm, session_id):
+    def test_offline_retrieval_wiring(self, cm, session_id, tmp_path):
         """纯本地 BM25+Jaccard 检索接线：追问能召回 KB 文档（诊断可观测）。"""
-        r = HybridRetriever(embedder=None, reranker=None)
+        # 隔离硬约束：不传 bm25_db_path 会落到生产 index/bm25_index.db，
+        # r.index() 的 DELETE FROM kb_fts 会清空真实索引（曾把 100 篇重建
+        # 成果反复打回 2 行样例残留，被数据层一致性体检抓出）。
+        r = HybridRetriever(embedder=None, reranker=None,
+                            bm25_db_path=str(tmp_path / "bm25_index.db"),
+                            chroma_persist_dir=str(tmp_path / "chroma"))
         r.index([
             {"text": SAMPLE_AI_NEWS,
              "meta": {"doc_id": "d_news", "source": "test", "doc_type": "news"}},

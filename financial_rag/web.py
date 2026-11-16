@@ -69,11 +69,13 @@ from financial_rag.api.kb_router import router as _kb_router
 from financial_rag.api.ingest_router import router as _ingest_router
 from financial_rag.api.analysis_router import router as _analysis_router
 from financial_rag.api.query_router import router as _query_router
+from financial_rag.api.data_router import router as _data_router
 
 app.include_router(_kb_router)
 app.include_router(_ingest_router)
 app.include_router(_analysis_router)
 app.include_router(_query_router)
+app.include_router(_data_router)
 
 # ---------------------------------------------------------------------------
 # Serve frontend (cached HTML)
