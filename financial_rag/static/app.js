@@ -9,6 +9,7 @@ import { loadDirBrowser, browseCustomDir, ingestCustomDir, ingestNews, initUploa
 import { runKBQuery, runKlineTool, switchQueryMode, dispatchQuery, runPipelineQuery } from './modules/query.js';
 import { analyzeNews, analyzeTopic, refreshLearningHistory } from './modules/analyze.js';
 import { loadChatSessions, sendFollowup } from './modules/chat.js';
+import { loadDataLayer } from './modules/data_layer.js';
 
 // ── Expose to global (for onclick handlers in HTML) ──
 window._loadOverviewStats = loadOverviewStats;
@@ -31,6 +32,7 @@ window._analyzeTopic = analyzeTopic;
 window._refreshLearningHistory = refreshLearningHistory;
 window._loadChatSessions = loadChatSessions;
 window._sendFollowup = sendFollowup;
+window._loadDataLayer = loadDataLayer;
 
 // ── Global state ──
 window._kbDocs = [];
@@ -47,6 +49,7 @@ document.querySelectorAll('.nav-item').forEach(el => {
     // Auto-refresh on panel switch
     if (el.dataset.panel === 'analyze') refreshLearningHistory();
     if (el.dataset.panel === 'overview') loadOverviewStats();
+    if (el.dataset.panel === 'datalayer') loadDataLayer();
   });
 });
 

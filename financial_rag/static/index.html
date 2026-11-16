@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/static/styles/ingest.css">
 <link rel="stylesheet" href="/static/styles/query.css">
 <link rel="stylesheet" href="/static/styles/chat.css">
+<link rel="stylesheet" href="/static/styles/datalayer.css">
 </head>
 <body>
 
@@ -51,6 +52,10 @@
     <div class="nav-item" data-panel="analyze">
       <span class="nav-icon">🧠</span>
       <span class="nav-label">深度分析<span class="nav-sub">News · Topic · Chat</span></span>
+    </div>
+    <div class="nav-item" data-panel="datalayer">
+      <span class="nav-icon">🗄️</span>
+      <span class="nav-label">数据层<span class="nav-sub">Storage · Flow · Health</span></span>
     </div>
     <div class="sidebar-footer">
       <div style="font-size:10px;color:var(--text3);line-height:1.6">
@@ -411,6 +416,23 @@
         <div class="card-header"><h3 style="margin:0"><span class="card-icon">📖</span> 学习历史</h3><button class="btn btn-secondary btn-xs" onclick="window._refreshLearningHistory()">刷新</button></div>
         <div id="learningHistoryList"></div>
       </div>
+    </div>
+
+    <!-- ══════════ DATA LAYER ══════════ -->
+    <div class="panel" id="panel-datalayer">
+      <div class="panel-header">
+        <h2>数据层 <button class="btn btn-secondary btn-xs" onclick="window._loadDataLayer()" style="margin-left:8px">刷新</button></h2>
+        <p>哪个库归谁管 · 每个操作落进哪几个库 · 各库当下状态与一致性体检（纯只读，不触发重建）</p>
+      </div>
+      <div class="loading" id="dl-loading"><div class="spinner"></div><p>正在巡检数据层...</p></div>
+      <div class="section-divider"><span class="sd-icon">🩺</span><span class="sd-title">一致性体检</span><span class="sd-desc">真相源 vs 派生索引四方计数</span></div>
+      <div id="dlHealth"></div>
+      <div class="section-divider"><span class="sd-icon">🏷️</span><span class="sd-title">元数据覆盖率</span><span class="sd-desc">文档 meta 字段非空占比 · 以真相源 kb_docs 为准</span></div>
+      <div id="dlMeta"></div>
+      <div class="section-divider"><span class="sd-icon">🗄️</span><span class="sd-title">三层存储</span><span class="sd-desc">归属 · 路径 · 可再生 · 实时状态</span></div>
+      <div id="dlStores"></div>
+      <div class="section-divider"><span class="sd-icon">🔀</span><span class="sd-title">数据流</span><span class="sd-desc">每个操作落进哪几个库</span></div>
+      <div id="dlFlows"></div>
     </div>
 
   </div><!-- /main-content -->
