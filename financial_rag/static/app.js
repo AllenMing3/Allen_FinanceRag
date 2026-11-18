@@ -10,6 +10,7 @@ import { runKBQuery, runKlineTool, switchQueryMode, dispatchQuery, runPipelineQu
 import { analyzeNews, analyzeTopic, refreshLearningHistory } from './modules/analyze.js';
 import { loadChatSessions, sendFollowup } from './modules/chat.js';
 import { loadDataLayer } from './modules/data_layer.js';
+import { loadEvalPanel } from './modules/eval_panel.js';
 
 // ── Expose to global (for onclick handlers in HTML) ──
 window._loadOverviewStats = loadOverviewStats;
@@ -33,6 +34,7 @@ window._refreshLearningHistory = refreshLearningHistory;
 window._loadChatSessions = loadChatSessions;
 window._sendFollowup = sendFollowup;
 window._loadDataLayer = loadDataLayer;
+window._loadEvalPanel = loadEvalPanel;
 
 // ── Global state ──
 window._kbDocs = [];
@@ -50,6 +52,7 @@ document.querySelectorAll('.nav-item').forEach(el => {
     if (el.dataset.panel === 'analyze') refreshLearningHistory();
     if (el.dataset.panel === 'overview') loadOverviewStats();
     if (el.dataset.panel === 'datalayer') loadDataLayer();
+    if (el.dataset.panel === 'eval') loadEvalPanel();
   });
 });
 

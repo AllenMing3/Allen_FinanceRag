@@ -261,6 +261,13 @@ def format_comparison(cmp: Comparison) -> str:
 def main(argv=None) -> int:
     import argparse
     import logging
+    import sys
+    # Windows GBK 控制台 print 中文 / U+2212(−) 会 UnicodeEncodeError → 强制 std 流 utf-8
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     logging.getLogger("financial_rag").setLevel(logging.WARNING)
     logging.getLogger("jieba").setLevel(logging.ERROR)
 
@@ -271,10 +278,19 @@ def main(argv=None) -> int:
                     help="核心指标 / 区分度回退容忍阈值（默认 0.02；关键用例下界不吃 tol）")
     ap.add_argument("--update-baseline", action="store_true",
                     help="用本次结果覆盖生成 output_baseline.json（保留手工 critical_cases）")
+    ap.add_argument("--ai-analysis", action="store_true",
+                    help="评估后调用 LLM 预分析报告（辅助观测，需 DASHSCOPE_API_KEY，不改变退出码）")
     args = ap.parse_args(argv)
 
     report = evaluate()
     print(format_report(report))
+
+    def _ai_analysis(cmp=None):
+        from financial_rag.eval.ai_analysis import build_digest_l2, analyze_and_report
+        meta = {c["case_id"]: {"quality_tier": c["expected"]["quality_tier"],
+                               "tags": c["expected"].get("tags", [])}
+                for c in load_cases()}
+        analyze_and_report(build_digest_l2(report, cmp, case_meta=meta))
 
     if args.update_baseline:
         save_baseline(report)
@@ -284,10 +300,14 @@ def main(argv=None) -> int:
     baseline = load_baseline()
     if baseline is None:
         print("\n（尚无 output_baseline.json，用 --update-baseline 生成首个基线）")
+        if args.ai_analysis:
+            _ai_analysis()
         return 0
 
     cmp = compare(report, baseline, tol=args.tol)
     print(format_comparison(cmp))
+    if args.ai_analysis:
+        _ai_analysis(cmp)
     return 0 if cmp.ok else 1
 
 
