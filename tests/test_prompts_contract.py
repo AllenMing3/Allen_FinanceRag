@@ -151,6 +151,31 @@ class TestAssessmentSchemaLock:
 
 
 @pytest.mark.critical
+class TestAssessmentExplainability:
+    """可解释性契约：判定依据必须显式输出，证据必须逐字摘录（前端展示依赖）"""
+
+    def test_news_reasoning_fields(self):
+        tpl = prompts.NEWS_ASSESSMENT_SYSTEM
+        for field in ("verdict_reasoning", "confidence_reasoning", "evidence"):
+            assert field in tpl, f"NEWS_ASSESSMENT 缺可解释性字段 {field}"
+
+    def test_topic_reasoning_fields(self):
+        tpl = prompts.TOPIC_ASSESSMENT_SYSTEM
+        for field in ("verdict_reasoning", "confidence_reasoning", "evidence"):
+            assert field in tpl, f"TOPIC_ASSESSMENT 缺可解释性字段 {field}"
+
+    def test_news_evidence_verbatim_discipline(self):
+        tpl = prompts.NEWS_ASSESSMENT_SYSTEM
+        assert "逐字摘录" in tpl
+        assert "禁止编造" in tpl
+
+    def test_topic_evidence_verbatim_discipline(self):
+        tpl = prompts.TOPIC_ASSESSMENT_SYSTEM
+        assert "逐字摘录" in tpl
+        assert "禁止编造" in tpl
+
+
+@pytest.mark.critical
 class TestAssessmentFallbackMarkers:
     """降级路径【】标记是 _text_to_structured_* 解析器契约，逐字不动"""
 

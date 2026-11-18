@@ -2,7 +2,22 @@
 import { api, apiGet, showLoading, hideLoading } from './api.js';
 import { toast, escHtml, scoreColor } from './ui.js';
 import { verdictBadge, confidenceBadge, directionArrow, severityBar, sentimentPill } from './render.js';
-import { renderHallucinationCard, renderKbSearchInfo } from './quality.js';
+import { renderHallucinationCard, renderKbSearchInfo, renderProvenance } from './quality.js';
+
+// ── 判定依据（LLM 显式输出 reasoning；降级路径字段缺失时优雅降级）──
+
+function renderVerdictBasis(s) {
+  if (!s || !s.verdict) return '';
+  if (!s.verdict_reasoning && !s.confidence_reasoning) {
+    return '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">🧭 本次分析未提供结构化判定依据（降级路径）</div>';
+  }
+  let h = '<div style="margin-bottom:12px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);border-left:3px solid var(--accent);font-size:12px">';
+  h += '<div style="font-weight:600;margin-bottom:4px">🧭 判定依据</div>';
+  if (s.verdict_reasoning) h += `<div style="line-height:1.6">${escHtml(s.verdict_reasoning)}</div>`;
+  if (s.confidence_reasoning) h += `<div style="color:var(--text2);margin-top:4px;font-size:11px">置信度依据：${escHtml(s.confidence_reasoning)}</div>`;
+  h += '</div>';
+  return h;
+}
 
 // ── News analysis ──
 
@@ -25,7 +40,9 @@ export async function analyzeNews() {
     // Verdict
     h += `<div class="verdict-center">${verdictBadge(d.assessment)}${confidenceBadge(d.confidence)}</div>`;
     if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:8px">💾 分析结论已存入知识库</div>`;
-    h += renderHallucinationCard(d.hallucination);
+    h += renderVerdictBasis(s);
+    h += renderHallucinationCard(d.hallucination, { kbSearchInfo: d.kb_search_info, entities: d.entities });
+    h += renderProvenance(d.provenance);
 
     // Multi-dim impact
     if (s.impact) {
@@ -54,6 +71,7 @@ export async function analyzeNews() {
           <span class="signal-text">${escHtml(sig.signal || '')}</span>
           <span class="signal-type" style="color:${typeColor}">${sig.type === 'positive' ? '▲' : sig.type === 'negative' ? '▼' : '●'}</span>
         </div>`;
+        if (sig.evidence) h += `<div style="font-size:11px;color:var(--text3);padding:0 0 4px 26px">📎 原文依据：“${escHtml(sig.evidence)}”</div>`;
       });
       h += '</div>';
     }
@@ -131,7 +149,9 @@ export async function analyzeTopic() {
     let h = '<div style="margin-top:12px">';
     h += `<div class="verdict-center">${verdictBadge(d.assessment)}${confidenceBadge(d.confidence)}</div>`;
     if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:8px">💾 研判结论已存入知识库</div>`;
-    h += renderHallucinationCard(d.hallucination);
+    h += renderVerdictBasis(s);
+    h += renderHallucinationCard(d.hallucination, { kbSearchInfo: d.kb_search_info, topic: d.topic });
+    h += renderProvenance(d.provenance);
 
     // Stats
     const trendDir = s.sentiment_trend || 'mixed';
@@ -149,6 +169,7 @@ export async function analyzeTopic() {
         h += `<div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);border-left:3px solid ${sentColor};font-size:12px;min-width:140px">
           <div style="font-weight:600;margin-bottom:3px">${escHtml(st.name || '')} ${sentimentPill(st.sentiment)}</div>
           <div style="color:var(--text2);font-size:11px">${escHtml(st.summary || '')}</div>
+          ${st.evidence ? `<div style="color:var(--text3);font-size:10px;margin-top:3px">📎 ${escHtml(st.evidence)}</div>` : ''}
         </div>`;
       });
       h += '</div></div>';

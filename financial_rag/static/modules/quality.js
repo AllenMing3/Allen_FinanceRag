@@ -34,8 +34,9 @@ export function renderGuardLayers(hal) {
 }
 
 // ── 完整防幻觉评分卡（新闻解读 / 话题调研）──
+// ctx 可选：{kbSearchInfo, entities, topic}，传入后展开区附"低分缺什么知识"建议。
 
-export function renderHallucinationCard(hal) {
+export function renderHallucinationCard(hal, ctx = {}) {
   if (!hal) return '';
   if (hal.skipped) {
     const reason = SKIP_REASONS[hal.skip_reason] || hal.skip_reason || '';
@@ -51,6 +52,126 @@ export function renderHallucinationCard(hal) {
     <div class="qs-cell"><div class="qs-label">幻觉风险</div><div class="qs-value" style="font-size:14px;color:${riskColor}">${hal.passed ? '✅ 通过' : '❌ 未通过'}</div></div>
   </div>`;
   h += renderGuardLayers(hal);
+  // 计分解释 + 知识缺口建议：分数不能是黑盒，明细后端已透出，这里如实讲给用户
+  if (hal.layers && Object.keys(hal.layers).length) {
+    h += '<div data-collapsible="true" style="margin-top:8px;border-top:1px dashed var(--border)">';
+    h += '<div class="collapsible-header" style="padding:6px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text2);font-weight:600"><span>🧮 这个分数怎么算的 · 低分缺什么</span><span class="collapse-arrow">▶</span></div>';
+    h += '<div class="collapsible-body" style="display:none;font-size:11px;color:var(--text2)">';
+    h += renderScoreExplain(hal);
+    h += renderScoreSuggestions(hal, ctx);
+    h += '</div></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+// ── 计分解释（确定性规则，与 guard/reflector.py 的权重/阈值保持一致）──
+
+const LAYER_WEIGHTS_PCT = {
+  L1_source_grounding: '41.7', L2_numerical_fidelity: '25',
+  L3_citation_integrity: '16.7', L4_structure_compliance: '16.7',
+};
+
+function renderScoreExplain(hal) {
+  const layers = hal.layers || {};
+  let h = `<div style="margin-bottom:8px;line-height:1.6">总分 = 四层加权平均（来源锚定 ${LAYER_WEIGHTS_PCT.L1_source_grounding}% · 数值一致 ${LAYER_WEIGHTS_PCT.L2_numerical_fidelity}% · 引用完整 ${LAYER_WEIGHTS_PCT.L3_citation_integrity}% · 结构规范 ${LAYER_WEIGHTS_PCT.L4_structure_compliance}%）。<strong>≥60% 判"通过"</strong>。风险分级：≥80% 且无未锚定句 = 低；≥60% 且未锚定≤2句 = 中；其余 = 高。</div>`;
+
+  const l1 = layers.L1_source_grounding;
+  if (l1) {
+    h += `<div style="margin-bottom:6px"><strong>来源锚定 ${((l1.score || 0) * 100).toFixed(0)}%</strong> = 有来源支撑的句子 ÷ 总句数（${l1.anchored || 0}/${l1.total || 0}）。每句与新闻/知识库做分词重叠比对，重叠率≥30% 记为有支撑。`;
+    if (l1.unanchored && l1.unanchored.length) {
+      h += '<div style="color:var(--warn);margin-top:3px">无直接支撑的句子（多为模型推理）：</div>';
+      l1.unanchored.forEach(s => { h += `<div style="color:var(--text3);padding-left:8px">· ${escHtml(s)}</div>`; });
+    }
+    h += '</div>';
+  }
+
+  const l2 = layers.L2_numerical_fidelity;
+  if (l2) {
+    h += `<div style="margin-bottom:6px"><strong>数值一致 ${((l2.score || 0) * 100).toFixed(0)}%</strong> = 能在来源中核实的数字 ÷ 数字总数（${l2.verified || 0}/${l2.total || 0}）。`;
+    if (l2.unmatched && l2.unmatched.length) {
+      h += `<div style="color:var(--warn);margin-top:3px">对不上的数字：<strong>${l2.unmatched.map(escHtml).join('、')}</strong></div>`;
+    }
+    h += '</div>';
+  }
+
+  const l3 = layers.L3_citation_integrity;
+  if (l3) {
+    h += `<div style="margin-bottom:6px"><strong>引用完整 ${((l3.score || 0) * 100).toFixed(0)}%</strong>：`;
+    if (l3.citations_found > 0) {
+      h += `有效引用 ÷ 引用总数（${l3.valid || 0}/${l3.citations_found}）。`;
+    } else {
+      h += `深度分析不强制 [N] 引用标记，${l3.has_text_reference ? '检测到文字引用表述，计 80%' : '未检测到引用表述，计 60%'}。`;
+    }
+    h += '</div>';
+  }
+
+  const l4 = layers.L4_structure_compliance;
+  if (l4) {
+    h += `<div style="margin-bottom:6px"><strong>结构规范 ${((l4.score || 0) * 100).toFixed(0)}%</strong> = 命中的期望段落 ÷ 4（关键信号/影响分析/风险提示/后续关注）。`;
+    if (l4.missing_sections && l4.missing_sections.length) {
+      h += `<div style="color:var(--warn);margin-top:3px">缺失段落：${l4.missing_sections.map(escHtml).join('、')}</div>`;
+    }
+    h += '</div>';
+  }
+  return h;
+}
+
+// ── 低分归因与知识补充建议（纯确定性推导，不调 LLM）──
+
+export function renderScoreSuggestions(hal, ctx = {}) {
+  const tips = [];
+  const info = ctx.kbSearchInfo;
+  const companies = (ctx.entities || {}).companies || [];
+  const firstCompany = companies.length ? (typeof companies[0] === 'string' ? companies[0] : companies[0].name || '') : '';
+  const subject = ctx.topic || firstCompany || '本话题';
+
+  if (info) {
+    if (!info.kb_built) {
+      tips.push('知识库尚未构建，本次分析完全没有背景资料支撑。请在「数据管理」导入文档并构建索引。');
+    } else if ((info.total_results || 0) === 0) {
+      tips.push(`知识库检索不到与「${subject}」相关的背景资料，结论只能依赖输入内容本身。建议导入相关公司/行业文档。`);
+    } else if ((info.above_threshold || 0) === 0) {
+      tips.push(`检索到 ${info.total_results} 条资料但相关度全部低于阈值 ${info.threshold || 0.4}，未被采纳。可补充与「${subject}」更直接相关的文档。`);
+    }
+  }
+
+  const l2 = (hal.layers || {}).L2_numerical_fidelity;
+  if (l2 && l2.unmatched && l2.unmatched.length) {
+    tips.push(`以下数字在新闻与知识库中均无法核实：${l2.unmatched.join('、')}。可能是模型推算，补充含这些数据的原始资料可提升可信度。`);
+  }
+  const l1 = (hal.layers || {}).L1_source_grounding;
+  if (l1 && l1.unanchored && l1.unanchored.length) {
+    tips.push(`有 ${l1.unanchored.length} 句分析找不到直接来源支撑（明细见上），属于模型推理，建议人工复核或补充佐证资料。`);
+  }
+
+  if (!tips.length) return '';
+  let h = '<div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--border)"><strong>🧩 低分原因与可补充的知识</strong>';
+  tips.forEach(t => { h += `<div style="margin-top:3px;line-height:1.5">💡 ${escHtml(t)}</div>`; });
+  h += '</div>';
+  return h;
+}
+
+// ── 结论出处（模型 / 生成路径 / KB 参考 / 时间）──
+
+const PATH_LABELS = {
+  llm_json: 'LLM 结构化分析', llm_freetext: 'LLM 降级分析（自由文本解析）',
+  llm_failed: 'LLM 分析失败', rule: '规则研判（无 LLM）', no_llm: '基础摘要（无 LLM）',
+};
+
+export function renderProvenance(prov) {
+  if (!prov || !Object.keys(prov).length) return '';
+  const pathLabel = PATH_LABELS[prov.path] || '未知路径';
+  let h = '<div style="margin-bottom:14px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:11px;color:var(--text2)">';
+  h += '<div style="font-weight:600;margin-bottom:4px">🔎 结论出处</div>';
+  h += `<div>模型：<strong>${escHtml(prov.model || '未知')}</strong>${prov.provider ? `（${escHtml(prov.provider)}）` : ''} · 生成方式：${escHtml(pathLabel)}</div>`;
+  if ((prov.kb_hits || 0) > 0) {
+    const docs = (prov.kb_documents || []).map(escHtml).join('、');
+    h += `<div>知识库参考：${prov.kb_hits} 条证据${docs ? `（${docs}）` : ''}</div>`;
+  } else {
+    h += '<div style="color:var(--warn)">知识库参考：0 条 — 本结论未参考知识库背景，仅基于输入内容</div>';
+  }
+  if (prov.generated_at) h += `<div style="color:var(--text3)">生成时间：${escHtml(prov.generated_at)}</div>`;
   h += '</div>';
   return h;
 }

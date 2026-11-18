@@ -235,6 +235,7 @@ class AnalysisAgent(BaseAgent):
                 "doc_type": result.get("doc_type", ""), "kb_sources": kb_sources,
                 "assessment": result.get("assessment", ""), "confidence": result.get("confidence", ""),
                 "kb_search_info": result.get("kb_search_info", {}),
+                "analysis_path": result.get("analysis_path", ""),
             },
             context_updates={
                 "final_answer": markdown,
@@ -307,6 +308,7 @@ class AnalysisAgent(BaseAgent):
                 "topic": result.get("topic", topic), "news_count": result.get("news_count", 0),
                 "news": result.get("news", []), "kb_sources": kb_sources,
                 "kb_search_info": result.get("kb_search_info", {}),
+                "analysis_path": result.get("analysis_path", ""),
             },
             context_updates={
                 "final_answer": markdown,

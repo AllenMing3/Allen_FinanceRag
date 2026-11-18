@@ -133,6 +133,34 @@ def _run_hallucination_check(result: dict, extra_sources: list = None):
         logger.warning(f"HallucinationGuard check failed: {e}")
 
 
+def _attach_provenance(result: dict):
+    """给分析结论附出处声明：模型 / 生成路径 / KB 参考 / 时间。
+
+    结论不能是黑盒：用户必须能看到"谁给出的、参考了什么知识库"。
+    任何异常降级为空 dict，不影响分析主流程。
+    """
+    try:
+        cfg = _state.get("cfg")
+        kb_sources = result.get("kb_sources", []) or []
+        docs = []
+        for kb in kb_sources:
+            name = kb.get("source") or ""
+            if name and name not in docs:
+                docs.append(name)
+        from datetime import datetime
+        result["provenance"] = {
+            "model": cfg.llm.model if cfg else "",
+            "provider": cfg.llm.provider if cfg else "",
+            "path": result.get("analysis_path", ""),
+            "kb_hits": len(kb_sources),
+            "kb_documents": docs,
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    except Exception as e:
+        logger.warning(f"Attach provenance failed: {e}")
+        result["provenance"] = {}
+
+
 def _run_analysis_via_agent_chain(intent: str, raw_input: str, metadata: dict, parsed_data=None):
     """通过 Agent 链 (AnalysisAgent → ScoringAgent) 执行深度分析。
 
@@ -177,6 +205,7 @@ def _run_analysis_via_agent_chain(intent: str, raw_input: str, metadata: dict, p
         "doc_type": data.get("doc_type", ""),
         "kb_sources": data.get("kb_sources", []),
         "kb_search_info": data.get("kb_search_info", {}),
+        "analysis_path": data.get("analysis_path", ""),
         # Topic-specific fields
         "topic": data.get("topic"),
         "news_count": data.get("news_count"),
@@ -300,6 +329,7 @@ async def api_analyze_news(req: AnalyzeNewsRequest):
                             confidence=result.get("confidence", ""))
         result["saved_to_kb"] = True
 
+    _attach_provenance(result)
     return result
 
 
@@ -380,6 +410,7 @@ async def api_analyze_topic(req: AnalyzeTopicRequest):
             _state["meta_store"] = _state.get("meta_store", []) + meta_items
             _save_meta(_state["meta_store"])
 
+    _attach_provenance(result)
     return result
 
 

@@ -115,6 +115,8 @@ def check_hallucination(output_text: str, source_items: List = None, mode: str =
     return {
         "overall_score": result.get("overall_score", 1.0),
         "risk": result.get("risk", "low"),
+        # passed 必须透出：丢失会让序列化默认 False，高分也显示"未通过"（与及格线解释矛盾）
+        "passed": result.get("passed", False),
         "checks": result.get("checks", {}),
         "report": result.get("report", ""),
         "unverified": result.get("unverified", []),

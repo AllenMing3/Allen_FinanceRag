@@ -673,8 +673,10 @@ Step 5（得出结论）：综合以上分析，给出 verdict 和 confidence
 1. 分析中的事实必须来自新闻原文或知识库背景；两者均未出现的公司/数字禁止写入
 2. 如果新闻和知识库背景都没给出的数字，不要在分析中编造
 3. 禁止写"市场反应积极" — 必须说明具体反应（如"股价涨X%""订单增X%"）
-4. key_signals 中的每条 signal 必须能在新闻原文中找到依据
+4. key_signals 中的每条 signal 必须能在新闻原文中找到依据，并在 evidence 字段逐字摘录原文
 5. 使用知识库背景信息时用文字注明（如"知识库背景显示…"），不要标 [N] 编号
+6. verdict_reasoning 必须引用 key_signals 中的具体事实，禁止只写"综合判断为利空"这类无依据结论
+7. evidence 必须是新闻原文的逐字摘录（不改写不概括）；找不到原文依据时填空字符串，禁止编造
 </anti_hallucination>
 
 <edge_cases>
@@ -701,6 +703,8 @@ Step 5（得出结论）：综合以上分析，给出 verdict 和 confidence
 {
   "verdict": "bullish 或 bearish 或 neutral",
   "confidence": "high 或 medium 或 low",
+  "verdict_reasoning": "1-3句判定依据：引用 key_signals 中的具体事实，说明为什么是利好/利空/中性",
+  "confidence_reasoning": "1-2句置信度依据：数据完整度、知识库有无佐证或矛盾、信息缺口",
   "impact": {
     "industry": {"direction": "bullish/bearish/neutral", "summary": "20字以内行业影响"},
     "company": {"direction": "bullish/bearish/neutral", "summary": "20字以内公司影响"},
@@ -708,7 +712,7 @@ Step 5（得出结论）：综合以上分析，给出 verdict 和 confidence
     "market": {"direction": "bullish/bearish/neutral", "summary": "20字以内市场影响"}
   },
   "key_signals": [
-    {"signal": "关键事实描述（必须包含具体信息）", "severity": 1到5的整数, "type": "positive或negative或neutral"}
+    {"signal": "关键事实描述（必须包含具体信息）", "severity": 1到5的整数, "type": "positive或negative或neutral", "evidence": "新闻原文逐字摘录（50字以内）；依据来自知识库时以'知识库:'开头；无原文依据填空字符串"}
   ],
   "analysis": "150-300字综合分析（因果链+具体数据+涉及公司/行业）",
   "risks": ["风险因素1（具体描述）", "风险因素2"],
@@ -773,11 +777,13 @@ Step 5（综合研判）：结合新闻和知识库，给出 verdict 和投资�
 </analysis_framework>
 
 <anti_hallucination>
-1. sub_topics 中的每个子话题必须有新闻或知识库背景支撑
+1. sub_topics 中的每个子话题必须有新闻或知识库背景支撑，并在 evidence 字段摘录支撑原文
 2. key_players 只包含新闻或知识库背景中实际出现的公司/人物
 3. contrarian_signals 如果没有实质内容，填空数组，不要编造
 4. investment_implication 必须有逻辑链（因为X趋势 → 建议Y），不要写空泛建议
 5. 使用知识库背景信息时用文字注明（如"知识库背景显示…"），不要标 [N] 编号
+6. verdict_reasoning 必须引用具体子话题或新闻事实，禁止只写"综合研判为利好"这类无依据结论
+7. evidence 必须是新闻标题或正文的逐字摘录（不改写不概括）；找不到原文依据时填空字符串，禁止编造
 </anti_hallucination>
 
 <edge_cases>
@@ -804,8 +810,10 @@ Step 5（综合研判）：结合新闻和知识库，给出 verdict 和投资�
 {
   "verdict": "bullish 或 bearish 或 neutral",
   "confidence": "high 或 medium 或 low",
+  "verdict_reasoning": "1-3句判定依据：引用具体子话题或新闻事实，说明为什么是利好/利空/中性",
+  "confidence_reasoning": "1-2句置信度依据：新闻数量与质量、知识库有无佐证或矛盾、信息缺口",
   "sub_topics": [
-    {"name": "子话题名称", "sentiment": "positive/negative/neutral", "summary": "30字概括（含具体事件）"}
+    {"name": "子话题名称", "sentiment": "positive/negative/neutral", "summary": "30字概括（含具体事件）", "evidence": "支撑该子话题的新闻标题或正文逐字摘录（50字以内）；无原文依据填空字符串"}
   ],
   "key_players": [
     {"name": "公司或人物名", "role": "角色描述", "mentions": 被提及次数}
