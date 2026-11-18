@@ -36,7 +36,7 @@ class DocMetadata:
     # === 必填（入库时系统自动分配）===
     doc_id: str = ""              # 唯一标识 (persistence.make_doc_id)
     title: str = ""               # 文档标题
-    doc_type: str = ""            # annual_report / research / news / concept / other
+    doc_type: str = ""            # annual_report / research / news / concept / analysis / other
     source: str = ""              # 来源: pdf / rss / manual / upload / news:xxx
     date_added: str = ""          # 入库日期 (YYYY-MM-DD)
 
@@ -123,10 +123,10 @@ def _load_company_keywords():
     logger.debug(f"公司词典加载完成: {len(_COMPANY_KEYWORDS)} 个关键词")
 
 
-# 公司名后缀模式（正则兜底：匹配 "XX科技有限公司" 等）
-_COMPANY_SUFFIX_RE = re.compile(
-    r'([\u4e00-\u9fff]{2,8}(?:科技|集团|股份|控股|电子|信息|智能|数据|网络|通信|半导体|新能源))'
-)
+# 公司名抽取只走词典（_extract_company）。
+# 曾有 "XX科技/集团/智能" 后缀正则兜底，实为垃圾工厂：
+# "人工智能" 命中 "智能" 后缀、句子碎片被当公司名入库（2026-11 探针核实 ~35 个垃圾值），
+# 错误公司名会污染检索第5步 apply_filters，留空优于错填，故删除兜底。
 
 
 # ===================== 行业/板块词典 =====================
@@ -225,20 +225,55 @@ def extract_metadata(text: str, title: str = "", existing_meta: Optional[Dict] =
 
 
 def _extract_company(text: str) -> str:
-    """抽取公司名：词典优先，正则兜底"""
+    """抽取公司名：词典唯一裁决（按关键词长度降序，避免短词误匹配）"""
     _load_company_keywords()
 
-    # 词典匹配（按关键词长度降序，避免短词误匹配）
     for keyword in sorted(_COMPANY_KEYWORDS.keys(), key=len, reverse=True):
         if keyword in text:
             return _COMPANY_KEYWORDS[keyword]
 
-    # 正则兜底：匹配"XX科技/集团/股份"模式
-    m = _COMPANY_SUFFIX_RE.search(text)
-    if m:
-        return m.group(1)
-
     return ""
+
+
+# ===================== 归一化 =====================
+
+# 旧版中文 doc_type 词表 → schema 词表（extraction_tools 旧管道遗留）
+_DOC_TYPE_MAP = {
+    "新闻报道": "news",
+    "年报": "financial_report",
+    "季报": "financial_report",
+    "研究报告": "research",
+    "行业分析": "research",
+    "其他": "other",
+}
+
+_PUBLISH_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}')
+
+
+def normalize_doc_meta(meta: Dict) -> Dict:
+    """归一化历史失范字段，返回需变更的字段 dict（与 extract_metadata 同 idiom）
+
+    1. publish_time → publish_date：旧新闻管道只写 publish_time（权威时间戳），
+       publish_date 缺失或是正文抠出的年份（两者并存时全部冲突）。
+       新闻场景 publish_time 权威，直接覆盖。
+    2. doc_type：旧中文词表映射到 schema 词表；未知非空值原样保留；
+       分析结论落库（source=analysis:*）推断为 analysis。
+    """
+    changes: Dict = {}
+
+    pt = meta.get("publish_time", "")
+    if pt and _PUBLISH_DATE_RE.match(pt):
+        date = pt[:10]
+        if meta.get("publish_date") != date:
+            changes["publish_date"] = date
+
+    dt = meta.get("doc_type", "")
+    if dt in _DOC_TYPE_MAP:
+        changes["doc_type"] = _DOC_TYPE_MAP[dt]
+    elif not dt and str(meta.get("source", "")).startswith("analysis:"):
+        changes["doc_type"] = "analysis"
+
+    return changes
 
 
 def _extract_date(text: str) -> str:

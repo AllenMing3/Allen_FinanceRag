@@ -22,6 +22,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from financial_rag.core.scorer import ScoreGrade
+from financial_rag.services.persistence import make_doc_id
 from financial_rag.api.app_state import (
     _state, _state_lock, _ensure_init,
     _KB_PATH, _INDEX_PATH,
@@ -59,12 +60,17 @@ def _save_analysis_to_kb(topic: str, assessment: str, analysis: str, analysis_ty
         "text": text[:2000],  # cap to avoid bloating KB
         "meta": {
             "source": f"analysis:{analysis_type}:{topic[:20]}",
+            "title": topic,
+            "doc_type": "analysis",
+            "date_added": now[:10],
             "timestamp": now,
             "type": "analysis_result",
             "assessment": assessment,
             "confidence": confidence,
         },
     }
+    # 身份证出生即齐全（此前 title/doc_type/doc_id/date_added 全空，检索过滤/溯源无法消费）
+    doc["meta"]["doc_id"] = make_doc_id(doc)
     with _state_lock:
         # Deduplicate: remove previous analysis for same topic+type (prefix match)
         prefix = f"analysis:{analysis_type}:{topic[:20]}"
