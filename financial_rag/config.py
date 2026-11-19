@@ -62,24 +62,6 @@ class ReflectionConfig:
 
 
 @dataclass
-class LightRAGConfig:
-    """LightRAG 知识图谱配置 — 仅 PDF/图片解析内容走图谱
-
-    默认关闭：lightrag 是实验性可选方案，未纳入依赖锁定（PyPI 仅 beta，需源码安装）。
-    未安装却开启会在启动时触发 `No module named 'lightrag'` 告警，故默认 off。
-    确需启用（已源码安装 lightrag）时设 LIGHTRAG_ENABLE=true。
-    """
-    enable: bool = field(
-        default_factory=lambda: os.getenv("LIGHTRAG_ENABLE", "false").lower() == "true"
-    )
-    working_dir: str = "./data/knowledge_base/lightrag"
-    query_mode: str = "hybrid"          # local / global / hybrid / mix
-    chunk_token_size: int = 300
-    chunk_overlap_token_size: int = 50
-    entity_extract_max_gleaning: int = 1
-
-
-@dataclass
 class MockConfig:
     """Mock 模式配置 — 仅模拟数据源 API（Tushare/RSS），LLM 始终使用真实 API"""
     # 总开关: MOCK_MODE=true 时数据源 API 返回模拟数据
@@ -138,7 +120,6 @@ class AppConfig:
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     reflection: ReflectionConfig = field(default_factory=ReflectionConfig)
     tushare: TushareConfig = field(default_factory=TushareConfig)
-    lightrag: LightRAGConfig = field(default_factory=LightRAGConfig)
     mock: MockConfig = field(default_factory=MockConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
 
@@ -150,7 +131,7 @@ class AppConfig:
 
     @property
     def index_dir(self) -> str:
-        """派生索引层：可随时删除重建（kb_index / bm25 / chroma / embedding_cache / lightrag）。"""
+        """派生索引层：可随时删除重建（kb_index / bm25 / chroma / embedding_cache）。"""
         return os.path.join(self.kb_dir, "index")
 
     @property
@@ -162,8 +143,6 @@ class AppConfig:
         for d in [self.data_dir, self.kb_dir, self.output_dir,
                   self.source_dir, self.index_dir, self.state_dir]:
             os.makedirs(d, exist_ok=True)
-        # LightRAG 图谱归入派生索引层（可重建）
-        self.lightrag.working_dir = os.path.join(self.index_dir, "lightrag")
 
 
 # 全局配置

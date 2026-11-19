@@ -51,12 +51,6 @@ CAPABILITY_MAP = {
         },
         "说明": "改检索行为 → retriever.py; 改权重 → fusion.py; 改过滤 → filters.py",
     },
-    "知识图谱": {
-        "tools": ["query_knowledge_graph", "get_graph_stats"],
-        "入口": "financial_rag/tools/graph_tools.py",
-        "实现": "financial_rag/retrievers/lightrag_adapter.py",
-        "说明": "LightRAG图谱查询。仅PDF/图片内容走图谱",
-    },
     "新闻/数据获取": {
         "tools": ["fetch_stock_news", "fetch_financial_news", "fetch_announcements",
                   "fetch_news_report", "fetch_date_events", "fetch_kline_context"],

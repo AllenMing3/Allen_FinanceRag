@@ -49,8 +49,5 @@ observability = [
 # 本项目是应用而非发布库：不打包安装，代码经 PYTHONPATH/cwd 访问（与 CI 一致）
 package = false
 
-# 可选图谱检索依赖 lightrag：PyPI 仅有 0.1.0b6、需从源码安装，故不纳入本文件与 uv.lock；
-# 如需启用请按 financial_rag/retrievers/README.md 手动安装到 .venv。
-#
 # 重依赖 arize-phoenix（可观测性 UI/collector）刻意不进本文件：它与主环境存在硬性版本冲突，
 # 隔离安装到独立 .venv-obs（见 requirements-observability.txt 与 scripts/start_phoenix.*）。

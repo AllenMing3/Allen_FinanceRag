@@ -87,10 +87,6 @@ STORE_REGISTRY = [
      "writers": ["embed_texts", "save"], "regenerable": True,
      "rebuild_source": "embedding API（重算费钱费时，缓存为省钱而存）",
      "desc": "文本 MD5 → 向量缓存（LRU 5000 条），避免重复调 embedding API"},
-    {"id": "lightrag", "name": "LightRAG 图谱", "layer": "index", "rel": "lightrag",
-     "kind": "dir_files", "owner": "retrievers/lightrag_adapter.py",
-     "writers": ["insert"], "regenerable": True, "rebuild_source": "PDF/图片解析内容",
-     "desc": "实验性知识图谱（默认关闭，LIGHTRAG_ENABLE=true 启用）"},
     # —— state 运行状态（可删）——
     {"id": "stats", "name": "KB 统计", "layer": "state", "rel": "stats.json",
      "kind": "json_dict", "owner": "services/persistence.py",

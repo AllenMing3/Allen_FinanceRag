@@ -20,10 +20,10 @@ from financial_rag.services import data_layer
 
 pytestmark = pytest.mark.unit
 
-# 计划中声明的全部存储（source 3 + index 5 + state 4）+ 补录（词典 + 输入区）
+# 计划中声明的全部存储（source 3 + index 4 + state 4）+ 补录（词典 + 输入区）
 EXPECTED_STORE_IDS = {
     "kb_docs", "news_metadata", "news_archive",
-    "kb_index", "bm25", "chroma", "embedding_cache", "lightrag",
+    "kb_index", "bm25", "chroma", "embedding_cache",
     "stats", "kb_version", "conversations", "learning",
     "dictionaries", "financial_input",
 }

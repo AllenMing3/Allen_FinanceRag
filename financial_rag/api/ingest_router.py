@@ -388,22 +388,6 @@ async def api_ingest_files(req: IngestFilesRequest):
                 [(fn, os.path.join(dir_path, fn), n) for fn, _, n in file_stats], [], []),
         }
 
-    # LightRAG 图谱构建: PDF/图片解析内容送入知识图谱
-    lightrag = _state.get("lightrag")
-    if lightrag:
-        graph_docs = [
-            d for d in raw_docs
-            if d.get("meta", {}).get("parse_type") in ("pdf", "image")
-        ]
-        if graph_docs:
-            try:
-                texts = [d["text"] for d in graph_docs]
-                metas = [d.get("meta", {}) for d in graph_docs]
-                lightrag.insert_texts(texts, metas)
-                logger.info(f"[Ingest] {len(graph_docs)} 篇 PDF/图片文档已送入 LightRAG 图谱")
-            except Exception as e:
-                logger.warning(f"[Ingest] LightRAG 插入失败: {e}")
-
     # Phase 2: Assign doc_ids, dedup, then store in KB
     _assign_doc_ids(raw_docs)
     with _state_lock:
@@ -645,17 +629,6 @@ async def api_ingest_upload(files: list[UploadFile] = File(...)):
         if not raw_docs:
             return {"loaded": 0, "message": "所有文件未通过质量检查", "total": len(_state.get("kb_docs", [])),
                     "preprocessing": pp_stats, "file_results": _build_file_results(upload_entries, [], [])}
-
-        # LightRAG graph insertion
-        lightrag = _state.get("lightrag")
-        if lightrag:
-            try:
-                texts = [d["text"] for d in raw_docs]
-                metas = [d.get("meta", {}) for d in raw_docs]
-                lightrag.insert_texts(texts, metas)
-                logger.info(f"[Upload] {len(raw_docs)} docs inserted into LightRAG")
-            except Exception as e:
-                logger.warning(f"[Upload] LightRAG insert failed: {e}")
 
         # Phase 3: Store in KB
         _assign_doc_ids(raw_docs)

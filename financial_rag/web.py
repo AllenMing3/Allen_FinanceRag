@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 # 抑制第三方库噪音日志（仅显示 WARNING 及以上）
-for _noisy in ("lightrag", "nano-vectordb", "chromadb", "httpx", "openai"):
+for _noisy in ("chromadb", "httpx", "openai"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 # ---------------------------------------------------------------------------

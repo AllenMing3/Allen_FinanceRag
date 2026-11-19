@@ -23,7 +23,7 @@ from financial_rag.llm import get_llm, get_caller, LLMCaller
 class SubQuery:
     """子查询"""
     query: str          # 子查询文本
-    source: str = "all" # kb / news / graph / all
+    source: str = "all" # kb / news / all
     mode: str = "hybrid" # local / global / hybrid / mix
     purpose: str = ""   # 这个子查询的目的
 
@@ -55,7 +55,6 @@ _PLAN_SYSTEM = """你是一个查询规划器。根据用户的中文财经查�
 ## 子查询来源
 - kb: 知识库 (已导入的分析报告、文档)
 - news: 新闻 (实时新闻抓取)
-- graph: 知识图谱 (实体关系推理)
 - all: 全部来源
 
 ## 子查询模式
@@ -80,7 +79,6 @@ _PLAN_SYSTEM = """你是一个查询规划器。根据用户的中文财经查�
 2. 对比类 → 为每个对比方单独生成子查询 + 一个综合子查询
 3. 复杂分析 → 2-4 个子查询，不要超过 5 个
 4. 每个子查询要具体、可检索，避免泛泛的问题
-5. graph 来源适合实体关系推理 (如 "A 和 B 有什么关系")
 """
 
 
