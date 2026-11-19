@@ -79,13 +79,13 @@
     <div class="panel active" id="panel-overview">
       <div class="panel-header">
         <h2>系统概览</h2>
-        <p>FinRAG — 基于多 Agent 协作的金融 RAG 系统，集成 5-Phase Pipeline + 混合检索 + L1-L4 规则护栏</p>
+        <p>FinRAG — 基于多 Agent 协作的金融 RAG 系统：5-Phase Pipeline + 混合检索 + L1-L4 规则护栏 + 结论可解释性 + KB 自学习闭环</p>
       </div>
 
       <div class="overview-stats" id="overviewStats">
         <div class="stat-chip"><span class="stat-num" id="statAgents">3</span><span class="stat-label">Agents</span></div>
         <div class="stat-chip"><span class="stat-num" id="statTools">36</span><span class="stat-label">Tools</span></div>
-        <div class="stat-chip"><span class="stat-num" id="statTests">372</span><span class="stat-label">Tests</span></div>
+        <div class="stat-chip"><span class="stat-num" id="statTests">533</span><span class="stat-label">Tests</span></div>
         <div class="stat-chip"><span class="stat-num" id="statDocs">-</span><span class="stat-label">KB Docs</span></div>
         <div class="stat-chip"><span class="stat-num" id="statIndex">-</span><span class="stat-label">Index</span></div>
         <div class="stat-chip"><span class="stat-num" id="statModel">-</span><span class="stat-label">LLM</span></div>
@@ -141,9 +141,9 @@
       <div class="ov-section">
         <h3 class="ov-title">Hybrid Retrieval Pipeline</h3>
         <div class="retrieval-chain">
-          <div class="rc-node"><div class="rc-icon">🔤</div><div class="rc-name">BM25</div><div class="rc-detail">jieba trigram 分词<br>权重 0.3</div></div>
+          <div class="rc-node"><div class="rc-icon">🔤</div><div class="rc-name">BM25</div><div class="rc-detail">jieba 分词 · FTS5 增量索引<br>权重 0.5</div></div>
           <div class="rc-plus">+</div>
-          <div class="rc-node"><div class="rc-icon">🧮</div><div class="rc-name">ChromaDB</div><div class="rc-detail">HNSW ANN 语义检索<br>1024-dim · 权重 0.7</div></div>
+          <div class="rc-node"><div class="rc-icon">🧮</div><div class="rc-name">ChromaDB</div><div class="rc-detail">HNSW ANN 语义检索<br>1024-dim · 权重 0.5</div></div>
           <div class="rc-arrow">→</div>
           <div class="rc-node"><div class="rc-icon">🔀</div><div class="rc-name">RRF Fusion</div><div class="rc-detail">Reciprocal Rank Fusion<br>k=60 · MD5 去重</div></div>
           <div class="rc-arrow">→</div>
@@ -158,7 +158,7 @@
         <div class="guard-layers">
           <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:100%;background:var(--accent)"></div></div><div class="gl-info"><span class="gl-name">L1 来源锚定</span><span class="gl-weight">42%</span><span class="gl-desc">jieba 分词 → 逐句 token 重叠率 ≥ 30% 视为有来源支撑</span></div></div>
           <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:60%;background:var(--accent2)"></div></div><div class="gl-info"><span class="gl-name">L2 数值一致</span><span class="gl-weight">25%</span><span class="gl-desc">提取「数字+单位」对，交叉比对检索源，防止编造数据</span></div></div>
-          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--ok)"></div></div><div class="gl-info"><span class="gl-name">L3 引用完整</span><span class="gl-weight">17%</span><span class="gl-desc">[N] 标记存在且 N 对应有效来源，防止伪引用</span></div></div>
+          <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--ok)"></div></div><div class="gl-info"><span class="gl-name">L3 引用完整</span><span class="gl-weight">17%</span><span class="gl-desc">[N] 标记存在且 N 对应有效来源，防止伪引用（深度分析接受文字引用）</span></div></div>
           <div class="gl-row"><div class="gl-bar-wrap"><div class="gl-bar" style="width:40%;background:var(--warn)"></div></div><div class="gl-info"><span class="gl-name">L4 结构规范</span><span class="gl-weight">17%</span><span class="gl-desc">检测摘要/要点/分析/风险等预期段落是否存在</span></div></div>
         </div>
         <p style="font-size:10px;color:var(--text3);margin-top:8px">L1-L4 确定性规则层（零 LLM、毫秒级）每层得分透明嵌入最终输出 · 深度语义评判由离线 RAGAS faithfulness 评估承担</p>
@@ -361,7 +361,7 @@
           <select class="input" id="tool-kline-period" style="flex:none;width:80px"><option value="daily">日K</option><option value="weekly">周K</option></select>
           <button class="btn btn-primary btn-sm" onclick="window._runKlineTool()">分析</button>
         </div>
-        <div class="dev-notice"><span>🚧</span><span>该功能持续开发中，部分技术指标可能尚未完善</span></div>
+        <div class="dev-notice"><span>ℹ️</span><span>真实行情需配置 TUSHARE_TOKEN（.env）；MOCK 模式下使用示例数据</span></div>
         <div id="tool-kline-result" class="kline-result"></div>
       </div>
     </div>

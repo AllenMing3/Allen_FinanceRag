@@ -108,7 +108,7 @@ function renderScoreExplain(hal) {
 
   const l4 = layers.L4_structure_compliance;
   if (l4) {
-    h += `<div style="margin-bottom:6px"><strong>结构规范 ${((l4.score || 0) * 100).toFixed(0)}%</strong> = 命中的期望段落 ÷ 4（关键信号/影响分析/风险提示/后续关注）。`;
+    h += `<div style="margin-bottom:6px"><strong>结构规范 ${((l4.score || 0) * 100).toFixed(0)}%</strong> = 命中的期望段落 ÷ 4（关键信号/影响分析/风险提示/后续关注），命中≥2段额外加 20%（封顶 100%）。`;
     if (l4.missing_sections && l4.missing_sections.length) {
       h += `<div style="color:var(--warn);margin-top:3px">缺失段落：${l4.missing_sections.map(escHtml).join('、')}</div>`;
     }
