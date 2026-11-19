@@ -130,10 +130,11 @@ async def api_kb_status():
     }
 
 
+# 重端点用同步 def：FastAPI 自动将其扔进线程池，避免阻塞事件循环。
 @router.post("/api/kb-query")
-async def api_kb_query(req: QueryRequest):
+def api_kb_query(req: QueryRequest):
     """Query against the built KB with full source citation"""
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
     logger.info(f"[API] /kb-query: query={req.query!r}, top_k={req.top_k}")
     from financial_rag.core.scorer import PipelineScoreCard, ScoreGrade
     from financial_rag.guard.service import ReliabilityService
@@ -260,9 +261,9 @@ async def api_kb_query(req: QueryRequest):
 
 
 @router.post("/api/build")
-async def api_build_kb(req: BuildRequest):
+def api_build_kb(req: BuildRequest):
     """Build index from accumulated KB documents (incremental by default)"""
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
     documents = req.documents or _state.get("kb_docs", [])
     if not documents:
         raise HTTPException(400, "没有文档可索引，请先摄取数据")
@@ -484,9 +485,9 @@ def _resolve_text(text: str, doc_index: int) -> tuple:
 
 
 @router.post("/api/pipeline/clean-report")
-async def api_pipeline_clean_report(req: CleanReportRequest):
+def api_pipeline_clean_report(req: CleanReportRequest):
     """清洗报告: 对一段文本运行 TextPreprocessor，返回清洗前后对比 + 评分"""
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
     from financial_rag.retrievers.preprocessor import TextPreprocessor
     from financial_rag.core.ingestion_scorer import IngestionScoreCard
 
@@ -550,9 +551,9 @@ async def api_pipeline_clean_report(req: CleanReportRequest):
 
 
 @router.post("/api/pipeline/chunk-demo")
-async def api_pipeline_chunk_demo(req: ChunkDemoRequest):
+def api_pipeline_chunk_demo(req: ChunkDemoRequest):
     """切片 + 分词 Demo: 对一段文本切片，展示前 3 个 chunk 的分词结果"""
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
     from financial_rag.retrievers.chunker import TextChunker
     from financial_rag.retrievers.bm25_engine import BM25Engine
     from financial_rag.retrievers.dictionaries import FINANCIAL_TERMS, INDUSTRY_TERMS
@@ -648,9 +649,9 @@ async def api_pipeline_chunk_demo(req: ChunkDemoRequest):
 
 
 @router.get("/api/pipeline/dict-stats")
-async def api_pipeline_dict_stats():
+def api_pipeline_dict_stats():
     """词典利用率报告: 扫描 KB 文档，报告每个词典的命中情况"""
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
     from financial_rag.retrievers.dictionaries import (
         FINANCIAL_TERMS, INDUSTRY_TERMS, ACTION_TERMS, STOCK_MAP,
         JIEBA_FINANCE_WORDS, SYNONYM_LOOKUP, CONCEPT_MAP,

@@ -9,7 +9,6 @@ Endpoints:
 - GET  /api/ingest/progress
 - POST /api/ingest/news
 """
-import asyncio
 import os
 import shutil
 import tempfile
@@ -280,14 +279,15 @@ async def api_directories():
     return {"directories": results}
 
 
+# 重端点用同步 def：FastAPI 自动将其扔进线程池，避免阻塞事件循环。
 @router.post("/api/ingest/files")
-async def api_ingest_files(req: IngestFilesRequest):
+def api_ingest_files(req: IngestFilesRequest):
     """Load and optionally analyze documents from a directory into the KB.
 
     File reading is synchronous. Heavy LLM analysis runs in background thread.
     Poll GET /api/ingest/progress for status.
     """
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
     import json
 
     if _ingest_progress.get("running"):
@@ -565,12 +565,12 @@ async def api_ingest_progress():
 
 
 @router.post("/api/ingest/upload")
-async def api_ingest_upload(files: list[UploadFile] = File(...)):
+def api_ingest_upload(files: list[UploadFile] = File(...)):
     """Upload PDF/image files directly for parsing and ingestion.
 
     Accepted types: .pdf, .png, .jpg, .jpeg, .webp
     """
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
 
     if _ingest_progress.get("running"):
         raise HTTPException(409, f"导入正在进行中: {_ingest_progress['current']}/{_ingest_progress['total']}")
@@ -661,13 +661,13 @@ async def api_ingest_upload(files: list[UploadFile] = File(...)):
 
 
 @router.post("/api/ingest/news")
-async def api_ingest_news(req: IngestNewsRequest):
+def api_ingest_news(req: IngestNewsRequest):
     """Fetch news, store metadata, AND auto-import quality articles to KB.
 
     Quality gate: articles with content >= 100 chars after cleaning pass
     through preprocessing and get added to KB for retrieval.
     """
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
     from financial_rag.tools.news_tools import run_news_pipeline
 
     logger.info(f"[API] /ingest/news: query={req.query!r}, max_news={req.max_news}")

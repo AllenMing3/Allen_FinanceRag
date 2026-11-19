@@ -6,7 +6,6 @@ Endpoints:
 - POST /api/slot
 - POST /api/score
 """
-import asyncio
 import time
 import logging
 
@@ -24,9 +23,10 @@ router = APIRouter()
 # ===================== Endpoints =====================
 
 
+# 重端点用同步 def：FastAPI 自动将其扔进线程池，避免阻塞事件循环。
 @router.post("/api/pipeline")
-async def api_pipeline(req: QueryRequest):
-    await asyncio.to_thread(_ensure_init)
+def api_pipeline(req: QueryRequest):
+    _ensure_init()
     logger.info(f"[API] /pipeline: query={req.query!r}, template={req.template}, verbose={req.verbose}")
     if not _state["has_key"]:
         raise HTTPException(400, "Pipeline 需要 DASHSCOPE_API_KEY")
@@ -40,8 +40,20 @@ async def api_pipeline(req: QueryRequest):
         "news": NEWS_BRIEF_TEMPLATE, "deep": DEEP_ANALYSIS_TEMPLATE,
     }
     template = tmpl_map.get(req.template, QUICK_QA_TEMPLATE)
-    scheduler = _state["scheduler"]
-    scheduler.config.verbose = req.verbose
+    # scheduler/orchestrator 每请求新建：两者均持实例级可变状态
+    # （orchestrator.pipeline/context、scheduler.config.verbose），共享单例并发下互相覆写。
+    from financial_rag.core.factory import create_orchestrator
+    from financial_rag.core.pipeline import PipelineConfig, create_pipeline_scheduler
+    scheduler = create_pipeline_scheduler(
+        orchestrator=create_orchestrator(
+            retriever=_state.get("retriever"), llm=_state.get("llm")),
+        retriever=_state.get("retriever"),
+        registry=_state.get("registry"),
+        executor=_state.get("executor"),
+        llm=_state.get("llm"),
+        filler=_state.get("filler"),
+        config=PipelineConfig(verbose=req.verbose),
+    )
 
     result = scheduler.run(
         query=req.query, template=template,
@@ -76,8 +88,8 @@ async def api_pipeline(req: QueryRequest):
 
 
 @router.post("/api/slot")
-async def api_slot(req: SlotRequest):
-    await asyncio.to_thread(_ensure_init)
+def api_slot(req: SlotRequest):
+    _ensure_init()
     if not _state["has_key"]:
         raise HTTPException(400, "槽位填充需要 DASHSCOPE_API_KEY")
 
@@ -150,8 +162,8 @@ async def api_slot(req: SlotRequest):
 
 
 @router.post("/api/score")
-async def api_score(req: ScoreRequest):
-    await asyncio.to_thread(_ensure_init)
+def api_score(req: ScoreRequest):
+    _ensure_init()
     r = _state["retriever"]
     if not _state.get("kb_built"):
         docs = _state.get("kb_docs", [])

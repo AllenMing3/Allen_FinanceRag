@@ -71,8 +71,7 @@ def _ensure_init():
             return
         from financial_rag.config import config as _cfg
         from financial_rag.llm import get_llm
-        from financial_rag.core.factory import create_orchestrator, create_hybrid_retriever
-        from financial_rag.core.pipeline import PipelineConfig, create_pipeline_scheduler
+        from financial_rag.core.factory import create_hybrid_retriever
         from financial_rag.tools import create_financial_registry, ToolExecutor, create_tool_session
         from financial_rag.slot_filler import create_slot_filler
 
@@ -95,16 +94,8 @@ def _ensure_init():
         _state["registry"] = create_financial_registry(retriever=_state["retriever"], llm=_state["llm"])
         _state["executor"] = ToolExecutor(_state["registry"])
         _state["filler"] = create_slot_filler(llm=_state["llm"], verbose=False) if _state["llm"] else None
-        _state["orchestrator"] = create_orchestrator(retriever=_state["retriever"], llm=_state["llm"])
-        _state["scheduler"] = create_pipeline_scheduler(
-            orchestrator=_state["orchestrator"],
-            retriever=_state["retriever"],
-            registry=_state["registry"],
-            executor=_state["executor"],
-            llm=_state["llm"],
-            filler=_state["filler"],
-            config=PipelineConfig(verbose=False),
-        )
+        # orchestrator/scheduler 不再全局单例：两者持实例级可变状态（pipeline/context、
+        # config.verbose），并发请求共享会互相覆写。由端点每请求经 factory 新建。
         _state["kb_docs"] = _load_kb()
         _state["kb_built"] = False
 

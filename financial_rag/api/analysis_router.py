@@ -166,9 +166,12 @@ def _run_analysis_via_agent_chain(intent: str, raw_input: str, metadata: dict, p
 
     Returns: 前端期望的 result dict，或 None（链失败时走 fallback）。
     """
-    orch = _state.get("orchestrator")
-    if not orch:
-        return None
+    # orchestrator 每请求新建：pipeline/context 是实例级可变状态，
+    # 共享单例在并发请求下会互相覆写链与上下文（结论串台）。
+    # 工厂创建开销极小（无 API 调用），agent/registry 随之全新、天然隔离。
+    from financial_rag.core.factory import create_orchestrator
+    orch = create_orchestrator(
+        retriever=_state.get("retriever"), llm=_state.get("llm"))
 
     orch.set_pipeline(["AnalysisAgent", "ScoringAgent"])
     context = AgentContext(
@@ -261,10 +264,12 @@ async def api_config():
     return _config_cache
 
 
+# 重端点用同步 def：FastAPI 自动将其扔进线程池，避免阻塞事件循环。
+# 若用 async def + 同步重活，单个分析会冻结全站（含轻量端点与静态资源）。
 @router.post("/api/analyze/news")
-async def api_analyze_news(req: AnalyzeNewsRequest):
+def api_analyze_news(req: AnalyzeNewsRequest):
     """Analyze pasted news text via Agent chain: AnalysisAgent → ScoringAgent"""
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
 
     text = req.text.strip()
     if not text:
@@ -334,9 +339,9 @@ async def api_analyze_news(req: AnalyzeNewsRequest):
 
 
 @router.post("/api/analyze/topic")
-async def api_analyze_topic(req: AnalyzeTopicRequest):
+def api_analyze_topic(req: AnalyzeTopicRequest):
     """Topic research via Agent chain: AnalysisAgent → ScoringAgent"""
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
 
     topic = req.topic.strip()
     if not topic:
@@ -442,8 +447,8 @@ async def api_metadata_status():
 
 
 @router.post("/api/news")
-async def api_news(req: NewsRequest):
-    await asyncio.to_thread(_ensure_init)
+def api_news(req: NewsRequest):
+    _ensure_init()
     from financial_rag.tools.news_tools import run_news_pipeline
 
     data = run_news_pipeline(
@@ -503,9 +508,9 @@ async def api_news(req: NewsRequest):
 
 
 @router.post("/api/kline")
-async def api_kline(req: KlineRequest):
+def api_kline(req: KlineRequest):
     """K线技术分析 — 按需查询，不进知识库"""
-    await asyncio.to_thread(_ensure_init)
+    _ensure_init()
     from financial_rag.core.base import AgentContext
     from financial_rag.agents.analysis_agent import AnalysisAgent
 
