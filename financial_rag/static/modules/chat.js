@@ -113,6 +113,7 @@ window._deleteChatSession = async function (id) {
 
 export async function sendFollowup() {
   if (!chatSessionId) return;
+  const sid = chatSessionId; // 在途请求守卫：响应返回时若已切会话则丢弃渲染
   const input = document.getElementById('chatFollowupInput');
   const msg = input?.value.trim();
   if (!msg) return;
@@ -127,7 +128,8 @@ export async function sendFollowup() {
   const sendBtn = document.getElementById('chatSendBtn');
   if (sendBtn) sendBtn.disabled = true;
   try {
-    const d = await api('/api/chat/followup', { session_id: chatSessionId, message: msg });
+    const d = await api('/api/chat/followup', { session_id: sid, message: msg });
+    if (sid !== chatSessionId) return; // 已切会话：回答属于旧会话，不画进当前 DOM
     const loading = document.getElementById('chatLoading');
     if (loading) loading.remove();
     if (d.error) {
@@ -140,12 +142,15 @@ export async function sendFollowup() {
     }
     messagesEl.scrollTop = messagesEl.scrollHeight;
   } catch (e) {
+    if (sid !== chatSessionId) return; // 已切会话：错误也不画进当前 DOM
     const loading = document.getElementById('chatLoading');
     if (loading) loading.remove();
     messagesEl.innerHTML += `<div class="chat-msg assistant" style="color:var(--danger)">❌ ${escHtml(e.message)}</div>`;
     toast('发送失败: ' + e.message, 'error');
+  } finally {
+    // 无论是否切会话，输入控件必须恢复可用
+    input.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
+    if (sid === chatSessionId) input.focus();
   }
-  input.disabled = false;
-  if (sendBtn) sendBtn.disabled = false;
-  input.focus();
 }

@@ -279,10 +279,12 @@ class TestFollowupTool:
         # 诊断恒返回：即使 KB 未构建
         assert "kb_search_info" in result
         assert result["kb_search_info"]["kb_built"] is False
-        # 用户消息先落盘
+        # 用户消息先落盘；错误也落盘为 assistant 消息（档案与 UI 一致，不留悬空问句）
         s = cm.get_session(session_id)
-        assert s.messages[-1].role == "user"
-        assert s.messages[-1].content == "为什么是利好？"
+        assert s.messages[-2].role == "user"
+        assert s.messages[-2].content == "为什么是利好？"
+        assert s.messages[-1].role == "assistant"
+        assert s.messages[-1].metadata.get("error") is True
 
     @pytest.mark.critical
     def test_offline_retrieval_wiring(self, cm, session_id, tmp_path):

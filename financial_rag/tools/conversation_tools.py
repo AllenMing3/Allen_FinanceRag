@@ -130,8 +130,10 @@ def _followup_impl(cm, session, session_id: str, message: str) -> Dict[str, Any]
 
     llm = _conv_refs.get("llm")
     if llm is None:
-        return {"error": "追问需要 LLM（未配置 DASHSCOPE_API_KEY）",
-                "kb_search_info": kb_search_info}
+        err = "追问需要 LLM（未配置 DASHSCOPE_API_KEY）"
+        # 错误也落盘：档案与 UI 一致，不留悬空 user 问句
+        cm.add_message(session_id, "assistant", err, metadata={"error": True})
+        return {"error": err, "kb_search_info": kb_search_info}
 
     # 3. 证据组装（档案 + 新检索，LLM/Guard 同源）
     assembled = assemble_followup_context(session.context, new_results)
@@ -153,14 +155,17 @@ def _followup_impl(cm, session, session_id: str, message: str) -> Dict[str, Any]
         answer = resp.content
     except Exception as e:
         logger.error(f"[followup] LLM 失败: {e}")
-        return {"error": f"分析过程中出现错误: {e}",
-                "kb_search_info": kb_search_info}
+        err = f"分析过程中出现错误: {e}"
+        cm.add_message(session_id, "assistant", err, metadata={"error": True})
+        return {"error": err, "kb_search_info": kb_search_info}
 
     # 5. L1-L4 校验（与证据同源）
     hallucination = check_followup_answer(answer, assembled)
     elapsed_ms = round((time.time() - t0) * 1000)
+    hinfo = cm.history_info(session)
     logger.info(f"[followup] 完成: {elapsed_ms}ms, "
-                f"guard risk={hallucination.get('risk')}")
+                f"guard risk={hallucination.get('risk')}, "
+                f"历史水位 {hinfo['compressed_upto']}/{hinfo['total_messages']}")
 
     # 6. 助手回答落盘（带诊断摘要 + 完整证据，供 eval/backflow 回流取样）
     cm.add_message(session_id, "assistant", answer, metadata={
@@ -178,6 +183,7 @@ def _followup_impl(cm, session, session_id: str, message: str) -> Dict[str, Any]
         "hallucination": hallucination,
         "kb_search_info": kb_search_info,
         "context_trace": assembled.trace.to_dict(),
+        "history_info": hinfo,
     }
 
 
