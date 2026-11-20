@@ -278,6 +278,7 @@ class LLMCaller:
         system: Optional[str] = None,
         max_json_retries: int = 2,
         use_cache: bool = True,
+        return_meta: bool = False,
         **kwargs,
     ) -> Optional[Union[Dict, List]]:
         """调用 LLM 并期望 JSON 输出，解析失败自动重试。
@@ -287,13 +288,28 @@ class LLMCaller:
             system: system prompt（自动追加 JSON 输出提示）
             max_json_retries: JSON 解析失败时最大重试次数
             use_cache: 是否使用缓存
+            return_meta: True 时返回 (data, meta) 二元组；meta 含 elapsed_ms/
+                attempts/usage(重试累加)/finish_reason/cache_hit/model，
+                供调用方透出消耗诊断（默认 False，既有调用方零影响）
             **kwargs: 透传给 llm.chat()
 
         Returns:
-            解析后的 Dict/List，或 None（全部重试耗尽仍无法解析）
+            解析后的 Dict/List，或 None（全部重试耗尽仍无法解析）；
+            return_meta=True 时为 (data, meta)
         """
         # 追加 JSON 输出约束到 system prompt
         json_system = (system or DEFAULT_SYSTEM_CONSTRAINTS) + JSON_OUTPUT_HINT
+
+        meta = {
+            "elapsed_ms": 0.0, "attempts": 0,
+            "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+            "finish_reason": "", "cache_hit": False, "model": "",
+        }
+        t0 = time.time()
+        if return_meta and use_cache and self.cache_ttl > 0:
+            # 预查首轮缓存：命中标记供调用方区分"真消耗"与"缓存复用"
+            key = self._hash(self._build_messages(messages, json_system), kwargs)
+            meta["cache_hit"] = self._get_cached(key) is not None
 
         for attempt in range(max_json_retries + 1):
             # 每次重试禁用缓存（避免拿到相同的错误响应）
@@ -303,6 +319,16 @@ class LLMCaller:
                 use_cache=(use_cache and attempt == 0),
                 **kwargs,
             )
+            if return_meta:
+                meta["attempts"] += 1
+                usage = getattr(resp, "usage", None) or {}
+                meta["usage"]["input_tokens"] += usage.get(
+                    "input_tokens", usage.get("prompt_tokens", 0)) or 0
+                meta["usage"]["output_tokens"] += usage.get(
+                    "output_tokens", usage.get("completion_tokens", 0)) or 0
+                meta["usage"]["total_tokens"] += usage.get("total_tokens", 0) or 0
+                meta["finish_reason"] = getattr(resp, "finish_reason", "") or ""
+                meta["model"] = getattr(resp, "model", "") or meta["model"]
 
             content = resp.content or ""
             logger.info(
@@ -316,12 +342,18 @@ class LLMCaller:
             result = parse_json_from_text(content)
             if result is not None:
                 logger.info(f"[LLMCaller] JSON 解析成功, keys={list(result.keys()) if isinstance(result, dict) else 'list'}")
+                if return_meta:
+                    meta["elapsed_ms"] = round((time.time() - t0) * 1000, 1)
+                    return result, meta
                 return result
 
             # 尝试解析 list
             list_result = parse_json_list_from_text(content)
             if list_result is not None:
                 logger.info(f"[LLMCaller] JSON list 解析成功, len={len(list_result)}")
+                if return_meta:
+                    meta["elapsed_ms"] = round((time.time() - t0) * 1000, 1)
+                    return list_result, meta
                 return list_result
 
             logger.warning(
@@ -329,6 +361,9 @@ class LLMCaller:
             )
 
         logger.error("[LLMCaller] JSON 解析全部重试耗尽，返回 None")
+        if return_meta:
+            meta["elapsed_ms"] = round((time.time() - t0) * 1000, 1)
+            return None, meta
         return None
 
     # ---------- Function Calling 调用 ----------

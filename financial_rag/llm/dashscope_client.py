@@ -128,7 +128,7 @@ class DashScopeLLM:
             return LLMResponse(
                 content=resp.output.choices[0].message.content,
                 model=self.model,
-                usage=resp.usage.__dict__ if resp.usage else {},
+                usage=dict(resp.usage) if resp.usage else {},
                 finish_reason=resp.output.choices[0].finish_reason or "",
             )
         else:
@@ -189,7 +189,7 @@ class DashScopeLLM:
             return LLMResponse(
                 content=msg.content or "",
                 model=self.model,
-                usage=resp.usage.__dict__ if resp.usage else {},
+                usage=dict(resp.usage) if resp.usage else {},
                 finish_reason=choice.finish_reason or "",
                 tool_calls=tool_calls,
             )
@@ -249,7 +249,7 @@ class DashScopeLLM:
             return LLMResponse(
                 content=content,
                 model=model,
-                usage=resp.usage.__dict__ if resp.usage else {},
+                usage=dict(resp.usage) if resp.usage else {},
                 finish_reason=resp.output.choices[0].finish_reason or "",
             )
         else:

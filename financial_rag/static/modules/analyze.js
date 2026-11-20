@@ -19,6 +19,28 @@ function renderVerdictBasis(s) {
   return h;
 }
 
+// ── 研判消耗摘要（耗时/token/重试/截断/缓存 — 不再静默）──
+
+function renderAssessmentStats(stats) {
+  if (!stats) return '';
+  const pathLabel = {
+    llm_json: 'JSON 结构化', llm_freetext: '自由文本降级',
+    llm_failed: 'LLM 失败', rule: '规则分析', no_llm: '无 LLM',
+  }[stats.path] || stats.path;
+  let h = '<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:8px">';
+  h += `⏱ ${((stats.elapsed_ms || 0) / 1000).toFixed(1)}s`;
+  const tk = stats.tokens || {};
+  if (tk.total_tokens > 0) {
+    h += ` · 🔤 ${tk.total_tokens} tokens（入 ${tk.input_tokens || 0} / 出 ${tk.output_tokens || 0}）`;
+  }
+  h += ` · ${escHtml(pathLabel)}`;
+  if (stats.attempts > 1) h += ` · <span style="color:var(--warn, #b45309)">🔁 重试 ${stats.attempts - 1} 次</span>`;
+  if (stats.truncated) h += ' · <span style="color:var(--danger)">⚠️ 输出被截断(max_tokens)</span>';
+  if (stats.cache_hit) h += ' · ⚡ 缓存命中';
+  h += '</div>';
+  return h;
+}
+
 // ── News analysis ──
 
 export async function analyzeNews() {
@@ -39,6 +61,7 @@ export async function analyzeNews() {
 
     // Verdict
     h += `<div class="verdict-center">${verdictBadge(d.assessment)}${confidenceBadge(d.confidence)}</div>`;
+    h += renderAssessmentStats(d.assessment_stats);
     if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:8px">💾 分析结论已存入知识库</div>`;
     h += renderVerdictBasis(s);
     h += renderHallucinationCard(d.hallucination, { kbSearchInfo: d.kb_search_info, entities: d.entities });
@@ -148,6 +171,7 @@ export async function analyzeTopic() {
     const s = d.structured || {};
     let h = '<div style="margin-top:12px">';
     h += `<div class="verdict-center">${verdictBadge(d.assessment)}${confidenceBadge(d.confidence)}</div>`;
+    h += renderAssessmentStats(d.assessment_stats);
     if (d.saved_to_kb) h += `<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:8px">💾 研判结论已存入知识库</div>`;
     h += renderVerdictBasis(s);
     h += renderHallucinationCard(d.hallucination, { kbSearchInfo: d.kb_search_info, topic: d.topic });

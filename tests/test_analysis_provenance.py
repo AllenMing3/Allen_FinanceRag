@@ -32,12 +32,18 @@ class _StubCaller:
     def call_json(self, user, **kwargs):
         if self.json_error:
             raise self.json_error
+        if kwargs.get("return_meta"):
+            meta = {"elapsed_ms": 0.0, "attempts": 1,
+                    "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+                    "finish_reason": "stop", "cache_hit": False, "model": "stub"}
+            return self.json_result, meta
         return self.json_result
 
     def call(self, user, **kwargs):
         if self.text_error:
             raise self.text_error
-        return SimpleNamespace(content=self.text_content)
+        return SimpleNamespace(content=self.text_content, usage={},
+                               finish_reason="stop", model="stub")
 
 
 @pytest.fixture

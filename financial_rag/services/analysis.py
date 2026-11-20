@@ -81,12 +81,19 @@ def analyze_news_text(
     )
 
     # 3. LLM assessment or rule-based fallback
+    import time as _time
+    _t_assess = _time.time()
     if llm:
-        assessment, structured, confidence, analysis_path = _llm_news_assessment(llm, text, doc_type, metrics_clean, entities_clean, kb_ctx.grounding_text)
+        assessment, structured, confidence, analysis_path, assessment_stats = _llm_news_assessment(llm, text, doc_type, metrics_clean, entities_clean, kb_ctx.grounding_text)
     else:
         assessment, structured = _heuristic_assessment(text, doc_type, metrics_clean, entities_clean)
         confidence = ""
         analysis_path = "rule"
+        assessment_stats = {
+            "path": "rule", "elapsed_ms": round((_time.time() - _t_assess) * 1000, 1),
+            "attempts": 0, "tokens": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+            "finish_reason": "", "truncated": False, "cache_hit": False, "model": "",
+        }
 
     # Extract plain-text analysis from structured dict
     analysis_text = structured.get("analysis", "") if isinstance(structured, dict) else str(structured)
@@ -103,6 +110,7 @@ def analyze_news_text(
         "kb_grounding": kb_ctx.source_items,
         "kb_search_info": kb_search_info,
         "analysis_path": analysis_path,
+        "assessment_stats": assessment_stats,
     }
 
 
@@ -180,11 +188,16 @@ def analyze_topic_research(
     logger.info(f"[analyze_topic] 步骤 3/4: LLM 研判...")
     t2 = _time.time()
     if llm:
-        assessment, structured, confidence, analysis_path = _llm_topic_assessment(llm, topic, items, combined_text, kb_ctx.grounding_text)
+        assessment, structured, confidence, analysis_path, assessment_stats = _llm_topic_assessment(llm, topic, items, combined_text, kb_ctx.grounding_text)
     else:
         assessment = "neutral"
         confidence = ""
         analysis_path = "no_llm"
+        assessment_stats = {
+            "path": "no_llm", "elapsed_ms": round((_time.time() - t2) * 1000, 1),
+            "attempts": 0, "tokens": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+            "finish_reason": "", "truncated": False, "cache_hit": False, "model": "",
+        }
         structured = {
             "verdict": "neutral",
             "confidence": "low",
@@ -220,6 +233,7 @@ def analyze_topic_research(
         "kb_grounding": kb_ctx.source_items,
         "kb_search_info": kb_search_info,
         "analysis_path": analysis_path,
+        "assessment_stats": assessment_stats,
     }
 
 
@@ -544,12 +558,25 @@ def _text_to_structured_topic(text: str, verdict: str, confidence: str, items: l
 def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities: dict, kb_grounding: str) -> tuple:
     """LLM-powered news assessment with structured JSON output — via LLMCaller.
 
-    Returns: (assessment, structured, confidence, path) — path 透出生成路径
-    (llm_json / llm_freetext / llm_failed)，供前端结论出处展示。
+    Returns: (assessment, structured, confidence, path, stats) — path 透出生成路径
+    (llm_json / llm_freetext / llm_failed)，供前端结论出处展示；stats 为消耗诊断
+    (elapsed_ms/tokens/attempts/truncated/cache_hit)，重试与截断不再静默。
     """
     from financial_rag.llm.caller import LLMCaller
 
     import json as _json
+    import time as _time
+    t0 = _time.time()
+    stats = {"path": "llm_failed", "elapsed_ms": 0.0, "attempts": 0,
+             "tokens": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+             "finish_reason": "", "truncated": False, "cache_hit": False, "model": ""}
+
+    def _finish(path):
+        stats["path"] = path
+        stats["elapsed_ms"] = round((_time.time() - t0) * 1000, 1)
+        stats["truncated"] = stats["finish_reason"] == "length"
+        return stats
+
     metrics_str = _json.dumps(metrics, ensure_ascii=False, indent=2) if metrics else "无"
     entities_str = _json.dumps(entities, ensure_ascii=False, indent=2) if entities else "无"
     # grounding 已由 ContextBuilder 统一组装（句边界截断 + 预算控制），此处直接注入
@@ -567,10 +594,16 @@ def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities:
     # --- 主路径: call_json 结构化输出 ---
     try:
         caller = LLMCaller(llm)
-        data = caller.call_json(user, system=NEWS_ASSESSMENT_SYSTEM, max_tokens=1200, temperature=0.0)
+        data, meta = caller.call_json(user, system=NEWS_ASSESSMENT_SYSTEM, max_tokens=1200, temperature=0.0, return_meta=True)
+        stats["attempts"] += meta["attempts"]
+        stats["tokens"] = meta["usage"]
+        stats["finish_reason"] = meta["finish_reason"]
+        stats["cache_hit"] = meta["cache_hit"]
+        stats["model"] = meta["model"]
         if data and isinstance(data, dict) and "verdict" in data:
-            logger.info(f"[news_assessment] JSON 结构化成功: verdict={data.get('verdict')}, signals={len(data.get('key_signals', []))}")
-            return data["verdict"], data, data.get("confidence", ""), "llm_json"
+            logger.info(f"[news_assessment] JSON 结构化成功: verdict={data.get('verdict')}, signals={len(data.get('key_signals', []))}, "
+                        f"tokens={meta['usage']['total_tokens']}, attempts={meta['attempts']}, finish={meta['finish_reason']}")
+            return data["verdict"], data, data.get("confidence", ""), "llm_json", _finish("llm_json")
     except Exception as e:
         logger.warning(f"[news_assessment] call_json 失败，降级到 free-text: {e}")
 
@@ -579,22 +612,40 @@ def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities:
         caller = LLMCaller(llm)
         fallback_user = NEWS_ASSESSMENT_USER.format(instruction="请给出你的分析。", **user_kwargs)
         resp = caller.call(fallback_user, system=NEWS_ASSESSMENT_FALLBACK_SYSTEM, max_tokens=800)
+        usage = getattr(resp, "usage", None) or {}
+        stats["attempts"] += 1
+        for k in ("input_tokens", "output_tokens", "total_tokens"):
+            stats["tokens"][k] += usage.get(k, 0) or 0
+        stats["finish_reason"] = getattr(resp, "finish_reason", "") or stats["finish_reason"]
+        stats["model"] = getattr(resp, "model", "") or stats["model"]
         verdict = _parse_verdict(resp.content)
         confidence = _extract_confidence(resp.content)
         # 包装为结构化格式
         structured = _text_to_structured_news(resp.content, verdict, confidence)
-        return verdict, structured, confidence, "llm_freetext"
+        return verdict, structured, confidence, "llm_freetext", _finish("llm_freetext")
     except Exception as e:
         logger.warning(f"LLM news analysis failed: {e}")
-        return "unknown", {"analysis": f"LLM 分析失败: {e}", "verdict": "unknown"}, "", "llm_failed"
+        return "unknown", {"analysis": f"LLM 分析失败: {e}", "verdict": "unknown"}, "", "llm_failed", _finish("llm_failed")
 
 
 def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_grounding: str) -> tuple:
     """LLM-powered topic research assessment with structured JSON output — via LLMCaller.
 
-    Returns: (assessment, structured, confidence, path) — path 同 _llm_news_assessment。
+    Returns: (assessment, structured, confidence, path, stats) — 同 _llm_news_assessment。
     """
     from financial_rag.llm.caller import LLMCaller
+
+    import time as _time
+    t0 = _time.time()
+    stats = {"path": "llm_failed", "elapsed_ms": 0.0, "attempts": 0,
+             "tokens": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+             "finish_reason": "", "truncated": False, "cache_hit": False, "model": ""}
+
+    def _finish(path):
+        stats["path"] = path
+        stats["elapsed_ms"] = round((_time.time() - t0) * 1000, 1)
+        stats["truncated"] = stats["finish_reason"] == "length"
+        return stats
 
     news_preview = "\n".join(
         f"  - [{item.get('source', '')}] {item.get('title', '')}"
@@ -616,10 +667,16 @@ def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_g
     # --- 主路径: call_json 结构化输出 ---
     try:
         caller = LLMCaller(llm)
-        data = caller.call_json(user, system=TOPIC_ASSESSMENT_SYSTEM, max_tokens=1500, temperature=0.0)
+        data, meta = caller.call_json(user, system=TOPIC_ASSESSMENT_SYSTEM, max_tokens=1500, temperature=0.0, return_meta=True)
+        stats["attempts"] += meta["attempts"]
+        stats["tokens"] = meta["usage"]
+        stats["finish_reason"] = meta["finish_reason"]
+        stats["cache_hit"] = meta["cache_hit"]
+        stats["model"] = meta["model"]
         if data and isinstance(data, dict) and "verdict" in data:
-            logger.info(f"[topic_assessment] JSON 结构化成功: verdict={data.get('verdict')}, sub_topics={len(data.get('sub_topics', []))}, players={len(data.get('key_players', []))}")
-            return data["verdict"], data, data.get("confidence", ""), "llm_json"
+            logger.info(f"[topic_assessment] JSON 结构化成功: verdict={data.get('verdict')}, sub_topics={len(data.get('sub_topics', []))}, players={len(data.get('key_players', []))}, "
+                        f"tokens={meta['usage']['total_tokens']}, attempts={meta['attempts']}, finish={meta['finish_reason']}")
+            return data["verdict"], data, data.get("confidence", ""), "llm_json", _finish("llm_json")
     except Exception as e:
         logger.warning(f"[topic_assessment] call_json 失败，降级到 free-text: {e}")
 
@@ -628,13 +685,19 @@ def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_g
         caller = LLMCaller(llm)
         fallback_user = TOPIC_ASSESSMENT_USER.format(instruction="请给出综合研判。", **user_kwargs)
         resp = caller.call(fallback_user, system=TOPIC_ASSESSMENT_FALLBACK_SYSTEM, max_tokens=1000)
+        usage = getattr(resp, "usage", None) or {}
+        stats["attempts"] += 1
+        for k in ("input_tokens", "output_tokens", "total_tokens"):
+            stats["tokens"][k] += usage.get(k, 0) or 0
+        stats["finish_reason"] = getattr(resp, "finish_reason", "") or stats["finish_reason"]
+        stats["model"] = getattr(resp, "model", "") or stats["model"]
         verdict = _parse_verdict(resp.content)
         confidence = _extract_confidence(resp.content)
         structured = _text_to_structured_topic(resp.content, verdict, confidence, items)
-        return verdict, structured, confidence, "llm_freetext"
+        return verdict, structured, confidence, "llm_freetext", _finish("llm_freetext")
     except Exception as e:
         logger.warning(f"LLM topic analysis failed: {e}")
-        return "unknown", {"analysis": f"LLM 分析失败: {e}", "verdict": "unknown"}, "", "llm_failed"
+        return "unknown", {"analysis": f"LLM 分析失败: {e}", "verdict": "unknown"}, "", "llm_failed", _finish("llm_failed")
 
 
 def _heuristic_assessment(text: str, doc_type: str, metrics: dict, entities: dict) -> tuple:
