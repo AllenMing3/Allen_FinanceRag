@@ -8,10 +8,14 @@ import { renderHallucinationCard, renderKbSearchInfo, renderProvenance } from '.
 
 function renderVerdictBasis(s) {
   if (!s || !s.verdict) return '';
-  if (!s.verdict_reasoning && !s.confidence_reasoning) {
-    return '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">🧭 本次分析未提供结构化判定依据（降级路径）</div>';
+  let h = '';
+  if (s.degraded) {
+    h += '<div style="font-size:11px;color:var(--warn, #b45309);margin-bottom:8px">⚠️ 降级解析：仅展示真实解析出的字段，多维影响/严重度等结构化信息不完整</div>';
   }
-  let h = '<div style="margin-bottom:12px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);border-left:3px solid var(--accent);font-size:12px">';
+  if (!s.verdict_reasoning && !s.confidence_reasoning) {
+    return h + '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">🧭 本次分析未提供结构化判定依据（降级路径）</div>';
+  }
+  h += '<div style="margin-bottom:12px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);border-left:3px solid var(--accent);font-size:12px">';
   h += '<div style="font-weight:600;margin-bottom:4px">🧭 判定依据</div>';
   if (s.verdict_reasoning) h += `<div style="line-height:1.6">${escHtml(s.verdict_reasoning)}</div>`;
   if (s.confidence_reasoning) h += `<div style="color:var(--text2);margin-top:4px;font-size:11px">置信度依据：${escHtml(s.confidence_reasoning)}</div>`;
@@ -36,8 +40,16 @@ function renderAssessmentStats(stats) {
   h += ` · ${escHtml(pathLabel)}`;
   if (stats.attempts > 1) h += ` · <span style="color:var(--warn, #b45309)">🔁 重试 ${stats.attempts - 1} 次</span>`;
   if (stats.truncated) h += ' · <span style="color:var(--danger)">⚠️ 输出被截断(max_tokens)</span>';
+  if (stats.input_truncated) h += ' · <span style="color:var(--warn, #b45309)">✂️ 输入超3000字已截断</span>';
   if (stats.cache_hit) h += ' · ⚡ 缓存命中';
   h += '</div>';
+  const warns = stats.validation_warnings || [];
+  if (warns.length) {
+    h += '<div style="font-size:11px;color:var(--warn, #b45309);margin-bottom:8px;padding:6px 10px;background:var(--surface2);border-radius:var(--radius-sm)">';
+    h += `🔍 输出校验警告 (${warns.length})：`;
+    h += warns.map(w => `<div style="margin-top:2px">• ${escHtml(w)}</div>`).join('');
+    h += '</div>';
+  }
   return h;
 }
 

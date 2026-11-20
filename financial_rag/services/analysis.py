@@ -93,6 +93,7 @@ def analyze_news_text(
             "path": "rule", "elapsed_ms": round((_time.time() - _t_assess) * 1000, 1),
             "attempts": 0, "tokens": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
             "finish_reason": "", "truncated": False, "cache_hit": False, "model": "",
+            "validation_warnings": [], "input_truncated": False,
         }
 
     # Extract plain-text analysis from structured dict
@@ -197,6 +198,7 @@ def analyze_topic_research(
             "path": "no_llm", "elapsed_ms": round((_time.time() - t2) * 1000, 1),
             "attempts": 0, "tokens": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
             "finish_reason": "", "truncated": False, "cache_hit": False, "model": "",
+            "validation_warnings": [], "input_truncated": False,
         }
         structured = {
             "verdict": "neutral",
@@ -464,20 +466,22 @@ def _extract_confidence(text: str) -> str:
 
 
 def _text_to_structured_news(text: str, verdict: str, confidence: str) -> dict:
-    """Convert free-text LLM response to structured dict (fallback parser)."""
+    """Convert free-text LLM response to structured dict (fallback parser).
+
+    诚实降级：只填真实解析出的字段，不伪造 impact 四维/severity/套话；
+    degraded=True 供前端提示结构化不完整。
+    """
     import re as _re
-    # Extract key signals section
+    # Extract key signals section（severity/type 未解析出就不填，不造假值）
     signals = []
     sig_match = _re.search(r'【关键信号】(.*?)(?=【|$)', text, _re.DOTALL)
     if sig_match:
         for line in sig_match.group(1).strip().split('\n'):
             line = line.strip().lstrip('-•·')
             if line.strip():
-                signals.append({"signal": line.strip()[:80], "severity": 3, "type": "neutral"})
-    if not signals:
-        signals.append({"signal": "见分析正文", "severity": 2, "type": "neutral"})
+                signals.append({"signal": line.strip()[:80], "type": "neutral"})
 
-    # Extract risks
+    # Extract risks（无则空数组，不填套话）
     risks = []
     risk_match = _re.search(r'【风险提示】(.*?)(?=【|$)', text, _re.DOTALL)
     if risk_match:
@@ -485,8 +489,6 @@ def _text_to_structured_news(text: str, verdict: str, confidence: str) -> dict:
             line = line.strip().lstrip('-•·')
             if line.strip():
                 risks.append(line.strip()[:80])
-    if not risks:
-        risks.append("信息不足，需进一步观察")
 
     # Extract analysis section
     analysis_match = _re.search(r'【(?:综合分析|影响分析)】(.*?)(?=【|$)', text, _re.DOTALL)
@@ -495,16 +497,10 @@ def _text_to_structured_news(text: str, verdict: str, confidence: str) -> dict:
     return {
         "verdict": verdict,
         "confidence": confidence,
-        "impact": {
-            "industry": {"direction": verdict, "summary": "见分析正文"},
-            "company": {"direction": verdict, "summary": "见分析正文"},
-            "tech": {"direction": "neutral", "summary": "见分析正文"},
-            "market": {"direction": verdict, "summary": "见分析正文"},
-        },
+        "degraded": True,
         "key_signals": signals[:4],
         "analysis": analysis_text,
         "risks": risks[:2],
-        "watch_next": ["持续关注后续动态"],
     }
 
 
@@ -512,18 +508,16 @@ def _text_to_structured_topic(text: str, verdict: str, confidence: str, items: l
     """Convert free-text LLM response to structured dict (fallback parser)."""
     import re as _re
 
-    # Extract key events
+    # Extract key events（sentiment 未解析出就不填，不造假值）
     events = []
     event_match = _re.search(r'【行业动态】(.*?)(?=【|$)', text, _re.DOTALL)
     if event_match:
         for line in event_match.group(1).strip().split('\n'):
             line = line.strip().lstrip('-•·')
             if line.strip():
-                events.append({"name": line.strip()[:50], "sentiment": "neutral", "summary": line.strip()[:80]})
-    if not events:
-        events.append({"name": "综合动态", "sentiment": "neutral", "summary": "见分析正文"})
+                events.append({"name": line.strip()[:50], "summary": line.strip()[:80]})
 
-    # Extract risks
+    # Extract risks（无则空数组，不填套话）
     risks = []
     risk_match = _re.search(r'【风险提示】(.*?)(?=【|$)', text, _re.DOTALL)
     if risk_match:
@@ -531,12 +525,10 @@ def _text_to_structured_topic(text: str, verdict: str, confidence: str, items: l
             line = line.strip().lstrip('-•·')
             if line.strip():
                 risks.append(line.strip()[:80])
-    if not risks:
-        risks.append("信息不足，需进一步观察")
 
-    # Extract investment implication
+    # Extract investment implication（无则空，不填误导文案）
     invest_match = _re.search(r'【投资启示】(.*?)(?=【|$)', text, _re.DOTALL)
-    investment = invest_match.group(1).strip() if invest_match else "配置 API Key 获取投资建议"
+    investment = invest_match.group(1).strip() if invest_match else ""
 
     # Extract analysis
     analysis_match = _re.search(r'【综合分析】(.*?)(?=【|$)', text, _re.DOTALL)
@@ -545,6 +537,7 @@ def _text_to_structured_topic(text: str, verdict: str, confidence: str, items: l
     return {
         "verdict": verdict,
         "confidence": confidence,
+        "degraded": True,
         "sub_topics": events[:4],
         "key_players": [],
         "sentiment_trend": "mixed",
@@ -555,12 +548,72 @@ def _text_to_structured_topic(text: str, verdict: str, confidence: str, items: l
     }
 
 
+_PROMPT_TEXT_LIMIT = 3000
+_TRUNCATION_MARKER = "\n\n[注：原文超过3000字已截断，以上为前3000字；结论仅基于可见部分，信息不足时请降低置信度]"
+
+
+def _truncate_for_prompt(text: str) -> str:
+    """注入 LLM 的文本截断：超限时追加显式标记，不再静默硬切。"""
+    if len(text) <= _PROMPT_TEXT_LIMIT:
+        return text
+    return text[:_PROMPT_TEXT_LIMIT] + _TRUNCATION_MARKER
+
+
+_VERDICT_ENUM = {"bullish", "bearish", "neutral"}
+_CONFIDENCE_ENUM = {"high", "medium", "low"}
+
+
+def _validate_assessment(data: dict, source_text: str, kind: str = "news") -> tuple:
+    """研判输出程序化校验（rubric 一致性不再只靠 prompt 自觉）。
+
+    Returns: (hard_errors, warnings)
+      hard_errors — verdict/confidence 非法枚举 → 调用方重试，仍失败降级
+      warnings — evidence 不在原文/severity 越界/条数超界 → 透出前端不阻断
+    evidence 契约：逐字摘录原文；'知识库:' 前缀与空串豁免（prompt 允许）。
+    """
+    errors, warns = [], []
+    if data.get("verdict") not in _VERDICT_ENUM:
+        errors.append(f"verdict 非法: {data.get('verdict')!r}")
+    if data.get("confidence") not in _CONFIDENCE_ENUM:
+        errors.append(f"confidence 非法: {data.get('confidence')!r}")
+
+    def _check_evidence(items, label):
+        for i, it in enumerate(items):
+            if not isinstance(it, dict):
+                continue
+            ev = (it.get("evidence") or "").strip()
+            if not ev or ev.startswith("知识库:") or ev.startswith("知识库："):
+                continue
+            if ev not in source_text:
+                warns.append(f"{label}[{i}] evidence 未在原文找到逐字依据: {ev[:30]!r}")
+
+    if kind == "news":
+        sigs = data.get("key_signals") or []
+        if not 2 <= len(sigs) <= 4:
+            warns.append(f"key_signals 条数越界: {len(sigs)}（契约 2-4）")
+        for i, s in enumerate(sigs):
+            if not isinstance(s, dict):
+                continue
+            sev = s.get("severity")
+            if not isinstance(sev, int) or not 1 <= sev <= 5:
+                warns.append(f"key_signals[{i}] severity 越界: {sev!r}（契约 1-5 整数）")
+        _check_evidence(sigs, "key_signals")
+    else:
+        subs = data.get("sub_topics") or []
+        for i, st in enumerate(subs):
+            if isinstance(st, dict) and st.get("sentiment") not in {"positive", "negative", "neutral"}:
+                warns.append(f"sub_topics[{i}] sentiment 非法: {st.get('sentiment')!r}")
+        _check_evidence(subs, "sub_topics")
+    return errors, warns
+
+
 def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities: dict, kb_grounding: str) -> tuple:
     """LLM-powered news assessment with structured JSON output — via LLMCaller.
 
     Returns: (assessment, structured, confidence, path, stats) — path 透出生成路径
     (llm_json / llm_freetext / llm_failed)，供前端结论出处展示；stats 为消耗诊断
-    (elapsed_ms/tokens/attempts/truncated/cache_hit)，重试与截断不再静默。
+    (elapsed_ms/tokens/attempts/truncated/cache_hit/validation_warnings/
+    input_truncated)，重试、截断与校验警告不再静默。
     """
     from financial_rag.llm.caller import LLMCaller
 
@@ -569,7 +622,8 @@ def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities:
     t0 = _time.time()
     stats = {"path": "llm_failed", "elapsed_ms": 0.0, "attempts": 0,
              "tokens": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
-             "finish_reason": "", "truncated": False, "cache_hit": False, "model": ""}
+             "finish_reason": "", "truncated": False, "cache_hit": False, "model": "",
+             "validation_warnings": [], "input_truncated": len(text) > _PROMPT_TEXT_LIMIT}
 
     def _finish(path):
         stats["path"] = path
@@ -586,24 +640,38 @@ def _llm_news_assessment(llm, text: str, doc_type: str, metrics: dict, entities:
         NEWS_ASSESSMENT_SYSTEM, NEWS_ASSESSMENT_USER, NEWS_ASSESSMENT_FALLBACK_SYSTEM,
     )
     user_kwargs = dict(
-        text=text[:3000], doc_type=doc_type, metrics=metrics_str,
+        text=_truncate_for_prompt(text), doc_type=doc_type, metrics=metrics_str,
         entities=entities_str, kb_grounding=kb_str,
     )
     user = NEWS_ASSESSMENT_USER.format(instruction="请输出 JSON 分析结果。", **user_kwargs)
 
-    # --- 主路径: call_json 结构化输出 ---
+    # --- 主路径: call_json 结构化输出（硬错重试一次，软错记警告）---
     try:
         caller = LLMCaller(llm)
-        data, meta = caller.call_json(user, system=NEWS_ASSESSMENT_SYSTEM, max_tokens=1200, temperature=0.0, return_meta=True)
-        stats["attempts"] += meta["attempts"]
-        stats["tokens"] = meta["usage"]
-        stats["finish_reason"] = meta["finish_reason"]
-        stats["cache_hit"] = meta["cache_hit"]
-        stats["model"] = meta["model"]
-        if data and isinstance(data, dict) and "verdict" in data:
-            logger.info(f"[news_assessment] JSON 结构化成功: verdict={data.get('verdict')}, signals={len(data.get('key_signals', []))}, "
-                        f"tokens={meta['usage']['total_tokens']}, attempts={meta['attempts']}, finish={meta['finish_reason']}")
-            return data["verdict"], data, data.get("confidence", ""), "llm_json", _finish("llm_json")
+        data, hard_errors = None, []
+        for round_idx in range(2):
+            data, meta = caller.call_json(
+                user, system=NEWS_ASSESSMENT_SYSTEM, max_tokens=1200,
+                temperature=0.0, return_meta=True,
+                use_cache=(round_idx == 0),  # 重试禁缓存：避免命中同一错误响应
+            )
+            stats["attempts"] += meta["attempts"]
+            for k in ("input_tokens", "output_tokens", "total_tokens"):
+                stats["tokens"][k] += meta["usage"].get(k, 0) or 0
+            stats["finish_reason"] = meta["finish_reason"]
+            stats["cache_hit"] = meta["cache_hit"]
+            stats["model"] = meta["model"]
+            if not (data and isinstance(data, dict) and "verdict" in data):
+                break
+            hard_errors, warns = _validate_assessment(data, user_kwargs["text"], kind="news")
+            stats["validation_warnings"] = warns
+            if not hard_errors:
+                logger.info(f"[news_assessment] JSON 结构化成功: verdict={data.get('verdict')}, signals={len(data.get('key_signals', []))}, "
+                            f"tokens={stats['tokens']['total_tokens']}, attempts={stats['attempts']}, finish={meta['finish_reason']}, warns={len(warns)}")
+                return data["verdict"], data, data.get("confidence", ""), "llm_json", _finish("llm_json")
+            logger.warning(f"[news_assessment] 输出校验硬错 (round {round_idx + 1}): {hard_errors}")
+        if hard_errors:
+            logger.warning("[news_assessment] 重试后仍校验失败，降级到 free-text")
     except Exception as e:
         logger.warning(f"[news_assessment] call_json 失败，降级到 free-text: {e}")
 
@@ -639,7 +707,8 @@ def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_g
     t0 = _time.time()
     stats = {"path": "llm_failed", "elapsed_ms": 0.0, "attempts": 0,
              "tokens": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
-             "finish_reason": "", "truncated": False, "cache_hit": False, "model": ""}
+             "finish_reason": "", "truncated": False, "cache_hit": False, "model": "",
+             "validation_warnings": [], "input_truncated": len(combined_text) > _PROMPT_TEXT_LIMIT}
 
     def _finish(path):
         stats["path"] = path
@@ -660,23 +729,37 @@ def _llm_topic_assessment(llm, topic: str, items: list, combined_text: str, kb_g
     )
     user_kwargs = dict(
         topic=topic, news_count=len(items), news_preview=news_preview,
-        combined_text=combined_text[:3000], kb_grounding=kb_str,
+        combined_text=_truncate_for_prompt(combined_text), kb_grounding=kb_str,
     )
     user = TOPIC_ASSESSMENT_USER.format(instruction="请输出 JSON 研判结果。", **user_kwargs)
 
-    # --- 主路径: call_json 结构化输出 ---
+    # --- 主路径: call_json 结构化输出（硬错重试一次，软错记警告）---
     try:
         caller = LLMCaller(llm)
-        data, meta = caller.call_json(user, system=TOPIC_ASSESSMENT_SYSTEM, max_tokens=1500, temperature=0.0, return_meta=True)
-        stats["attempts"] += meta["attempts"]
-        stats["tokens"] = meta["usage"]
-        stats["finish_reason"] = meta["finish_reason"]
-        stats["cache_hit"] = meta["cache_hit"]
-        stats["model"] = meta["model"]
-        if data and isinstance(data, dict) and "verdict" in data:
-            logger.info(f"[topic_assessment] JSON 结构化成功: verdict={data.get('verdict')}, sub_topics={len(data.get('sub_topics', []))}, players={len(data.get('key_players', []))}, "
-                        f"tokens={meta['usage']['total_tokens']}, attempts={meta['attempts']}, finish={meta['finish_reason']}")
-            return data["verdict"], data, data.get("confidence", ""), "llm_json", _finish("llm_json")
+        data, hard_errors = None, []
+        for round_idx in range(2):
+            data, meta = caller.call_json(
+                user, system=TOPIC_ASSESSMENT_SYSTEM, max_tokens=1500,
+                temperature=0.0, return_meta=True,
+                use_cache=(round_idx == 0),  # 重试禁缓存：避免命中同一错误响应
+            )
+            stats["attempts"] += meta["attempts"]
+            for k in ("input_tokens", "output_tokens", "total_tokens"):
+                stats["tokens"][k] += meta["usage"].get(k, 0) or 0
+            stats["finish_reason"] = meta["finish_reason"]
+            stats["cache_hit"] = meta["cache_hit"]
+            stats["model"] = meta["model"]
+            if not (data and isinstance(data, dict) and "verdict" in data):
+                break
+            hard_errors, warns = _validate_assessment(data, user_kwargs["combined_text"], kind="topic")
+            stats["validation_warnings"] = warns
+            if not hard_errors:
+                logger.info(f"[topic_assessment] JSON 结构化成功: verdict={data.get('verdict')}, sub_topics={len(data.get('sub_topics', []))}, players={len(data.get('key_players', []))}, "
+                            f"tokens={stats['tokens']['total_tokens']}, attempts={stats['attempts']}, finish={meta['finish_reason']}, warns={len(warns)}")
+                return data["verdict"], data, data.get("confidence", ""), "llm_json", _finish("llm_json")
+            logger.warning(f"[topic_assessment] 输出校验硬错 (round {round_idx + 1}): {hard_errors}")
+        if hard_errors:
+            logger.warning("[topic_assessment] 重试后仍校验失败，降级到 free-text")
     except Exception as e:
         logger.warning(f"[topic_assessment] call_json 失败，降级到 free-text: {e}")
 
